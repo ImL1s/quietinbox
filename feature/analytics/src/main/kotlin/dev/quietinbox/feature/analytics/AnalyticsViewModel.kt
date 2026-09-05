@@ -243,6 +243,8 @@ class AnalyticsViewModel @Inject constructor(
         const val TOP_ROWS = 20
         const val TOP_SENDERS = 12
         const val GAP_LIMIT = 200
+        /** A count query must succeed without failures for this long before the retry back-off restarts. */
+        const val BACKOFF_RESET_MS = 60_000L
     }
 
     /**
@@ -256,9 +258,13 @@ class AnalyticsViewModel @Inject constructor(
     @OptIn(kotlinx.coroutines.FlowPreview::class)
     private fun vaultSignals(): Flow<VaultState> {
         var consecutiveFailures = 0
+        var lastFailureAtMs = 0L
         val counts = inbox.observeCounts()
-            .onEach { consecutiveFailures = 0 } // back-off restarts after any successful emission
+            // The back-off restarts only after a quiet spell: a flapping query keeps backing off instead
+            // of recomputing every second.
+            .onEach { if (System.currentTimeMillis() - lastFailureAtMs > BACKOFF_RESET_MS) consecutiveFailures = 0 }
             .retryWhen { _, _ ->
+                lastFailureAtMs = System.currentTimeMillis()
                 emit(InboxCounts(0, 0, 0, 0))
                 delay((1_000L shl consecutiveFailures).coerceAtMost(30_000L))
                 consecutiveFailures = minOf(consecutiveFailures + 1, 5) // 1 s, 2 s, … capped at 30 s
