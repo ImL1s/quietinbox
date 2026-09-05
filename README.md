@@ -82,7 +82,7 @@ adb shell cmd notification post -S messaging -t "Alice" tag "hello from shell"
 
 ## 授權
 
-原創程式碼採 [Apache-2.0](LICENSE)。第三方元件保留各自授權（見 App 內「開源授權」）。本專案不包含任何競品 APK、反編譯原始碼、解密資產或詞典。
+原創程式碼採 [GPL-3.0-or-later](LICENSE)。第三方元件保留各自授權（見 App 內「開源授權」）。本專案不包含任何競品 APK、反編譯原始碼、解密資產或詞典。
 
 ---
 

@@ -271,7 +271,7 @@
     <string name="about_limitations">已知限制</string>
     <string name="about_limitations_body">• 只能觀測來源 App 實際發到系統的通知；沒有可靠方法得知漏了多少。\n• 預覽受限的通知會以佔位文字記錄。\n• 沒有穩定 ID 的同名聯絡人會分開保留，不會合併。\n• 沒有 ID 與時間戳的相同單則訊息會標為「可能重複」。\n• LINE、WhatsApp、Telegram、Instagram、Messenger 的 adapter 目前只以合成 fixture 測試。</string>
     <string name="about_licenses">開源授權</string>
-    <string name="about_licenses_body">QuietInbox 以 Apache-2.0 授權。第三方元件：AndroidX（Apache-2.0）、Kotlin（Apache-2.0）、Dagger/Hilt（Apache-2.0）、SQLCipher for Android（BSD）、Tink（Apache-2.0）、kotlinx 函式庫（Apache-2.0）。</string>
+    <string name="about_licenses_body">QuietInbox 以 GPL-3.0-or-later 授權。第三方元件：AndroidX（Apache-2.0）、Kotlin（Apache-2.0）、Dagger/Hilt（Apache-2.0）、SQLCipher for Android（BSD）、Tink（Apache-2.0）、kotlinx 函式庫（Apache-2.0）。</string>
     <string name="about_source">原始碼與回報：github.com/quietinbox（repository 公開前為佔位）</string>
 
     <!-- Onboarding -->

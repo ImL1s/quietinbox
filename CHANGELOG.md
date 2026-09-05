@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows Keep a Changelog.
 
+## [Unreleased]
+
+### Changed
+- Licence changed from Apache-2.0 to GPL-3.0-or-later (LICENSE, NOTICE, README, in-app licence text).
+- Added `CLAUDE.md` (repository guidance for AI-assisted contributions).
+
 ## [0.1.0] — 2026-09-06
 
 First installable vertical slice (plan §3 "v0.1"). Not published to any store.

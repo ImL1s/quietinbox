@@ -271,7 +271,7 @@
     <string name="about_limitations">Known limitations</string>
     <string name="about_limitations_body">• Only what a source posts to the system as a notification can be observed; there is no reliable count of what was missed.\n• Preview-restricted notifications are recorded as placeholders.\n• Same-named contacts without a stable id are kept apart, not merged.\n• Identical single messages without ids or timestamps are marked as possible repeats.\n• Adapters for LINE, WhatsApp, Telegram, Instagram and Messenger are tested with synthetic fixtures only.</string>
     <string name="about_licenses">Open-source licences</string>
-    <string name="about_licenses_body">QuietInbox is licensed under Apache-2.0. Third-party components: AndroidX (Apache-2.0), Kotlin (Apache-2.0), Dagger/Hilt (Apache-2.0), SQLCipher for Android (BSD), Tink (Apache-2.0), kotlinx libraries (Apache-2.0).</string>
+    <string name="about_licenses_body">QuietInbox is licensed under GPL-3.0-or-later. Third-party components: AndroidX (Apache-2.0), Kotlin (Apache-2.0), Dagger/Hilt (Apache-2.0), SQLCipher for Android (BSD), Tink (Apache-2.0), kotlinx libraries (Apache-2.0).</string>
     <string name="about_source">Source code and issues: github.com/quietinbox (placeholder until the repository is published)</string>
 
     <!-- Onboarding -->
