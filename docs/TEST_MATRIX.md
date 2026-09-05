@@ -18,6 +18,7 @@ are test tools, never evidence about a real source app.
 | Crypto | RFC 5869 vectors, codec round trips | `HkdfTest`, `RecoveryKeyCodecTest` | JVM |
 | Backup staging | Format and limit enforcement of the restore reader | `BackupStagerTest` (21 tests: manifest first, duplicate manifest, unsupported version, data after end, count mismatches, every size limit, unknown record) | `./gradlew :platform:backup:testDebugUnitTest` |
 | Capture coordinator | Commit fence and cold start with mocked repositories | `CaptureCoordinatorTest` (11 tests: pause discards queued events, resume rotates generation and session, non-source packages dropped after the source list loads, cancellation propagates) | `./gradlew :platform:capture:testDebugUnitTest` |
+| Analytics ViewModel | State rules of the activity page with mocked repositories | `AnalyticsViewModelTest` (6 tests: first report computed on `Dispatchers.Default`, period switch shows a clean placeholder without the previous period's capped label, vault change recomputes without a loading state, locked vault shown as locked and recovers once unlocked, opening vault keeps loading then computes, failing count query does not leave the page loading) | JVM |
 
 ## Scenario ids referenced by the plan (subset implemented as tests)
 
@@ -71,6 +72,11 @@ exists, and no source notification is ever read.
   clears and asserts nothing demo-tagged remains. It runs on a device
   (`./gradlew :platform:storage:connectedDebugAndroidTest`) because SQLCipher's native library
   cannot load on the JVM.
+
+## Not covered yet
+
+- `feature/*` ViewModels other than `AnalyticsViewModel` have no JVM tests; the locked-vault state of the
+  activity page is covered by `AnalyticsViewModelTest` but has not been exercised on a device.
 
 ## Quantitative targets (plan §15) — status
 

@@ -15,31 +15,38 @@ import dev.quietinbox.core.analytics.PeriodKind
 import dev.quietinbox.core.analytics.QuietRank
 import dev.quietinbox.core.analytics.RankingBoards
 import dev.quietinbox.core.analytics.SenderPhrases
+import dev.quietinbox.platform.storage.repo.VaultRepository
+import dev.quietinbox.platform.storage.db.VaultState
 import dev.quietinbox.platform.storage.repo.AnalyticsRepository
 import dev.quietinbox.platform.storage.repo.InboxCounts
 import dev.quietinbox.platform.storage.repo.ConversationLabel
 import dev.quietinbox.platform.storage.repo.HealthRepository
 import dev.quietinbox.platform.storage.repo.InboxRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.transformLatest
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlin.coroutines.coroutineContext
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import javax.inject.Inject
@@ -70,6 +77,8 @@ data class AnalyticsUiState(
     val labels: Map<Long, ConversationLabel> = emptyMap(),
     /** True when the period held more messages than [AnalyticsRepository.MESSAGE_CAP]; only the newest ones were counted. */
     val capped: Boolean = false,
+    /** The encrypted vault could not be opened; nothing can be computed until it is unlocked. */
+    val vaultLocked: Boolean = false,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -77,9 +86,13 @@ data class AnalyticsUiState(
 class AnalyticsViewModel @Inject constructor(
     private val analytics: AnalyticsRepository,
     private val health: HealthRepository,
-    inbox: InboxRepository,
+    private val inbox: InboxRepository,
+    private val vault: VaultRepository,
 ) : ViewModel() {
     private val selection = MutableStateFlow(PeriodSelection())
+
+    /** The chosen period, exposed directly so the chip row reflects a tap at once even while a slow query is still being cancelled. */
+    val selectedPeriod: StateFlow<PeriodSelection> = selection.asStateFlow()
 
     /**
      * Recomputes whenever the period changes or the message count changes. Everything downstream is
@@ -91,14 +104,23 @@ class AnalyticsViewModel @Inject constructor(
     private var last = AnalyticsUiState()
 
     @OptIn(kotlinx.coroutines.FlowPreview::class)
-    val state: StateFlow<AnalyticsUiState> = combine(selection, vaultChanges(inbox)) { s, _ -> s }
-        .transformLatest { s ->
-            // A period switch shows a loading state at once and cancels the previous computation; a
+    val state: StateFlow<AnalyticsUiState> = combine(selection, vaultSignals()) { s, v -> s to v }
+        .transformLatest { (s, v) ->
+            when (v) {
+                // A locked vault is a terminal, explained state — never an endless spinner.
+                is VaultState.Locked -> { emit(AnalyticsUiState(loading = false, selection = s, vaultLocked = true).also { last = it }); return@transformLatest }
+                // Still opening: keep the loading state; the first count tick arrives once it is Ready.
+                VaultState.Opening -> { emit(AnalyticsUiState(loading = true, selection = s).also { last = it }); return@transformLatest }
+                is VaultState.Ready -> Unit
+            }
+            // A period switch shows a clean loading placeholder at once (no report, no quality label
+            // carried over from the previous period) and cancels the previous computation; a
             // background vault change recomputes quietly behind the current content.
-            if (s != last.selection || last.report == null) emit(last.copy(loading = true, selection = s))
-            emit(compute(s))
+            // `last` is read and written only here: transformLatest cancels and joins the previous
+            // block before starting the next, so no other coroutine touches it.
+            if (s != last.selection || last.report == null) emit(AnalyticsUiState(loading = true, selection = s).also { last = it })
+            emit(compute(s).also { last = it })
         }
-        .onEach { last = it }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AnalyticsUiState())
 
@@ -116,14 +138,14 @@ class AnalyticsViewModel @Inject constructor(
         val now = System.currentTimeMillis()
         val period = period(s, now, zone)
         val messages: List<ObservedMessage> =
-            runCatching { analytics.messagesBetween(period.startEpochMs, period.endEpochMsInclusive) }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
-                .getOrDefault(emptyList())
-        val gaps = runCatching { health.observeGaps(GAP_LIMIT).first() }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }.getOrDefault(emptyList()).filter { gap ->
+            orDefault(emptyList()) { analytics.messagesBetween(period.startEpochMs, period.endEpochMsInclusive) }
+        val gaps = orDefault(emptyList()) { health.observeGaps(GAP_LIMIT).first() }.filter { gap ->
             (gap.startEpochMs ?: period.startEpochMs) < period.endEpochMsExclusive &&
                 (gap.endEpochMs ?: period.endEpochMsInclusive) >= period.startEpochMs
         }
-        val summaries = runCatching { analytics.summaryCountBetween(period.startEpochMs, period.endEpochMsInclusive) }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }.getOrDefault(0)
+        val summaries = orDefault(0) { analytics.summaryCountBetween(period.startEpochMs, period.endEpochMsInclusive) }
 
+        coroutineContext.ensureActive()
         val report = ActivityAnalytics.compute(
             AnalyticsInput(
                 messages = messages,
@@ -134,6 +156,7 @@ class AnalyticsViewModel @Inject constructor(
                 timeZone = zone,
             ),
         )
+        coroutineContext.ensureActive()
         val rankings = ActivityAnalytics.rankings(messages, period, zone).let {
             RankingBoards(it.allDays.take(TOP_ROWS), it.weekdays.take(TOP_ROWS), it.weekends.take(TOP_ROWS))
         }
@@ -142,6 +165,11 @@ class AnalyticsViewModel @Inject constructor(
         }
         val chattiness = ActivityAnalytics.chattiness(messages, zone).take(TOP_ROWS)
         val quiet = ActivityAnalytics.quietRate(messages, period, zone).take(TOP_ROWS)
+        coroutineContext.ensureActive()
+        val heatmap = ActivityAnalytics.heatmap(messages, zone).map { it.toList() }
+        val catchphrases = ActivityAnalytics.catchphrases(messages).take(TOP_SENDERS)
+        coroutineContext.ensureActive()
+        val emoji = ActivityAnalytics.emojiRanking(messages)
 
         val ids = buildSet {
             addAll(report.topConversations.map { it.conversationId })
@@ -152,7 +180,7 @@ class AnalyticsViewModel @Inject constructor(
             addAll(chattiness.map { it.conversationId })
             addAll(quiet.map { it.conversationId })
         }
-        val labels = runCatching { analytics.labels(ids) }.getOrDefault(emptyMap())
+        val labels = orDefault(emptyMap()) { analytics.labels(ids) }
 
         return AnalyticsUiState(
             loading = false,
@@ -161,15 +189,27 @@ class AnalyticsViewModel @Inject constructor(
             period = period,
             dayCount = period.days(zone).size,
             report = report,
-            heatmap = ActivityAnalytics.heatmap(messages, zone).map { it.toList() },
+            heatmap = heatmap,
             rankings = rankings,
             bestTime = bestTime,
             chattiness = chattiness,
             quiet = quiet,
-            catchphrases = ActivityAnalytics.catchphrases(messages).take(TOP_SENDERS),
-            emoji = ActivityAnalytics.emojiRanking(messages),
+            catchphrases = catchphrases,
+            emoji = emoji,
             labels = labels,
         )
+    }
+
+    /**
+     * A failed query degrades the report to [default] instead of crashing the screen, but a
+     * cancellation (period switched, screen left) must still unwind the whole computation.
+     */
+    private inline fun <T> orDefault(default: T, block: () -> T): T = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        default
     }
 
     private suspend fun period(s: PeriodSelection, now: Long, zone: TimeZone): Period = when (s.kind) {
@@ -178,7 +218,7 @@ class AnalyticsViewModel @Inject constructor(
         PeriodKind.LAST_MONTH -> Period.lastMonth(now, zone)
         PeriodKind.LAST_3_MONTHS -> Period.last3Months(now, zone)
         PeriodKind.ALL -> Period.all(
-            earliestEpochMs = runCatching { analytics.earliestTimestamp() }.getOrNull(),
+            earliestEpochMs = orDefault(null) { analytics.earliestTimestamp() },
             nowEpochMs = now,
             zone = zone,
         )
@@ -194,13 +234,23 @@ class AnalyticsViewModel @Inject constructor(
         const val GAP_LIMIT = 200
     }
 
-    /** Vault changes: the first signal arrives at once; later ones are sampled every 400 ms (never starved). */
+    /**
+     * What drives a recomputation: every non-Ready vault state at once (so a locked or opening vault
+     * is shown as such instead of an endless spinner); on a Ready vault, the first count at once and
+     * later ones sampled every 400 ms (never starved). A failing count query emits a fallback tick
+     * and retries with back-off, so an error neither leaves the page loading nor stops the ticks.
+     */
     @OptIn(kotlinx.coroutines.FlowPreview::class)
-    private fun vaultChanges(inbox: InboxRepository): Flow<Any?> {
+    private fun vaultSignals(): Flow<VaultState> {
         val counts = inbox.observeCounts()
-            .catch { emit(InboxCounts(0, 0, 0, 0)) } // an error must not leave the page in "loading" forever
+            .retryWhen { _, attempt ->
+                emit(InboxCounts(0, 0, 0, 0))
+                delay((1_000L shl minOf(attempt, 5L).toInt()).coerceAtMost(30_000L))
+                true
+            }
             .distinctUntilChanged()
             .shareIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
-        return merge(counts.take(1), counts.drop(1).sample(400))
+        val ticks = merge(counts.take(1), counts.drop(1).sample(400))
+        return merge(vault.state.filter { it !is VaultState.Ready }, ticks.map { vault.state.value })
     }
 }

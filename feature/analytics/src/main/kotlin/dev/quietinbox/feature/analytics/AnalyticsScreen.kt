@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Insights
+import androidx.compose.material.icons.outlined.SyncProblem
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -85,6 +86,7 @@ fun AnalyticsScreen(
     viewModel: AnalyticsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val selectedPeriod by viewModel.selectedPeriod.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val tabs = AnalyticsTab.entries
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
@@ -127,7 +129,7 @@ fun AnalyticsScreen(
                 }
             }
             PeriodRow(
-                selected = state.selection.kind,
+                selected = selectedPeriod.kind,
                 onSelect = viewModel::setPeriod,
                 onCustom = { pickerOpen = true },
             )
@@ -145,6 +147,14 @@ fun AnalyticsScreen(
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
                 )
+            }
+            if (state.vaultLocked) {
+                EmptyState(
+                    title = stringResource(R.string.vault_locked_title),
+                    body = stringResource(R.string.health_vault_locked),
+                    icon = Icons.Outlined.SyncProblem,
+                )
+                return@Column
             }
             if (state.loading || report == null) {
                 LoadingScreen()

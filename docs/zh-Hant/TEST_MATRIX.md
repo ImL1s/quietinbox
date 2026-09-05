@@ -18,6 +18,7 @@
 | 加密 | RFC 5869 測試向量、codec 來回轉換 | `HkdfTest`、`RecoveryKeyCodecTest` | JVM |
 | 備份 staging | 還原讀取器的格式與上限強制 | `BackupStagerTest`（21 個測試：manifest 必須在第一筆、重複 manifest、不支援的版本、end 之後仍有資料、計數不符、每一項大小上限、未知記錄型別） | `./gradlew :platform:backup:testDebugUnitTest` |
 | 擷取協調器 | 以 mock repository 驗證 commit 圍籬與冷啟動 | `CaptureCoordinatorTest`（11 個測試：暫停後丟棄排隊事件、恢復時輪換 generation 與 session、來源清單載入後丟棄非來源套件、取消會傳播） | `./gradlew :platform:capture:testDebugUnitTest` |
+| 分析 ViewModel | 以 mock repository 驗證活動頁的狀態規則 | `AnalyticsViewModelTest`（6 個測試：首份報表在 `Dispatchers.Default` 計算、切換期間顯示乾淨的載入佔位（不帶上一期間的截斷標籤）、資料庫變動時安靜重算不顯示載入、保險庫鎖定時顯示鎖定並在解鎖後恢復、開啟中維持載入直到就緒、計數查詢失敗不會卡在載入） | JVM |
 
 ## 計畫所引用的情境編號（已實作成測試的子集）
 
@@ -60,6 +61,11 @@
 - 覆蓋範圍：`DemoDataTest`（真機測試，`platform:storage`）寫入示範資料、驗證各畫面讀取的筆數與對話投影、
   確認重複寫入不會產生重複資料，接著清除並驗證不留下任何示範資料列。因為 SQLCipher 的原生函式庫無法在
   JVM 載入，此測試需在裝置上執行（`./gradlew :platform:storage:connectedDebugAndroidTest`）。
+
+## 尚未涵蓋
+
+- 除了 `AnalyticsViewModel` 之外，`feature/*` 的 ViewModel 沒有 JVM 測試；活動頁的「保險庫已鎖定」狀態有
+  `AnalyticsViewModelTest` 涵蓋，但尚未在裝置上實際走過。
 
 ## 量化目標（計畫 §15）—— 狀態
 
