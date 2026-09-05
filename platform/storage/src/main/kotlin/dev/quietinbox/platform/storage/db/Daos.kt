@@ -164,6 +164,9 @@ interface MessageDao {
     @Query("SELECT * FROM message WHERE conversationId = :conversationId AND sourceMessageId = :sourceMessageId LIMIT 1")
     suspend fun findBySourceId(conversationId: Long, sourceMessageId: String): MessageEntity?
 
+    @Query("SELECT id FROM message WHERE conversationId = :conversationId AND fingerprint = :fingerprint ORDER BY id DESC LIMIT 1")
+    suspend fun findIdByFingerprint(conversationId: Long, fingerprint: String): Long?
+
     @Insert
     suspend fun insert(entity: MessageEntity): Long
 

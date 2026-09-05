@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  jvm-tests:
+    name: JVM unit tests (core, parsers, crypto, backup)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Unit tests
+        run: >
+          ./gradlew --no-daemon --console=plain
+          :core:model:test :core:parser:test :core:identity:test :core:reconcile:test
+          :core:analytics:test :parsers:apps:test
+          :platform:crypto:testDebugUnitTest :platform:backup:testDebugUnitTest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jvm-test-reports
+          path: "**/build/reports/tests/**"
+
+  assemble:
+    name: Assemble + permission gate
+    runs-on: ubuntu-latest
+    needs: jvm-tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Assemble debug and release (unsigned)
+        run: ./gradlew --no-daemon --console=plain :app:assembleDebug :app:assembleRelease :app:lintDebug
+      - name: No network permission in release APK
+        run: tools/check-permissions.sh app/build/outputs/apk/release/app-release-unsigned.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apks
+          path: app/build/outputs/apk/**/*.apk
+
+  instrumented:
+    # Real SQLCipher needs an Android runtime. Runs on the API 29/35 emulators; API 26 is a
+    # separate lane per plan §15 because managed devices start at API 27.
+    name: Instrumented (API ${{ matrix.api }})
+    runs-on: ubuntu-latest
+    needs: jvm-tests
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [29, 35]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          profile: pixel_6
+          script: ./gradlew --no-daemon --console=plain :platform:storage:connectedDebugAndroidTest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: instrumented-reports-${{ matrix.api }}
+          path: "**/build/reports/androidTests/**"

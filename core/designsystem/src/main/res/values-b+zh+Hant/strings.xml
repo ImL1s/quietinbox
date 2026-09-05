@@ -196,6 +196,7 @@
     <string name="health_app_info">應用程式資訊</string>
     <string name="health_add_source_title">選擇 App</string>
     <string name="health_add_source_search">搜尋已安裝的 App</string>
+    <string name="health_add_by_package">以套件名稱直接新增（通用解析器）</string>
     <string name="health_add_source_empty">沒有符合的 App。</string>
     <string name="health_known_source">有版本化 adapter</string>
     <string name="health_last_event">最近事件 %1$s</string>

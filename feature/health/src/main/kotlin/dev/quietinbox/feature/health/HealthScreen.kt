@@ -388,8 +388,11 @@ private fun AddSourceSheet(onDismiss: () -> Unit, search: suspend (String) -> Li
                         leadingContent = { SourceBadge(app.packageName, size = 36.dp) },
                         headlineContent = { Text(app.label) },
                         supportingContent = {
-                            if (app.hasAdapter) QualityTag(stringResource(R.string.health_known_source), Icons.Outlined.CheckCircle, QualityColors.verified)
-                            else Text(app.packageName, style = MaterialTheme.typography.bodySmall)
+                            when {
+                                app.manual -> Text(stringResource(R.string.health_add_by_package), style = MaterialTheme.typography.bodySmall)
+                                app.hasAdapter -> QualityTag(stringResource(R.string.health_known_source), Icons.Outlined.CheckCircle, QualityColors.verified)
+                                else -> Text(app.packageName, style = MaterialTheme.typography.bodySmall)
+                            }
                         },
                         trailingContent = { TextButton(onClick = { onAdd(app) }) { Text(stringResource(R.string.action_add)) } },
                         colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),

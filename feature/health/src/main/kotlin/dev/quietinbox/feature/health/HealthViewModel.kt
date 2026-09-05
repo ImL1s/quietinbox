@@ -37,7 +37,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-data class InstalledApp(val packageName: String, val label: String, val hasAdapter: Boolean)
+data class InstalledApp(val packageName: String, val label: String, val hasAdapter: Boolean, val manual: Boolean = false)
 
 data class HealthUiState(
     val capture: CaptureStatus = CaptureStatus(),
@@ -150,7 +150,14 @@ class HealthViewModel @Inject constructor(
             .map { InstalledApp(it.packageName, pm.getApplicationLabel(it).toString(), registry.adapterFor(it.packageName) != null) }
             .filter { q.isEmpty() || it.label.lowercase().contains(q) || it.packageName.contains(q) }
             .sortedWith(compareByDescending<InstalledApp> { it.hasAdapter }.thenBy { it.label.lowercase() })
-        launchable
+        // Power-user path: a package the launcher cannot see (package visibility rules, or a
+        // package without a launcher activity) can still be added by its exact name.
+        val looksLikePackage = q.matches(Regex("""[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+"""))
+        if (looksLikePackage && q !in existing && launchable.none { it.packageName == q }) {
+            launchable + InstalledApp(q, q, registry.adapterFor(q) != null, manual = true)
+        } else {
+            launchable
+        }
     }
 
     private fun isMessagingLike(packageName: String): Boolean =

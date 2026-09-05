@@ -13,6 +13,7 @@ import dev.quietinbox.core.reconcile.Decision
 import dev.quietinbox.core.reconcile.KnownKind
 import dev.quietinbox.core.reconcile.KnownMessage
 import dev.quietinbox.core.reconcile.MessageWindow
+import dev.quietinbox.core.reconcile.ReconcileNote
 import dev.quietinbox.core.reconcile.ReconcileResult
 import dev.quietinbox.core.reconcile.WindowItem
 import dev.quietinbox.platform.storage.db.CheckpointEntity
@@ -186,6 +187,17 @@ class IngestRepository @Inject constructor(
                         if (db.suppressionDao().isSuppressed(conversationId, decision.fingerprint, now) > 0) {
                             suppressed++
                             continue
+                        }
+                        // Checkpoint loss guard: with no previous window (e.g. checkpoint pruned) an
+                        // already-stored identical message is linked, not inserted again.
+                        if (decision is Decision.New && !decision.confirmedById && ReconcileNote.NO_PREVIOUS_WINDOW in reconcile.notes) {
+                            val existingId = db.messageDao().findIdByFingerprint(conversationId, decision.fingerprint)
+                            if (existingId != null) {
+                                storedIds[index] = existingId
+                                db.observationLinkDao().insert(ObservationLinkEntity(messageId = existingId, eventId = snapshot.eventId, kind = KnownKind.STALE_WINDOW.name, observedAtEpochMs = now))
+                                db.messageDao().incrementObservation(existingId)
+                                continue
+                            }
                         }
                         val dedup = when (decision) {
                             is Decision.AmbiguousRepeat -> DedupState.AMBIGUOUS_REPEAT

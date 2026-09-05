@@ -196,6 +196,7 @@
     <string name="health_app_info">App info</string>
     <string name="health_add_source_title">Choose an app</string>
     <string name="health_add_source_search">Search installed apps</string>
+    <string name="health_add_by_package">Add by exact package name (generic parser)</string>
     <string name="health_add_source_empty">No matching apps.</string>
     <string name="health_known_source">Versioned adapter available</string>
     <string name="health_last_event">last event %1$s</string>
