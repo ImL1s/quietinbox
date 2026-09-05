@@ -75,8 +75,9 @@ exists, and no source notification is ever read.
 
 ## Not covered yet
 
-- `feature/*` ViewModels other than `AnalyticsViewModel` have no JVM tests; the locked-vault state of the
-  activity page is covered by `AnalyticsViewModelTest` but has not been exercised on a device.
+- `feature/*` ViewModels other than `AnalyticsViewModel` have no JVM tests; the locked-vault state and the
+  "report may be incomplete" label of the activity page are covered by `AnalyticsViewModelTest` but have not
+  been exercised on a device. The test harness does not cancel `viewModelScope` (each test owns its ViewModel).
 
 ## Quantitative targets (plan §15) — status
 

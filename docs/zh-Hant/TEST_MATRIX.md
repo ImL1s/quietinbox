@@ -64,8 +64,9 @@
 
 ## 尚未涵蓋
 
-- 除了 `AnalyticsViewModel` 之外，`feature/*` 的 ViewModel 沒有 JVM 測試；活動頁的「保險庫已鎖定」狀態有
-  `AnalyticsViewModelTest` 涵蓋，但尚未在裝置上實際走過。
+- 除了 `AnalyticsViewModel` 之外，`feature/*` 的 ViewModel 沒有 JVM 測試；活動頁的「保險庫已鎖定」狀態與
+  「報表可能不完整」標籤有 `AnalyticsViewModelTest` 涵蓋，但尚未在裝置上實際走過。測試 harness 不會取消
+  `viewModelScope`（每個測試各自擁有 ViewModel）。
 
 ## 量化目標（計畫 §15）—— 狀態
 

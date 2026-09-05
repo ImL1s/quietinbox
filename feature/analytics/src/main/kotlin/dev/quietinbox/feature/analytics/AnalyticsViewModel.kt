@@ -218,7 +218,7 @@ class AnalyticsViewModel @Inject constructor(
         block()
     } catch (e: CancellationException) {
         throw e
-    } catch (e: Throwable) {
+    } catch (e: Exception) { // JVM Errors (OOM, linkage) keep propagating
         any = true
         default
     }
@@ -260,7 +260,8 @@ class AnalyticsViewModel @Inject constructor(
             .onEach { consecutiveFailures = 0 } // back-off restarts after any successful emission
             .retryWhen { _, _ ->
                 emit(InboxCounts(0, 0, 0, 0))
-                delay((1_000L shl minOf(consecutiveFailures++, 5)).coerceAtMost(30_000L))
+                delay((1_000L shl consecutiveFailures).coerceAtMost(30_000L))
+                consecutiveFailures = minOf(consecutiveFailures + 1, 5) // 1 s, 2 s, … capped at 30 s
                 true
             }
             .distinctUntilChanged()
