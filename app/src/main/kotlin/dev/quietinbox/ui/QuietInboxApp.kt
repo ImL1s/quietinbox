@@ -1,6 +1,9 @@
 package dev.quietinbox.ui
 
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,12 +61,27 @@ fun QuietInboxApp(activity: FragmentActivity, viewModel: AppViewModel = hiltView
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val locked by viewModel.lock.locked.collectAsStateWithLifecycle()
     val s = settings
+    val mode = when (s?.themeMode) {
+        ThemeMode.LIGHT -> QuietThemeMode.LIGHT
+        ThemeMode.DARK -> QuietThemeMode.DARK
+        else -> QuietThemeMode.SYSTEM
+    }
+    // System bar icon contrast must follow the app theme, not only the OS dark-mode flag.
+    val systemDark = isSystemInDarkTheme()
+    val dark = when (mode) {
+        QuietThemeMode.LIGHT -> false
+        QuietThemeMode.DARK -> true
+        QuietThemeMode.SYSTEM -> systemDark
+    }
+    LaunchedEffect(dark) {
+        val transparent = android.graphics.Color.TRANSPARENT
+        activity.enableEdgeToEdge(
+            statusBarStyle = if (dark) SystemBarStyle.dark(transparent) else SystemBarStyle.light(transparent, transparent),
+            navigationBarStyle = if (dark) SystemBarStyle.dark(transparent) else SystemBarStyle.light(transparent, transparent),
+        )
+    }
     QuietInboxTheme(
-        mode = when (s?.themeMode) {
-            ThemeMode.LIGHT -> QuietThemeMode.LIGHT
-            ThemeMode.DARK -> QuietThemeMode.DARK
-            else -> QuietThemeMode.SYSTEM
-        },
+        mode = mode,
         dynamicColor = s?.dynamicColor ?: false,
         reduceMotion = s?.reduceMotion ?: false,
     ) {
