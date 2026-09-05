@@ -26,8 +26,14 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.transformLatest
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.sample
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -78,13 +84,18 @@ class AnalyticsViewModel @Inject constructor(
      * pure Kotlin over rows already in memory, but catchphrase scanning over "All" is real work, so
      * the whole pipeline runs off the main thread.
      */
-    // Recompute when the selection changes or the vault changes, but never more than twice a second:
-    // a burst of notifications must not re-scan the whole period for every single message.
+    // A period switch recomputes at once; vault changes are sampled (first at once, then at most one
+    // recomputation per 400 ms) so a burst of notifications cannot re-scan the period per message.
+    private var last = AnalyticsUiState()
+
     @OptIn(kotlinx.coroutines.FlowPreview::class)
-    val state: StateFlow<AnalyticsUiState> = combine(selection, inbox.observeCounts().catch { }.distinctUntilChanged()) { s, _ -> s }
-        .debounce(400)
-        .map { s -> compute(s) }
-        .flowOn(Dispatchers.Default)
+    val state: StateFlow<AnalyticsUiState> = combine(selection, vaultChanges(inbox)) { s, _ -> s }
+        .transformLatest { s ->
+            // A period switch shows a loading state at once and cancels the previous computation.
+            emit(last.copy(loading = true, selection = s))
+            emit(compute(s))
+        }
+        .onEach { last = it }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AnalyticsUiState())
 
     fun setPeriod(kind: PeriodKind) {
@@ -177,5 +188,12 @@ class AnalyticsViewModel @Inject constructor(
         const val TOP_ROWS = 20
         const val TOP_SENDERS = 12
         const val GAP_LIMIT = 200
+    }
+
+    /** Vault changes: the first signal arrives at once; later ones are sampled every 400 ms (never starved). */
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
+    private fun vaultChanges(inbox: InboxRepository): Flow<Any?> {
+        val counts = inbox.observeCounts().catch { }.distinctUntilChanged()
+        return merge(counts.take(1), counts.drop(1).sample(400))
     }
 }

@@ -13,7 +13,7 @@
 | L3 真實來源 App | 兩個知情同意的測試帳號、錄影紀錄 | **未執行** | — |
 | L4 故障與效能 | 終止 process、Doze、首次解鎖、撤銷、磁碟上限 | **未執行**（程式中已有 commit 圍籬（generation）；尚無注入故障的測試） | — |
 | L5 發行產物 | 合併後的 manifest、權限傾印、可重現建置 | `tools/check-permissions.sh`（CI）；尚無 SBOM／重建比對 | CI |
-| 真機測試（instrumented）儲存 | 真實的 SQLCipher + Room 遷移 | `VaultRoundTripTest`（日誌 → commit → 搜尋 → 抑制 → 以持久化的金鑰重新開啟）、`MigrationTest`（對照匯出的 schema 執行 1→2）、`DemoDataTest`（示範資料寫入 → 筆數與投影 → 重複寫入不重複 → 清除後不留痕跡） | `./gradlew :platform:storage:connectedDebugAndroidTest` |
+| 真機測試（instrumented）儲存 | 真實的 SQLCipher + Room 遷移 | `VaultRoundTripTest`（日誌 → commit → 搜尋 → 抑制 → 以持久化的金鑰重新開啟；刪除的會話在重播後不會復活）、`MigrationTest`（對照匯出的 schema 執行 1→2）、`DemoDataTest`（示範資料寫入 → 筆數與投影 → 重複寫入不重複 → 清除後不留痕跡） | `./gradlew :platform:storage:connectedDebugAndroidTest` |
 | 真機測試（instrumented）加密 | 在真實檔案系統上的持久化金鑰寫入 | `WrappedSecretFileTest`（資料 fsync → 更名 → 對目錄執行 `Os.fsync`；只建立一次、讀回、巢狀目錄） | `./gradlew :platform:crypto:connectedDebugAndroidTest` |
 | 加密 | RFC 5869 測試向量、codec 來回轉換 | `HkdfTest`、`RecoveryKeyCodecTest` | JVM |
 | 備份 staging | 還原讀取器的格式與上限強制 | `BackupStagerTest`（21 個測試：manifest 必須在第一筆、重複 manifest、不支援的版本、end 之後仍有資料、計數不符、每一項大小上限、未知記錄型別） | `./gradlew :platform:backup:testDebugUnitTest` |

@@ -60,8 +60,9 @@ class SnapshotFactory(
         val messaging = runCatching { NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(n) }.getOrNull()
 
         // MessagingStyle semantics: a message without a Person, or whose Person is the style's user,
-        // was sent by the device owner. The stable key / uri wins; a display name is only compared
-        // when neither side carries a key (two contacts may share a name).
+        // was sent by the device owner. A stable key / uri on either side decides; a display name is
+        // only compared when neither side carries one (two contacts may share a name). Erring towards
+        // "not self" is the deliberate failure mode: a contact's message must never be shown as mine.
         val self = messaging?.user
         val selfName = self?.name?.toString()
         val messages = messaging?.messages?.let { bound(it, TruncationFlag.MESSAGES, truncated, self, selfName) }.orEmpty()
@@ -164,7 +165,7 @@ class SnapshotFactory(
                     person == null -> true
                     self?.key != null || person.key != null -> self?.key != null && person.key == self.key
                     self?.uri != null || person.uri != null -> self?.uri != null && person.uri == self.uri
-                    else -> selfName != null && person.name?.toString() == selfName
+                    else -> !selfName.isNullOrBlank() && person.name?.toString() == selfName
                 },
                 dataMimeType = m.dataMimeType?.take(64),
                 dataUri = uri,

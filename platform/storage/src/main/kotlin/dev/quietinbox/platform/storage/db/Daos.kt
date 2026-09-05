@@ -225,6 +225,11 @@ interface MessageDao {
         LIMIT :limit
         """,
     )
+    /**
+     * Newest [limit] rows of the period. There is no index led by `sortKey`, so SQLite scans the
+     * period and sorts at most [limit] rows; that trades CPU for a bounded heap on purpose (the
+     * caller debounces recomputation). A `sortKey` index is a candidate for schema v3.
+     */
     suspend fun statsBetween(since: Long, until: Long, limit: Int): List<MessageStatRow>
 
     @Query("SELECT * FROM message ORDER BY id")

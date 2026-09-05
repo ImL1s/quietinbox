@@ -1,5 +1,6 @@
 package dev.quietinbox.feature.analytics
 
+import dev.quietinbox.platform.storage.repo.AnalyticsRepository
 import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -641,6 +642,14 @@ private fun RangeLine(state: AnalyticsUiState, report: ActivityReport) {
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (state.capped) {
+            // Honesty label: the period was truncated to the newest MESSAGE_CAP messages.
+            Text(
+                stringResource(R.string.analytics_capped, AnalyticsRepository.MESSAGE_CAP),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
     }
 }
 

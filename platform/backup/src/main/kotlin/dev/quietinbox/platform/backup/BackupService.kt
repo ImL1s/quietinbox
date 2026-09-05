@@ -213,6 +213,7 @@ class BackupService @Inject constructor(
     private suspend fun apply(db: QuietInboxDatabase, s: Staged): BackupResult {
         val writtenFiles = ArrayList<String>()
         val usedFiles = HashSet<String>() // blobs referenced by a message that was actually inserted
+        var committed = false
         // Blobs are decoded and encrypted to disk BEFORE the write transaction so the SQLite write
         // lock is never held during Tink work and file I/O (live capture would otherwise stall).
         class Prepared(val fileName: String, val byteCount: Long)
@@ -221,21 +222,21 @@ class BackupService @Inject constructor(
         val retentionMs = settings.current().retentionDays * 24L * 60L * 60L * 1000L
         return try {
             // Inside the try so a failure or cancellation while encrypting still removes every file.
-        for (media in s.media) {
-            val oldId = media.messageId ?: continue
-            val bytes = runCatching { Base64.decode(media.dataBase64, Base64.NO_WRAP) }.getOrNull()
-            if (bytes == null || bytes.size > BackupLimits.MAX_MEDIA_BYTES) {
-                prepared[oldId] = null
-                continue
+            for (media in s.media) {
+                val oldId = media.messageId ?: continue
+                val bytes = runCatching { Base64.decode(media.dataBase64, Base64.NO_WRAP) }.getOrNull()
+                if (bytes == null || bytes.size > BackupLimits.MAX_MEDIA_BYTES) {
+                    prepared[oldId] = null
+                    continue
+                }
+                val name = UUID.randomUUID().toString().replace("-", "")
+                if (blobCipher.encryptToFile(bytes, mediaDir.file(name)) is KeyResult.Ok) {
+                    writtenFiles += name
+                    prepared[oldId] = Prepared(name, bytes.size.toLong())
+                } else {
+                    prepared[oldId] = null
+                }
             }
-            val name = UUID.randomUUID().toString().replace("-", "")
-            if (blobCipher.encryptToFile(bytes, mediaDir.file(name)) is KeyResult.Ok) {
-                writtenFiles += name
-                prepared[oldId] = Prepared(name, bytes.size.toLong())
-            } else {
-                prepared[oldId] = null
-            }
-        }
             val counts = db.withTransaction {
                 for (src in s.sources) {
                     if (db.sourceDao().get(src.packageName) == null) {
@@ -336,13 +337,14 @@ class BackupService @Inject constructor(
                 }
                 Counts(s.sources.size, convMap.size, inserted, restoredRevisions, usedFiles.size)
             }
+            committed = true
             // Blobs prepared for messages that were skipped (duplicates, orphans) have no row: remove them.
             for (f in writtenFiles) if (f !in usedFiles) mediaDir.delete(f)
             BackupResult.Ok(counts)
         } catch (e: Exception) {
-            // The transaction rolled back; blobs written outside it are removed on every failure,
-            // cancellation included, before the cancellation is propagated.
-            for (f in writtenFiles) mediaDir.delete(f)
+            // Before the commit every blob is an orphan; after it (a cancellation landing on the way
+            // out) only the ones no inserted message references may go. Runs before the rethrow.
+            for (f in writtenFiles) if (!committed || f !in usedFiles) mediaDir.delete(f)
             if (e is CancellationException) throw e
             BackupResult.Failed(BackupResult.Reason.IO, "apply:${e::class.java.simpleName}")
         }
