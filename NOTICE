@@ -1,0 +1,14 @@
+QuietInbox
+Copyright 2026 The QuietInbox Authors
+
+This product includes software developed by third parties under their own licences:
+
+- AndroidX / Jetpack (Compose, Room, WorkManager, DataStore, Biometric, Navigation 3) — Apache License 2.0
+- Kotlin and kotlinx libraries (coroutines, serialization, datetime, collections-immutable) — Apache License 2.0
+- Dagger / Hilt — Apache License 2.0
+- SQLCipher for Android (net.zetetic:sqlcipher-android, Community Edition) — BSD-style licence, Copyright Zetetic LLC
+- Tink (com.google.crypto.tink) — Apache License 2.0
+- Material Icons — Apache License 2.0
+
+No third-party application code, decompiled sources, rule sets, dictionaries or media assets from
+other messaging or notification products are included in this repository.
