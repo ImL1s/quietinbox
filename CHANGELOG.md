@@ -5,10 +5,11 @@ All notable changes to this project are documented here. The format follows Keep
 ## [Unreleased]
 
 ### Added
-- `AnalyticsViewModelTest` (6 JVM tests over mocked repositories): the first report is computed on `Dispatchers.Default`; a period switch shows a clean placeholder without the previous period's "capped" label; a vault change recomputes without a loading state; a locked vault is shown as locked and recovers once unlocked; an opening vault keeps loading until ready; a failing count query does not leave the page loading.
+- `AnalyticsViewModelTest` (7 JVM tests over mocked repositories): the first report is computed on `Dispatchers.Default`; a period switch shows a clean placeholder without the previous period's "capped" label; a vault change recomputes without a loading state; a locked vault is shown as locked and recovers once unlocked (also when it locks while the page is open and the counts never change); an opening vault keeps loading until ready; a failing count query does not leave the page loading.
 
 ### Changed
 - Round 7 review: the activity page's loading placeholder no longer carries the previous period's report or "capped" honesty label; a locked vault is shown as "Vault locked" on the activity page instead of an endless spinner, and an opening vault keeps loading until it is ready; a failing vault-count query emits a fallback tick and retries with back-off instead of silently ending the recompute ticks; every query in the analytics computation propagates cancellation through one helper; cancellation is checked between the CPU stages so a period switch during a notification burst is not starved; the period chips reflect a tap at once even while a slow query is still being cancelled.
+- Round 8 review: the vault state is now the outer signal of the analytics pipeline (`flatMapLatest`), so unlocking the vault recovers the activity page even when the message counts did not change; the ViewModel test harness mirrors the storage layer (counts are observable only while the vault is ready) and no longer depends on coroutine worker thread names.
 
 ## [0.1.0] — 2026-09-06
 

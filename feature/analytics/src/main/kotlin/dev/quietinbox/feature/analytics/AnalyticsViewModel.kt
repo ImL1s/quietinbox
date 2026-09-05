@@ -40,7 +40,8 @@ import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.first
@@ -235,10 +236,12 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     /**
-     * What drives a recomputation: every non-Ready vault state at once (so a locked or opening vault
-     * is shown as such instead of an endless spinner); on a Ready vault, the first count at once and
-     * later ones sampled every 400 ms (never starved). A failing count query emits a fallback tick
-     * and retries with back-off, so an error neither leaves the page loading nor stops the ticks.
+     * What drives a recomputation. The vault state is the outer signal: every non-Ready state is
+     * emitted as such (a locked or opening vault is shown, never an endless spinner), and every
+     * transition to Ready starts a fresh inner subscription whose first count arrives at once (the
+     * shared flow replays it) — so unlocking recovers the page even when the counts did not change.
+     * Later counts are sampled every 400 ms (never starved). A failing count query emits a fallback
+     * tick and retries with back-off, so an error neither leaves the page loading nor stops the ticks.
      */
     @OptIn(kotlinx.coroutines.FlowPreview::class)
     private fun vaultSignals(): Flow<VaultState> {
@@ -250,7 +253,9 @@ class AnalyticsViewModel @Inject constructor(
             }
             .distinctUntilChanged()
             .shareIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
-        val ticks = merge(counts.take(1), counts.drop(1).sample(400))
-        return merge(vault.state.filter { it !is VaultState.Ready }, ticks.map { vault.state.value })
+        return vault.state.flatMapLatest { v ->
+            if (v !is VaultState.Ready) flowOf(v)
+            else merge(counts.take(1), counts.drop(1).sample(400)).map { v }
+        }
     }
 }

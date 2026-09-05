@@ -20,7 +20,7 @@ import io.kotest.matchers.ints.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.string.shouldStartWith
+import io.kotest.matchers.shouldNotBe
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -30,7 +30,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -78,7 +80,10 @@ class AnalyticsViewModelTest : FunSpec({
             coEvery { earliestTimestamp() } returns null
         }
         val health = mockk<HealthRepository> { every { observeGaps(any()) } returns flowOf(emptyList()) }
-        val inbox = mockk<InboxRepository> { every { observeCounts() } returns (countsFlow ?: counts) }
+        // Mirrors DatabaseHolder.flowWithDb: nothing is observable while the vault is not Ready.
+        val inbox = mockk<InboxRepository> {
+            every { observeCounts() } returns this@Harness.vaultState.flatMapLatest { v -> if (v is VaultState.Ready) (countsFlow ?: counts) else emptyFlow() }
+        }
         val vault = mockk<VaultRepository> { every { state } returns vaultState }
         val vm = AnalyticsViewModel(analytics, health, inbox, vault)
     }
@@ -87,12 +92,14 @@ class AnalyticsViewModelTest : FunSpec({
 
     test("first report arrives, carries no stale label, and is computed off the main thread") {
         val h = Harness(ready())
+        val testThread = Thread.currentThread().name
         val s = withTimeout(10_000) { h.vm.state.first { !it.loading } }
         s.report.shouldNotBeNull().sampleSize shouldBe 1
         s.capped.shouldBeFalse()
         s.vaultLocked.shouldBeFalse()
         h.queryThreads.shouldNotBeEmpty()
-        h.queryThreads.first() shouldStartWith "DefaultDispatcher-worker"
+        // Without flowOn(Dispatchers.Default) the query would run on the collector's (main/test) thread.
+        h.queryThreads.first() shouldNotBe testThread
     }
 
     test("a period switch shows a clean loading placeholder: no report and no capped label from the previous period") {
@@ -139,17 +146,25 @@ class AnalyticsViewModelTest : FunSpec({
         locked.vaultLocked.shouldBeTrue()
         locked.report.shouldBeNull()
 
-        h.vaultState.value = ready()
-        h.counts.value = InboxCounts(2, 2, 0, 0)
+        h.vaultState.value = ready() // no count change: unlocking alone must recover the page
         val recovered = withTimeout(10_000) { h.vm.state.first { it.report != null } }
         recovered.vaultLocked.shouldBeFalse()
+    }
+
+    test("a vault that locks while the page is open recovers when unlocked, even without a count change") {
+        val h = Harness(ready())
+        withTimeout(10_000) { h.vm.state.first { it.report != null } }
+        h.vaultState.value = VaultState.Locked(KeyFailure.Invalidated)
+        withTimeout(10_000) { h.vm.state.first { it.vaultLocked } }
+        h.vaultState.value = ready() // the counts are unchanged, so no count tick will arrive
+        val recovered = withTimeout(10_000) { h.vm.state.first { it.report != null && !it.vaultLocked } }
+        recovered.loading.shouldBeFalse()
     }
 
     test("an opening vault keeps the loading state and computes once ready") {
         val h = Harness(VaultState.Opening)
         withTimeoutOrNull(700) { h.vm.state.first { !it.loading } }.shouldBeNull()
-        h.vaultState.value = ready()
-        h.counts.value = InboxCounts(2, 2, 0, 0)
+        h.vaultState.value = ready() // no count change: becoming Ready alone must compute
         val s = withTimeout(10_000) { h.vm.state.first { !it.loading } }
         s.report.shouldNotBeNull()
     }

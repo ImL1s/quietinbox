@@ -18,7 +18,7 @@ records what the repository **actually delivers today** and what it does **not**
 | Journal-first commit, commit fence on revoke | Done | `IngestRepository.commit`, `CaptureCoordinator.process` generation check |
 | Inbox / conversation UI with quality labels | Done | Device screenshots |
 | Search (CJK bigram + Latin trigram, parameterised, paged) | Done | Instrumented test covers 開會 / hel; UI on device |
-| Activity insights (observed-only: overview, heat map, rankings, best time, chattiness, quiet rate, emoji, catchphrases) | Done | 32 JVM tests in `core:analytics` plus 6 in `AnalyticsViewModelTest` (state rules, off-main-thread computation, locked/opening vault); UI on device; at most 50,000 messages per period are loaded (every tab shows a notice when it capped) |
+| Activity insights (observed-only: overview, heat map, rankings, best time, chattiness, quiet rate, emoji, catchphrases) | Done | 32 JVM tests in `core:analytics` plus 7 in `AnalyticsViewModelTest` (state rules, off-main-thread computation, locked/opening vault); UI on device; at most 50,000 messages per period are loaded (every tab shows a notice when it capped) |
 | Capture health page with gaps and diagnostics | Done | UI on device |
 | Retention TTL worker | Done (not soak-tested) | `RetentionWorker`, 12h periodic |
 | Media copy (content:// + notification bitmap, encrypted) | Implemented, **not device-verified** | `MediaCopier`; no test yet exercises a real content URI |
