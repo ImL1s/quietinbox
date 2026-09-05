@@ -137,6 +137,15 @@ fun AnalyticsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             )
+            if (state.capped) {
+                // Honesty label, shared by every tab: the period was truncated to the newest messages.
+                Text(
+                    stringResource(R.string.analytics_capped, AnalyticsRepository.MESSAGE_CAP),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
+                )
+            }
             if (state.loading || report == null) {
                 LoadingScreen()
                 return@Column
@@ -642,14 +651,6 @@ private fun RangeLine(state: AnalyticsUiState, report: ActivityReport) {
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (state.capped) {
-            // Honesty label: the period was truncated to the newest MESSAGE_CAP messages.
-            Text(
-                stringResource(R.string.analytics_capped, AnalyticsRepository.MESSAGE_CAP),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
     }
 }
 

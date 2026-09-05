@@ -28,10 +28,12 @@ Play 會重新簽章商店版本，所以兩種安裝無法互相更新；使用
 2. 本機跑閘門：`./gradlew test :app:assembleRelease && tools/check-permissions.sh app/build/outputs/apk/release/app-release.apk`，
    把 release APK 裝到裝置上，走過 changelog 裡每一條使用者可見的流程。
 3. 獨立審查（名單見 `docs/reviews/README.md`）；修正；再審。
-4. `git tag vX.Y.Z && git push --tags`。workflow 會建置、跑權限閘門、發布附 `SHA256SUMS.txt` 的 GitHub release，
-   並把 AAB 上傳到 Play 的 **internal** 軌道。
-5. 推進到 production：*Actions → Release → Run workflow* 並選 `track=production`，或
-   `gplay promote --package dev.quietinbox.app --from internal --to production`。
+4. `git tag vX.Y.Z && git push --tags`。workflow 會建置、跑權限閘門、發布附 `SHA256SUMS.txt` 的 GitHub release；
+   它不會碰 Google Play。
+5. Google Play（刻意觸發）：*Actions → Release → Run workflow* 指定 tag 與 `track=internal` 或 `track=production`；或在本機
+   `gplay release --package dev.quietinbox.app --track internal --bundle app/build/outputs/bundle/release/app-release.aab --release-notes @fastlane/release-notes.json`
+   再 `gplay promote --package dev.quietinbox.app --from internal --to production`。
+   Play 與 GitHub 的版本來自同一個 tag、同一把金鑰；CI 與維護者機器建出的位元組可能不同（尚無可重現建置比對）。
 
 ## 截圖
 

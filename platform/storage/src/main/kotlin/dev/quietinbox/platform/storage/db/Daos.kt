@@ -216,6 +216,11 @@ interface MessageDao {
     @Query("SELECT * FROM message WHERE mediaState = 'PENDING' ORDER BY observedAtEpochMs LIMIT :limit")
     suspend fun pendingMedia(limit: Int): List<MessageEntity>
 
+    /**
+     * Newest [limit] rows of the period, newest first. No index is led by `sortKey`, so SQLite scans
+     * the period and sorts at most [limit] rows: CPU traded for a bounded heap on purpose (the caller
+     * samples vault changes at 400 ms). A `sortKey` index is a candidate for schema v3.
+     */
     @Query(
         """
         SELECT m.conversationId, m.sortKey, m.dedupState, m.contentStatus, m.body, m.senderName, m.isSelf, c.packageName
@@ -225,11 +230,6 @@ interface MessageDao {
         LIMIT :limit
         """,
     )
-    /**
-     * Newest [limit] rows of the period. There is no index led by `sortKey`, so SQLite scans the
-     * period and sorts at most [limit] rows; that trades CPU for a bounded heap on purpose (the
-     * caller debounces recomputation). A `sortKey` index is a candidate for schema v3.
-     */
     suspend fun statsBetween(since: Long, until: Long, limit: Int): List<MessageStatRow>
 
     @Query("SELECT * FROM message ORDER BY id")

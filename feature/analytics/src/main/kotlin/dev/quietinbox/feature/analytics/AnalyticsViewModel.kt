@@ -16,6 +16,7 @@ import dev.quietinbox.core.analytics.QuietRank
 import dev.quietinbox.core.analytics.RankingBoards
 import dev.quietinbox.core.analytics.SenderPhrases
 import dev.quietinbox.platform.storage.repo.AnalyticsRepository
+import dev.quietinbox.platform.storage.repo.InboxCounts
 import dev.quietinbox.platform.storage.repo.ConversationLabel
 import dev.quietinbox.platform.storage.repo.HealthRepository
 import dev.quietinbox.platform.storage.repo.InboxRepository
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.drop
@@ -91,11 +93,13 @@ class AnalyticsViewModel @Inject constructor(
     @OptIn(kotlinx.coroutines.FlowPreview::class)
     val state: StateFlow<AnalyticsUiState> = combine(selection, vaultChanges(inbox)) { s, _ -> s }
         .transformLatest { s ->
-            // A period switch shows a loading state at once and cancels the previous computation.
-            emit(last.copy(loading = true, selection = s))
+            // A period switch shows a loading state at once and cancels the previous computation; a
+            // background vault change recomputes quietly behind the current content.
+            if (s != last.selection || last.report == null) emit(last.copy(loading = true, selection = s))
             emit(compute(s))
         }
         .onEach { last = it }
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AnalyticsUiState())
 
     fun setPeriod(kind: PeriodKind) {
@@ -112,13 +116,13 @@ class AnalyticsViewModel @Inject constructor(
         val now = System.currentTimeMillis()
         val period = period(s, now, zone)
         val messages: List<ObservedMessage> =
-            runCatching { analytics.messagesBetween(period.startEpochMs, period.endEpochMsInclusive) }
+            runCatching { analytics.messagesBetween(period.startEpochMs, period.endEpochMsInclusive) }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
                 .getOrDefault(emptyList())
-        val gaps = runCatching { health.observeGaps(GAP_LIMIT).first() }.getOrDefault(emptyList()).filter { gap ->
+        val gaps = runCatching { health.observeGaps(GAP_LIMIT).first() }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }.getOrDefault(emptyList()).filter { gap ->
             (gap.startEpochMs ?: period.startEpochMs) < period.endEpochMsExclusive &&
                 (gap.endEpochMs ?: period.endEpochMsInclusive) >= period.startEpochMs
         }
-        val summaries = runCatching { analytics.summaryCountBetween(period.startEpochMs, period.endEpochMsInclusive) }.getOrDefault(0)
+        val summaries = runCatching { analytics.summaryCountBetween(period.startEpochMs, period.endEpochMsInclusive) }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }.getOrDefault(0)
 
         val report = ActivityAnalytics.compute(
             AnalyticsInput(
@@ -193,7 +197,10 @@ class AnalyticsViewModel @Inject constructor(
     /** Vault changes: the first signal arrives at once; later ones are sampled every 400 ms (never starved). */
     @OptIn(kotlinx.coroutines.FlowPreview::class)
     private fun vaultChanges(inbox: InboxRepository): Flow<Any?> {
-        val counts = inbox.observeCounts().catch { }.distinctUntilChanged()
+        val counts = inbox.observeCounts()
+            .catch { emit(InboxCounts(0, 0, 0, 0)) } // an error must not leave the page in "loading" forever
+            .distinctUntilChanged()
+            .shareIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
         return merge(counts.take(1), counts.drop(1).sample(400))
     }
 }

@@ -1,8 +1,8 @@
 name: Release
 
-# Tag `vX.Y.Z` → signed release APK + AAB, permission gate, GitHub Release with checksums, and an
-# upload of the AAB to Google Play (internal track by default). Production promotion is a
-# deliberate `workflow_dispatch` with track=production.
+# Tag `vX.Y.Z` → signed release APK + AAB, permission gate, GitHub Release with checksums.
+# Google Play uploads are deliberate: `workflow_dispatch` with a tag and a track (internal or
+# production); the paid store listing never changes as a side effect of a tag.
 on:
   push:
     tags: ["v*"]
@@ -95,6 +95,7 @@ jobs:
   google-play:
     name: Google Play (${{ inputs.track || 'internal' }})
     needs: build
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0

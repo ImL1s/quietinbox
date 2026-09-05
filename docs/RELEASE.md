@@ -29,10 +29,13 @@ The two installs cannot update over each other because Play re-signs the store c
 2. Run the gate locally: `./gradlew test :app:assembleRelease && tools/check-permissions.sh app/build/outputs/apk/release/app-release.apk`,
    install the release APK on a device and walk every user-facing flow in the changelog.
 3. Independent review (`docs/reviews/README.md` roster); fix; re-review.
-4. `git tag vX.Y.Z && git push --tags`. The workflow builds, gates, publishes the GitHub release
-   with `SHA256SUMS.txt`, and uploads the AAB to the Play **internal** track.
-5. Promote to production: *Actions → Release → Run workflow* with `track=production`, or
-   `gplay promote --package dev.quietinbox.app --from internal --to production`.
+4. `git tag vX.Y.Z && git push --tags`. The workflow builds, gates and publishes the GitHub release
+   with `SHA256SUMS.txt`. It does not touch Google Play.
+5. Google Play (deliberate): *Actions → Release → Run workflow* with the tag and `track=internal`
+   or `track=production`; or locally `gplay release --package dev.quietinbox.app --track internal --bundle app/build/outputs/bundle/release/app-release.aab --release-notes @fastlane/release-notes.json`
+   followed by `gplay promote --package dev.quietinbox.app --from internal --to production`.
+   The Play copy and the GitHub copy are built from the same tag with the same key; the bytes can
+   differ between the CI runner and a maintainer machine (no reproducible-build comparison yet).
 
 ## Screenshots
 
