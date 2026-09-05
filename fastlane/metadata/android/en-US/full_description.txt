@@ -13,7 +13,7 @@ FOUR PROMISES
 4. Everything is stored with SQLCipher (AES-256) under a key that exists only on this device and is protected by the Android Keystore.
 
 HOW IT WORKS
-QuietInbox uses Android's standard notification access (Notification Listener). You grant it once in system settings; the app then keeps copies only for the sources you enable, for as long as you choose (7–365 days). You can pause capture, delete a message or a whole conversation, or wipe everything including the keys.
+QuietInbox uses Android's standard notification access (Notification Listener). You grant it once in system settings; the app then keeps copies only for the sources you enable, for as long as you choose (1–365 days). You can pause capture, delete a message or a whole conversation, or wipe everything including the keys.
 
 LIMITS, STATED PLAINLY
 • If a source app does not post a notification (muted chat, Do Not Disturb, "hide content" settings), there is nothing to copy.

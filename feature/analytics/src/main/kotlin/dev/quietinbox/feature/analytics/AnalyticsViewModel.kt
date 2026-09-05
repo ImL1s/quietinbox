@@ -26,6 +26,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -58,6 +60,8 @@ data class AnalyticsUiState(
     val catchphrases: List<SenderPhrases> = emptyList(),
     val emoji: List<EmojiCount> = emptyList(),
     val labels: Map<Long, ConversationLabel> = emptyMap(),
+    /** True when the period held more messages than [AnalyticsRepository.MESSAGE_CAP]; only the newest ones were counted. */
+    val capped: Boolean = false,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -74,7 +78,11 @@ class AnalyticsViewModel @Inject constructor(
      * pure Kotlin over rows already in memory, but catchphrase scanning over "All" is real work, so
      * the whole pipeline runs off the main thread.
      */
-    val state: StateFlow<AnalyticsUiState> = combine(selection, inbox.observeCounts().catch { }) { s, _ -> s }
+    // Recompute when the selection changes or the vault changes, but never more than twice a second:
+    // a burst of notifications must not re-scan the whole period for every single message.
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
+    val state: StateFlow<AnalyticsUiState> = combine(selection, inbox.observeCounts().catch { }.distinctUntilChanged()) { s, _ -> s }
+        .debounce(400)
         .map { s -> compute(s) }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AnalyticsUiState())
@@ -99,7 +107,7 @@ class AnalyticsViewModel @Inject constructor(
             (gap.startEpochMs ?: period.startEpochMs) < period.endEpochMsExclusive &&
                 (gap.endEpochMs ?: period.endEpochMsInclusive) >= period.startEpochMs
         }
-        val summaries = runCatching { analytics.summaryCountSince(period.startEpochMs) }.getOrDefault(0)
+        val summaries = runCatching { analytics.summaryCountBetween(period.startEpochMs, period.endEpochMsInclusive) }.getOrDefault(0)
 
         val report = ActivityAnalytics.compute(
             AnalyticsInput(
@@ -134,6 +142,7 @@ class AnalyticsViewModel @Inject constructor(
         return AnalyticsUiState(
             loading = false,
             selection = s,
+            capped = messages.size >= AnalyticsRepository.MESSAGE_CAP,
             period = period,
             dayCount = period.days(zone).size,
             report = report,

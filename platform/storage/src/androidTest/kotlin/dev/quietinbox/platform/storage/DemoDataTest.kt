@@ -12,6 +12,7 @@ import dev.quietinbox.platform.storage.repo.SearchRepository
 import io.kotest.matchers.collections.shouldHaveAtLeastSize
 import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -68,6 +69,14 @@ class DemoDataTest {
         val dao = holder.db().demoDao()
         val now = System.currentTimeMillis()
 
+        // A non-demo row written before seeding must survive clear(): the seeder only touches its own tags.
+        holder.db().sourceDao().upsert(
+            dev.quietinbox.platform.storage.db.SourceConfigurationEntity(
+                packageName = "com.example.real", displayName = "Real source", enabled = true, paused = false,
+                retentionDays = null, mediaEnabled = false, addedAtEpochMs = now, adapterId = null,
+            ),
+        )
+
         val counts = demo.seed(now)
         counts.conversations shouldBe 8
         counts.messages shouldBeGreaterThanOrEqualTo 100
@@ -101,6 +110,7 @@ class DemoDataTest {
         dao.countAllGaps() shouldBe 2
 
         demo.clear()
+        holder.db().sourceDao().get("com.example.real") shouldNotBe null
 
         dao.countSources(packages) shouldBe 0
         dao.countConversations(packages) shouldBe 0

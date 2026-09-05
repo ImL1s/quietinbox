@@ -73,4 +73,5 @@
 
     <string name="analytics_empty_messages_title">Not enough observed messages</string>
     <string name="analytics_empty_messages_body">This view needs more messages in the selected period. QuietInbox counts only what a notification actually contained.</string>
+    <string name="analytics_capped">This period holds more than %1$d observed messages; only the newest %1$d are counted.</string>
 </resources>

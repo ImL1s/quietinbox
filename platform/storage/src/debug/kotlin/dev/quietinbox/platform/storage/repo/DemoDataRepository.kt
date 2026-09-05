@@ -34,9 +34,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.random.Random
 
-/** What [DemoDataRepository.seed] wrote, for the developer-facing confirmation text. */
-data class DemoCounts(val conversations: Int, val messages: Int)
-
 /**
  * Fills the vault with obviously synthetic demo content so the app can be demonstrated and
  * screenshotted without a single real notification.
@@ -47,20 +44,20 @@ data class DemoCounts(val conversations: Int, val messages: Int)
  * way `IngestRepository.commit` shapes them — same fingerprint function, same sort-key rule, same
  * search tokenisation — so the demo exercises the real read paths rather than a parallel one.
  *
- * Debug affordance only: nothing in the release UI reaches it. Every name, group and message body
+ * Debug source set only: release builds do not contain this class (they bind [NoDemoData]). Every name, group and message body
  * is invented; no real person, brand or application appears anywhere in the seeded data.
  */
 @Singleton
 class DemoDataRepository @Inject constructor(
     private val holder: DatabaseHolder,
-) {
+) : DemoData {
 
     /**
      * Replaces any previous demo content with a fresh set. Idempotent: it clears first, so calling
      * it twice leaves the same rows rather than duplicates. [now] is the "present" the data is laid
      * out behind; it is a parameter so tests get a deterministic window.
      */
-    suspend fun seed(now: Long = System.currentTimeMillis()): DemoCounts {
+    override suspend fun seed(now: Long): DemoCounts {
         val db = holder.db()
         return db.withTransaction {
             clearRows(db)
@@ -91,7 +88,7 @@ class DemoDataRepository @Inject constructor(
     }
 
     /** Removes every row this seeder can have produced, and nothing else. */
-    suspend fun clear() {
+    override suspend fun clear() {
         val db = holder.db()
         db.withTransaction { clearRows(db) }
     }

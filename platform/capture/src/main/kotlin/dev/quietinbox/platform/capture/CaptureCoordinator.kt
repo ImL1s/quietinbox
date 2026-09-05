@@ -314,6 +314,7 @@ class CaptureCoordinator @Inject constructor(
      * applies, restated against the snapshot: own-package events must be synthetic, and other
      * packages are filtered here only once the source list is known.
      */
+    @androidx.annotation.VisibleForTesting(otherwise = androidx.annotation.VisibleForTesting.PRIVATE)
     internal fun offerCaptured(captured: CapturedNotification) {
         val gen = activeGeneration ?: return
         if (paused) return

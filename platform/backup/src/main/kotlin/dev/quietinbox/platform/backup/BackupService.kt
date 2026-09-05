@@ -212,10 +212,15 @@ class BackupService @Inject constructor(
      */
     private suspend fun apply(db: QuietInboxDatabase, s: Staged): BackupResult {
         val writtenFiles = ArrayList<String>()
+        val usedFiles = HashSet<String>() // blobs referenced by a message that was actually inserted
         // Blobs are decoded and encrypted to disk BEFORE the write transaction so the SQLite write
         // lock is never held during Tink work and file I/O (live capture would otherwise stall).
         class Prepared(val fileName: String, val byteCount: Long)
         val prepared = HashMap<Long, Prepared?>() // old message id -> encrypted file, or null when it failed
+        val now = System.currentTimeMillis()
+        val retentionMs = settings.current().retentionDays * 24L * 60L * 60L * 1000L
+        return try {
+            // Inside the try so a failure or cancellation while encrypting still removes every file.
         for (media in s.media) {
             val oldId = media.messageId ?: continue
             val bytes = runCatching { Base64.decode(media.dataBase64, Base64.NO_WRAP) }.getOrNull()
@@ -231,9 +236,6 @@ class BackupService @Inject constructor(
                 prepared[oldId] = null
             }
         }
-        val now = System.currentTimeMillis()
-        val retentionMs = settings.current().retentionDays * 24L * 60L * 60L * 1000L
-        return try {
             val counts = db.withTransaction {
                 for (src in s.sources) {
                     if (db.sourceDao().get(src.packageName) == null) {
@@ -299,6 +301,7 @@ class BackupService @Inject constructor(
                         ),
                     )
                     if (blob != null) {
+                        usedFiles += blob.fileName
                         val blobId = db.mediaDao().insert(MediaBlobEntity(messageId = newId, fileName = blob.fileName, thumbFileName = null, mimeType = media.mimeType, byteCount = blob.byteCount, width = media.width, height = media.height, state = MediaState.LOCAL_COPY.name, failureReason = null, createdAtEpochMs = media.createdAtEpochMs))
                         db.messageDao().setMedia(newId, MediaState.LOCAL_COPY.name, blobId)
                     }
@@ -331,8 +334,10 @@ class BackupService @Inject constructor(
                 if (skippedOrphans > 0) {
                     db.diagnosticsDao().insert(dev.quietinbox.platform.storage.db.DiagnosticEventEntity(code = "RESTORE_ORPHAN_MESSAGES", detail = skippedOrphans.toString(), packageName = null, atEpochMs = System.currentTimeMillis()))
                 }
-                Counts(s.sources.size, convMap.size, inserted, restoredRevisions, writtenFiles.size)
+                Counts(s.sources.size, convMap.size, inserted, restoredRevisions, usedFiles.size)
             }
+            // Blobs prepared for messages that were skipped (duplicates, orphans) have no row: remove them.
+            for (f in writtenFiles) if (f !in usedFiles) mediaDir.delete(f)
             BackupResult.Ok(counts)
         } catch (e: Exception) {
             // The transaction rolled back; blobs written outside it are removed on every failure,

@@ -221,9 +221,11 @@ interface MessageDao {
         SELECT m.conversationId, m.sortKey, m.dedupState, m.contentStatus, m.body, m.senderName, m.isSelf, c.packageName
         FROM message m JOIN conversation c ON c.id = m.conversationId
         WHERE m.sortKey >= :since AND m.sortKey <= :until
+        ORDER BY m.sortKey DESC
+        LIMIT :limit
         """,
     )
-    suspend fun statsBetween(since: Long, until: Long): List<MessageStatRow>
+    suspend fun statsBetween(since: Long, until: Long, limit: Int): List<MessageStatRow>
 
     @Query("SELECT * FROM message ORDER BY id")
     suspend fun allForExport(): List<MessageEntity>
@@ -361,6 +363,9 @@ interface HealthDao {
     @Query("SELECT COUNT(*) FROM summary_observation WHERE observedAtEpochMs >= :since")
     suspend fun summaryCountSince(since: Long): Int
 
+    @Query("SELECT COUNT(*) FROM summary_observation WHERE observedAtEpochMs >= :since AND observedAtEpochMs <= :until")
+    suspend fun summaryCountBetween(since: Long, until: Long): Int
+
     @Query("SELECT COUNT(*) FROM summary_observation")
     fun observeSummaryCount(): Flow<Int>
 
@@ -386,7 +391,8 @@ interface DiagnosticsDao {
 data class DiagnosticCount(val code: String, val n: Int)
 
 /**
- * Queries used only by the debug demo seeder (`DemoDataRepository`). They address rows by the
+ * Queries used only by the debug demo seeder (`DemoDataRepository`, debug source set). They stay in
+ * the main Room class because a DAO cannot be variant-specific; they carry no demo content. They address rows by the
  * recognisable demo tags — a `demo.quietinbox.` package prefix, or a `demo-` capture generation —
  * so seeding and clearing can never touch captured data. No schema change: every column already
  * exists.

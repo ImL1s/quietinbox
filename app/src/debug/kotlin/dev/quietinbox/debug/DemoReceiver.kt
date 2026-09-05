@@ -8,7 +8,7 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
-import dev.quietinbox.platform.storage.repo.DemoDataRepository
+import dev.quietinbox.platform.storage.repo.DemoData
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -34,7 +34,7 @@ class DemoReceiver : BroadcastReceiver() {
     @EntryPoint
     @InstallIn(SingletonComponent::class)
     interface DemoEntryPoint {
-        fun demoDataRepository(): DemoDataRepository
+        fun demoDataRepository(): DemoData
     }
 
     override fun onReceive(context: Context, intent: Intent) {

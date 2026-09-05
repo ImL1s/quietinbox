@@ -43,15 +43,20 @@ class MediaCopier @Inject constructor(
 
     suspend fun copyPending(messageIds: List<Long>, bitmap: Bitmap?) = withContext(Dispatchers.IO) {
         val db = holder.db()
+        // A Bitmap is not thread-safe: compress it once here, then share the immutable bytes.
+        val bitmapBytes: ByteArray? = bitmap?.let { b ->
+            val out = ByteArrayOutputStream()
+            if (runCatching { b.compress(Bitmap.CompressFormat.PNG, 100, out) }.getOrDefault(false)) out.toByteArray() else null
+        }
         coroutineScope {
             messageIds.map { id ->
                 async {
-                    val row = db.messageDao().get(id) ?: return@async
-                    if (row.mediaState != MediaState.PENDING.name) return@async
                     parallelism.withPermit {
+                        val row = db.messageDao().get(id) ?: return@withPermit
+                        if (row.mediaState != MediaState.PENDING.name) return@withPermit
                         val state = when {
                             row.mediaUri != null -> copyUri(id, Uri.parse(row.mediaUri), row.mediaMimeType)
-                            bitmap != null -> copyBitmap(id, bitmap)
+                            bitmap != null -> copyBitmapBytes(id, bitmapBytes)
                             else -> MediaState.FAILED to null
                         }
                         db.messageDao().setMedia(id, state.first.name, state.second)
@@ -96,11 +101,8 @@ class MediaCopier @Inject constructor(
         return store(messageId, bytes, mimeType)
     }
 
-    private suspend fun copyBitmap(messageId: Long, bitmap: Bitmap): Pair<MediaState, Long?> {
-        val out = ByteArrayOutputStream()
-        val ok = runCatching { bitmap.compress(Bitmap.CompressFormat.PNG, 100, out) }.getOrDefault(false)
-        if (!ok) return MediaState.FAILED to null
-        val bytes = out.toByteArray()
+    private suspend fun copyBitmapBytes(messageId: Long, bytes: ByteArray?): Pair<MediaState, Long?> {
+        if (bytes == null) return MediaState.FAILED to null
         if (bytes.size > MAX_BYTES) return MediaState.TOO_LARGE to null
         return store(messageId, bytes, "image/png")
     }

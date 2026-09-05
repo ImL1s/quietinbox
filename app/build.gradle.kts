@@ -22,16 +22,18 @@ android {
         create("release") {
             when {
                 keystoreProps != null -> {
-                    storeFile = file(keystoreProps.getProperty("storeFile"))
-                    storePassword = keystoreProps.getProperty("storePassword")
-                    keyAlias = keystoreProps.getProperty("keyAlias")
-                    keyPassword = keystoreProps.getProperty("keyPassword")
+                    fun prop(name: String) = requireNotNull(keystoreProps.getProperty(name)) { "keystore.properties is missing '$name'" }
+                    storeFile = file(prop("storeFile"))
+                    storePassword = prop("storePassword")
+                    keyAlias = prop("keyAlias")
+                    keyPassword = prop("keyPassword")
                 }
                 envKeystore != null -> {
+                    fun env(name: String) = requireNotNull(System.getenv(name)) { "$name must be set together with QUIETINBOX_KEYSTORE_FILE" }
                     storeFile = file(envKeystore)
-                    storePassword = System.getenv("QUIETINBOX_KEYSTORE_PASSWORD")
-                    keyAlias = System.getenv("QUIETINBOX_KEY_ALIAS")
-                    keyPassword = System.getenv("QUIETINBOX_KEY_PASSWORD")
+                    storePassword = env("QUIETINBOX_KEYSTORE_PASSWORD")
+                    keyAlias = env("QUIETINBOX_KEY_ALIAS")
+                    keyPassword = env("QUIETINBOX_KEY_PASSWORD")
                 }
             }
             enableV1Signing = false
@@ -45,7 +47,7 @@ android {
         minSdk = 26
         // Baseline target per plan §4; an API 37 compatibility lane is tracked in docs/COMPATIBILITY.md.
         targetSdk = 36
-        versionCode = 1
+        versionCode = 2
         versionName = "0.1.0"
         testInstrumentationRunner = "dev.quietinbox.HiltTestRunner"
     }

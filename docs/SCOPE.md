@@ -18,13 +18,14 @@ records what the repository **actually delivers today** and what it does **not**
 | Journal-first commit, commit fence on revoke | Done | `IngestRepository.commit`, `CaptureCoordinator.process` generation check |
 | Inbox / conversation UI with quality labels | Done | Device screenshots |
 | Search (CJK bigram + Latin trigram, parameterised, paged) | Done | Instrumented test covers 開會 / hel; UI on device |
-| Activity statistics (observed-only) | Done | 32 JVM tests in `core:analytics`; UI on device |
+| Activity insights (observed-only: overview, heat map, rankings, best time, chattiness, quiet rate, emoji, catchphrases) | Done | 32 JVM tests in `core:analytics`; UI on device; at most 50,000 messages per period are loaded (the page says when it capped) |
 | Capture health page with gaps and diagnostics | Done | UI on device |
 | Retention TTL worker | Done (not soak-tested) | `RetentionWorker`, 12h periodic |
 | Media copy (content:// + notification bitmap, encrypted) | Implemented, **not device-verified** | `MediaCopier`; no test yet exercises a real content URI |
-| Encrypted backup export/import with recovery key | Implemented, **not device-verified** | `BackupService` + HKDF RFC vectors; no round-trip instrumented test yet |
-| Own reminders (off by default, DST-safe local time) | Implemented, **not device-verified** | `ReminderScheduler.delayUntilNext` pure function; no unit test yet |
+| Encrypted backup export/import with recovery key | Implemented, **not device-verified** | `BackupService` + HKDF RFC vectors; `BackupStagerTest` covers format and limits (21 JVM tests); no round-trip instrumented test yet |
+| Own reminders (off by default, DST-safe local time) | Implemented, **not device-verified** | `ReminderSchedulerTest` covers `delayUntilNext` (4 JVM tests); no device test yet |
 | UI lock (BiometricPrompt), screenshot protection | Implemented, **partially verified** | FLAG_SECURE verified to block `screencap` in debug before the debug-only exemption was added; biometric flow not exercised |
+| Demo mode (debug builds only) | Done | `DemoDataRepository` lives in the `debug` source set of `platform:storage` behind the `DemoData` interface; release binds a no-op and its dex contains no demo class or text (checked with `strings` on `classes.dex`); `DemoDataTest` on device |
 | No INTERNET permission | Done | `aapt2 dump permissions` on debug APK; `tools/check-permissions.sh` in CI |
 | zh-Hant + en localisation | Done | `core/designsystem/res/values*` |
 | Adaptive layout (rail + list-detail on wide windows) | Done (emulator) | Foldable_Test AVD (API 36, 2076×2152): `NavigationRail` + `ListDetailSceneStrategy` show inbox and conversation side by side; phone shows bottom bar |

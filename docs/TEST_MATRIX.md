@@ -16,6 +16,8 @@ are test tools, never evidence about a real source app.
 | Instrumented storage | Real SQLCipher + Room migrations | `VaultRoundTripTest` (journal → commit → search → suppression → reopen with persisted key), `MigrationTest` (1→2 against exported schema), `DemoDataTest` (debug demo seed → counts and projection → idempotent re-seed → clear leaves nothing) | `./gradlew :platform:storage:connectedDebugAndroidTest` |
 | Instrumented crypto | Durable key write on a real filesystem | `WrappedSecretFileTest` (data fsync → rename → `Os.fsync` on the directory; create-once, read-back, nested directory) | `./gradlew :platform:crypto:connectedDebugAndroidTest` |
 | Crypto | RFC 5869 vectors, codec round trips | `HkdfTest`, `RecoveryKeyCodecTest` | JVM |
+| Backup staging | Format and limit enforcement of the restore reader | `BackupStagerTest` (21 tests: manifest first, duplicate manifest, unsupported version, data after end, count mismatches, every size limit, unknown record) | `./gradlew :platform:backup:testDebugUnitTest` |
+| Capture coordinator | Commit fence and cold start with mocked repositories | `CaptureCoordinatorTest` (11 tests: pause discards queued events, resume rotates generation and session, non-source packages dropped after the source list loads, cancellation propagates) | `./gradlew :platform:capture:testDebugUnitTest` |
 
 ## Scenario ids referenced by the plan (subset implemented as tests)
 

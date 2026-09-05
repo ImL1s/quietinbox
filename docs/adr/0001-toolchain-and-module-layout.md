@@ -27,3 +27,13 @@ for opt-ins. A three-module spike was built and installed before the full layout
 
 - `-Xjvm-default=all` is gone in Kotlin 2.4 (`-jvm-default` only accepts `enable|no-compatibility|disable`); the default is sufficient.
 - KSP 2.3.11 targets Kotlin 2.3.20 but compiles fine with 2.4.10; if a KSP incompatibility appears, downgrade Kotlin to 2.3.x rather than pinning KSP.
+
+## Addendum (2026-09-06): one `:parsers:apps` module instead of five
+
+The plan listed `:parsers:line`, `:parsers:whatsapp`, `:parsers:telegram`, `:parsers:instagram` and
+`:parsers:messenger` as separate modules, plus `:tools:fixture-publisher`, `:tools:replay-cli` and
+`:benchmark`. v0.1 ships the five adapters inside a single `:parsers:apps` module: they share one
+`AppParser` base whose candidate hooks are `final`, so an adapter can only override
+`appSingleCandidates` and `postProcess`, which keeps the per-app surface small and reviewable. Splitting
+them would add five Gradle modules for ~60 lines each without an isolation benefit (they are all
+`SYNTHETIC_ONLY`). The tool and benchmark modules are not built yet; see `docs/SCOPE.md`.

@@ -8,7 +8,7 @@
 | 層級 | 判準（Oracle） | 現有內容 | 執行方式 |
 | --- | --- | --- | --- |
 | L0 契約與 fixture | 手寫的預期值 | `core:testing` Fixtures DSL；每個解析器測試都是一個帶有明確預期批次的合成 fixture | JVM |
-| L1 JVM 重播 | 純 Kotlin 的 parser／identity／reconcile／analytics | `core:*` 44 個測試（model 5、parser 10、identity 5、reconcile 20、analytics 4）、`parsers:apps` 43 個、`app` 4 個（提醒）；兩個 1,000 次迭代的性質測試（property test）：不同的內容必須恰好被接受一次（seed 20260905）、沒有 id 的重複內容絕不可重複，且重播絕不可縮小視窗（seed 20260906） | `./gradlew :core:model:test :core:parser:test :core:identity:test :core:reconcile:test :core:analytics:test :parsers:apps:test` |
+| L1 JVM 重播 | 純 Kotlin 的 parser／identity／reconcile／analytics | `core:*` 72 個測試（model 5、parser 10、identity 5、reconcile 20、analytics 32）、`parsers:apps` 43 個、`app` 4 個（提醒）；兩個 1,000 次迭代的性質測試（property test）：不同的內容必須恰好被接受一次（seed 20260905）、沒有 id 的重複內容絕不可重複，且重播絕不可縮小視窗（seed 20260906） | `./gradlew :core:model:test :core:parser:test :core:identity:test :core:reconcile:test :core:analytics:test :parsers:apps:test` |
 | L2 Android 發布器 | 透過自家 package 產生的真實通知回呼 | `SyntheticNotifications`（MessagingStyle、BigText）；引導流程步驟 4 | 裝置、手動 |
 | L3 真實來源 App | 兩個知情同意的測試帳號、錄影紀錄 | **未執行** | — |
 | L4 故障與效能 | 終止 process、Doze、首次解鎖、撤銷、磁碟上限 | **未執行**（程式中已有 commit 圍籬（generation）；尚無注入故障的測試） | — |
@@ -16,6 +16,8 @@
 | 真機測試（instrumented）儲存 | 真實的 SQLCipher + Room 遷移 | `VaultRoundTripTest`（日誌 → commit → 搜尋 → 抑制 → 以持久化的金鑰重新開啟）、`MigrationTest`（對照匯出的 schema 執行 1→2）、`DemoDataTest`（示範資料寫入 → 筆數與投影 → 重複寫入不重複 → 清除後不留痕跡） | `./gradlew :platform:storage:connectedDebugAndroidTest` |
 | 真機測試（instrumented）加密 | 在真實檔案系統上的持久化金鑰寫入 | `WrappedSecretFileTest`（資料 fsync → 更名 → 對目錄執行 `Os.fsync`；只建立一次、讀回、巢狀目錄） | `./gradlew :platform:crypto:connectedDebugAndroidTest` |
 | 加密 | RFC 5869 測試向量、codec 來回轉換 | `HkdfTest`、`RecoveryKeyCodecTest` | JVM |
+| 備份 staging | 還原讀取器的格式與上限強制 | `BackupStagerTest`（21 個測試：manifest 必須在第一筆、重複 manifest、不支援的版本、end 之後仍有資料、計數不符、每一項大小上限、未知記錄型別） | `./gradlew :platform:backup:testDebugUnitTest` |
+| 擷取協調器 | 以 mock repository 驗證 commit 圍籬與冷啟動 | `CaptureCoordinatorTest`（11 個測試：暫停後丟棄排隊事件、恢復時輪換 generation 與 session、來源清單載入後丟棄非來源套件、取消會傳播） | `./gradlew :platform:capture:testDebugUnitTest` |
 
 ## 計畫所引用的情境編號（已實作成測試的子集）
 

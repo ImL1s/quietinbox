@@ -60,12 +60,12 @@ class SnapshotFactory(
         val messaging = runCatching { NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(n) }.getOrNull()
 
         // MessagingStyle semantics: a message without a Person, or whose Person is the style's user,
-
-        // was sent by the device owner.
-
-        val selfName = messaging?.user?.name?.toString()
-        val messages = messaging?.messages?.let { bound(it, TruncationFlag.MESSAGES, truncated, selfName) }.orEmpty()
-        val historic = messaging?.historicMessages?.let { bound(it, TruncationFlag.HISTORIC_MESSAGES, truncated, selfName) }.orEmpty()
+        // was sent by the device owner. The stable key / uri wins; a display name is only compared
+        // when neither side carries a key (two contacts may share a name).
+        val self = messaging?.user
+        val selfName = self?.name?.toString()
+        val messages = messaging?.messages?.let { bound(it, TruncationFlag.MESSAGES, truncated, self, selfName) }.orEmpty()
+        val historic = messaging?.historicMessages?.let { bound(it, TruncationFlag.HISTORIC_MESSAGES, truncated, self, selfName) }.orEmpty()
 
         val actions = n.actions?.toList()?.let { list ->
             if (list.size > Limits.MAX_ACTIONS) truncated += TruncationFlag.ACTIONS
@@ -147,7 +147,7 @@ class SnapshotFactory(
         return CapturedNotification(snapshot, bitmap)
     }
 
-    private fun bound(list: List<NotificationCompat.MessagingStyle.Message>, flag: TruncationFlag, truncated: MutableSet<TruncationFlag>, selfName: String?): List<MessagingMessageShape> {
+    private fun bound(list: List<NotificationCompat.MessagingStyle.Message>, flag: TruncationFlag, truncated: MutableSet<TruncationFlag>, self: androidx.core.app.Person?, selfName: String?): List<MessagingMessageShape> {
         if (list.size > Limits.MAX_MESSAGES) truncated += flag
         return list.takeLast(Limits.MAX_MESSAGES).map { m ->
             val person = m.person
@@ -160,7 +160,12 @@ class SnapshotFactory(
                 senderName = person?.name?.let { BoundedText.of(it, 256) },
                 senderKey = person?.key?.take(Limits.MAX_KEY_CHARS),
                 senderUri = person?.uri?.take(Limits.MAX_URI_CHARS),
-                isSelf = person == null || (selfName != null && person.name?.toString() == selfName),
+                isSelf = when {
+                    person == null -> true
+                    self?.key != null || person.key != null -> self?.key != null && person.key == self.key
+                    self?.uri != null || person.uri != null -> self?.uri != null && person.uri == self.uri
+                    else -> selfName != null && person.name?.toString() == selfName
+                },
                 dataMimeType = m.dataMimeType?.take(64),
                 dataUri = uri,
                 isRemoteInputHistory = false,

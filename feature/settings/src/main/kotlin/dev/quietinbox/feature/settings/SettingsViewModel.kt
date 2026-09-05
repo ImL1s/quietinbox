@@ -10,7 +10,7 @@ import dev.quietinbox.core.model.BuildInfo
 import dev.quietinbox.platform.backup.BackupResult
 import dev.quietinbox.platform.backup.BackupService
 import dev.quietinbox.platform.crypto.KeyResult
-import dev.quietinbox.platform.storage.repo.DemoDataRepository
+import dev.quietinbox.platform.storage.repo.DemoData
 import dev.quietinbox.platform.storage.repo.VaultRepository
 import dev.quietinbox.platform.storage.settings.AppSettings
 import dev.quietinbox.platform.storage.settings.SettingsRepository
@@ -56,7 +56,7 @@ class SettingsViewModel @Inject constructor(
     private val backup: BackupService,
     private val vault: VaultRepository,
     private val reminders: ReminderScheduling,
-    private val demoData: DemoDataRepository,
+    private val demoData: DemoData,
     buildInfo: BuildInfo,
 ) : ViewModel() {
     private val local = MutableStateFlow(SettingsUiState(versionName = versionName(), developerTools = buildInfo.debug))

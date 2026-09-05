@@ -154,4 +154,28 @@ class VaultRoundTripTest {
         again.state.value.shouldBeInstanceOf<VaultState.Ready>()
         (again.state.value as VaultState.Ready).db.close()
     }
+
+    /** Whole-repo review I1: a deleted conversation must not come back as an empty row on replay. */
+    @Test
+    fun deletedConversationDoesNotResurrectOnReplay() = runBlocking {
+        ready()
+        val reconciler = Reconciler()
+        val s = Fixtures.snapshot(Fixtures.bigText("Alice", "delete me later", tag = "d1"), packageName = KnownSources.TELEGRAM, eventId = "d1")
+        val b = StandardParser().parse(s)
+        val id = IdentityResolver().resolve(s, b)
+        val r = reconciler.reconcile(s.notificationKey, b.messages, null, lookupById = { null })
+        val out = ingest.commit(s, b, id, r, "gen", null, mediaAllowed = false)
+        val conversationId = out.conversationId!!
+        inbox.deleteConversation(conversationId, System.currentTimeMillis(), 30L * 86_400_000)
+        ingest.findConversationId(id) shouldBe null
+
+        // Active-notification replay of the same content: every item is suppressed, so nothing may be stored.
+        val replay = reconciler.reconcile(s.notificationKey, b.messages, ingest.checkpoint(id.streamKey), lookupById = { null })
+        val again = ingest.commit(s.copy(eventId = "d2"), b, id, replay, "gen", null, mediaAllowed = false)
+        again.conversationId shouldBe null
+        again.newMessageIds shouldBe emptyList()
+        ingest.findConversationId(id) shouldBe null
+        holder.db().conversationDao().observeCount().first() shouldBe 0
+        Unit
+    }
 }

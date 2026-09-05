@@ -91,9 +91,12 @@ data class Period(
         }
 
         /** A user-picked inclusive date range; the dates are swapped when given the wrong way round. */
-        fun custom(start: LocalDate, endInclusive: LocalDate, zone: TimeZone): Period =
-            if (endInclusive < start) between(endInclusive, start, zone, PeriodKind.CUSTOM)
-            else between(start, endInclusive, zone, PeriodKind.CUSTOM)
+        fun custom(start: LocalDate, endInclusive: LocalDate, zone: TimeZone): Period {
+            val (from, to) = if (endInclusive < start) endInclusive to start else start to endInclusive
+            // Same clamp as [all]: a picker cannot turn one screen into an unbounded day loop.
+            val floor = to.minus(DatePeriod(days = MAX_SPAN_DAYS))
+            return between(maxOf(from, floor), to, zone, PeriodKind.CUSTOM)
+        }
 
         private fun today(nowEpochMs: Long, zone: TimeZone): LocalDate =
             Instant.fromEpochMilliseconds(nowEpochMs).toLocalDateTime(zone).date
