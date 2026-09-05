@@ -97,6 +97,7 @@ data class ConversationEntity(
     val lastViewedEpochMs: Long?,
     val messageCount: Int,
     val ambiguousCount: Int,
+    /** Reserved: summary-only observations are not attributable to a conversation in v0.1, so this stays 0. */
     val summaryOnlyCount: Int,
     val lastMessagePreview: String?,
     val lastSenderName: String?,

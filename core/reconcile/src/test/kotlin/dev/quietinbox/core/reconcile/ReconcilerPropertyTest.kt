@@ -7,6 +7,10 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.property.Arb
 import io.kotest.property.PropTestConfig
+import io.kotest.matchers.ints.shouldBeGreaterThanOrEqual
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
+import io.kotest.property.arbitrary.bind
+import io.kotest.property.arbitrary.boolean
 import io.kotest.property.arbitrary.int
 import io.kotest.property.arbitrary.list
 import io.kotest.property.checkAll
@@ -17,6 +21,7 @@ import io.kotest.property.checkAll
  * duplication) and re-posting the same window must never produce new decisions.
  * Seeds are fixed so failures are reproducible; 1,000 iterations on PR per plan section 15.
  */
+@OptIn(io.kotest.common.ExperimentalKotest::class)
 class ReconcilerPropertyTest : FunSpec({
     val r = Reconciler()
 
@@ -52,6 +57,61 @@ class ReconcilerPropertyTest : FunSpec({
             val expected = (0 until next).map { "msg-$it" }.filter { it in accepted.toSet() }
             accepted shouldBe expected
             accepted.toSet().size shouldBe accepted.size
+        }
+    }
+
+    /**
+     * Repeated, id-less, timestamp-less content (the "好 / ok" space where positional alignment is
+     * inherently ambiguous). "No loss" cannot hold there: a window that slid by exactly its own
+     * content is indistinguishable from a repost. What must hold is *no duplication*, and that a
+     * post which adds nothing (a stale suffix replay, an ambiguous single repeat, an identical
+     * repost) never shrinks the checkpoint window.
+     */
+    test("repeated content never duplicates and replays never shrink the window") {
+        data class Step(val advance: Int, val replaySuffix: Int, val closeBefore: Boolean)
+        val stepArb = Arb.bind(Arb.int(1, 4), Arb.int(0, 3), Arb.boolean()) { a, s, c -> Step(a, s, c) }
+        checkAll(
+            PropTestConfig(seed = 20260906L, iterations = 1_000),
+            Arb.list(stepArb, 1..30),
+            Arb.int(1, 5),
+            Arb.int(1, 3),
+        ) { steps, windowSize, alphabet ->
+            var posted = 0L
+            var next = 0
+            var window: MessageWindow? = null
+            var lastVisible: List<String> = emptyList()
+            var newTotal = 0
+            fun candidates(bodies: List<String>) = bodies.mapIndexed { i, b ->
+                MessageCandidate(ordinal = i, body = b, sender = SenderCandidate("S"), sourceTimestampEpochMs = null, timestampQuality = TimestampQuality.OBSERVED_ONLY)
+            }
+            fun body(n: Int) = "m" + (n % alphabet)
+            for (step in steps) {
+                // A stale replay: the last k visible items re-posted with a new post time.
+                if (step.replaySuffix > 0 && lastVisible.isNotEmpty()) {
+                    val prev = window
+                    val input = if (step.closeBefore) prev?.copy(closed = true) else prev
+                    val res = r.reconcile("key", candidates(lastVisible.takeLast(step.replaySuffix)), input, { null }, ++posted)
+                    res.decisions.count { it is Decision.New } shouldBe 0
+                    res.newWindow.items.size shouldBeGreaterThanOrEqual (prev?.items?.size ?: 0)
+                    window = res.newWindow
+                }
+                // A real update: the stream advances and the notification shows the last windowSize.
+                next += step.advance
+                val visible = (maxOf(0, next - windowSize) until next).map { body(it) }
+                val prev = window
+                val input = if (step.closeBefore) prev?.copy(closed = true) else prev
+                val res = r.reconcile("key", candidates(visible), input, { null }, ++posted)
+                val news = res.decisions.count { it is Decision.New }
+                news shouldBeLessThanOrEqual step.advance
+                newTotal += news
+                // An identical repost never adds and never shrinks.
+                val again = r.reconcile("key", candidates(visible), res.newWindow, { null }, ++posted)
+                again.decisions.count { it is Decision.New } shouldBe 0
+                again.newWindow.items.size shouldBeGreaterThanOrEqual res.newWindow.items.size
+                window = again.newWindow
+                lastVisible = visible
+            }
+            newTotal shouldBeLessThanOrEqual next
         }
     }
 })

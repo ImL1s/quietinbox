@@ -49,8 +49,11 @@ Four independent reviewers (Gemini 3.8 Flash high via agy, a Claude subagent, Cl
 - Pause/source-disable rotate the generation and are re-checked in `process()`; the consumer loop restarts after any throwable; bitmaps in flight are bounded.
 - Journal replay and live processing share one mutex; failed commits stay PENDING for up to 3 attempts; FK-safe observation links.
 - Reconciler aligns the whole window (ids as overrides), keeps the checkpoint on stale replays, and treats a same-post resync as a repost.
-- Restore links media blobs to the restored message, dedupes only against pre-existing rows, reads bounded lines, and never deletes the user's target document.
-- Key files are fsync'd; a missing Keystore key is reported as invalidated rather than minting a new one.
+- Restore links media blobs to the restored message, dedupes only against pre-existing rows, and bounds each line, the record count, the staged media bytes and the total staged text. It only reads the chosen document.
+- Export writes the complete ciphertext to a private temp file first and opens the chosen document only for the final copy, so a failure before that copy leaves an existing target untouched (a failure during the copy itself can still leave it truncated; the error text says so).
+- Key files are written data-fsync → rename → directory-fsync (`Os.fsync`; java.io cannot open a directory), and a directory fsync failure is reported instead of handing out an unproven key. A missing Keystore key is reported as invalidated rather than minting a new one.
+
+Round 2 (re-review of those fixes, `docs/reviews/2026-09-06-round2/`) found no Critical and three Important issues, all fixed: an ambiguous single repeat shrank the checkpoint window (the next post could duplicate two messages), the directory fsync was a silent no-op, and two documentation claims were ahead of the code. Also fixed from its Minor list: the checkpoint-loss guard links one row per pre-existing row instead of collapsing a batch onto a single id; a window id that no longer exists is written as null instead of being carried forward; `CancellationException` is rethrown in the capture pipeline; the disconnected session id is cleared; restore staging bounds the total text.
 - App lock is closed until the setting is known; search queries use 3-grams / single CJK characters so "hell" finds "hello" and "開" finds "開會".
 
 ## Known defects and rough edges found during device verification

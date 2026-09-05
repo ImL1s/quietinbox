@@ -1,6 +1,7 @@
 package dev.quietinbox.platform.storage.repo
 
 import androidx.room.withTransaction
+import kotlinx.coroutines.CancellationException
 import dev.quietinbox.core.identity.ConversationIdentity
 import dev.quietinbox.core.model.DedupState
 import dev.quietinbox.core.model.MediaState
@@ -128,6 +129,7 @@ class IngestRepository @Inject constructor(
 
     suspend fun diagnostic(code: String, detail: String? = null, packageName: String? = null, now: Long) {
         runCatching { holder.db().diagnosticsDao().insert(DiagnosticEventEntity(code = code, detail = detail, packageName = packageName, atEpochMs = now)) }
+            .onFailure { if (it is CancellationException) throw it }
     }
 
     /**
@@ -190,13 +192,14 @@ class IngestRepository @Inject constructor(
             )
 
             val suppressionKey = suppressionScopeKey(identity.scope, identity.identityKey)
-            // Checkpoint-loss guard input: fingerprints that existed BEFORE this batch (so equal
-            // items inside one window keep their multiplicity).
-            val preExisting: Map<String, Long> = if (ReconcileNote.NO_PREVIOUS_WINDOW in reconcile.notes) {
+            // Checkpoint-loss guard input: rows that existed BEFORE this batch, one consumable id
+            // per stored row, so equal items inside one window keep their multiplicity and a batch
+            // with two identical items links at most as many rows as already exist.
+            val preExisting: Map<String, ArrayDeque<Long>> = if (ReconcileNote.NO_PREVIOUS_WINDOW in reconcile.notes) {
                 reconcile.decisions.filter { it is Decision.New && !it.confirmedById }
                     .map { it.fingerprint }.distinct()
-                    .mapNotNull { fp -> db.messageDao().findIdByFingerprint(conversationId, fp)?.let { fp to it } }
-                    .toMap()
+                    .associateWith { fp -> ArrayDeque(db.messageDao().findIdsByFingerprint(conversationId, fp)) }
+                    .filterValues { it.isNotEmpty() }
             } else {
                 emptyMap()
             }
@@ -204,7 +207,9 @@ class IngestRepository @Inject constructor(
             val ambiguousIds = ArrayList<Long>()
             val pendingMedia = ArrayList<Long>()
             var suppressed = 0
-            val storedIds = HashMap<Int, Long>() // decision index -> message id
+            // Decision index -> message id; an explicit null means "observed, but no stored row"
+            // (e.g. a window id that no longer exists) so the checkpoint never keeps a dangling id.
+            val storedIds = HashMap<Int, Long?>()
             var lastStored: MessageCandidate? = null
 
             for ((index, decision) in reconcile.decisions.withIndex()) {
@@ -218,7 +223,7 @@ class IngestRepository @Inject constructor(
                         // Checkpoint loss guard: with no previous window (e.g. checkpoint pruned) an
                         // already-stored identical message is linked, not inserted again.
                         if (decision is Decision.New && !decision.confirmedById) {
-                            val existingId = preExisting[decision.fingerprint]
+                            val existingId = preExisting[decision.fingerprint]?.removeFirstOrNull()
                             if (existingId != null) {
                                 storedIds[index] = existingId
                                 db.observationLinkDao().insert(ObservationLinkEntity(messageId = existingId, eventId = snapshot.eventId, kind = KnownKind.STALE_WINDOW.name, observedAtEpochMs = now))
@@ -283,12 +288,10 @@ class IngestRepository @Inject constructor(
                         // Window ids can point at messages deleted by the user or by retention; an
                         // FK violation here would roll back the whole batch, so verify first.
                         val id = decision.existingMessageId?.takeIf { db.messageDao().get(it) != null }
-                        if (id != null) {
-                            storedIds[index] = id
-                            if (decision.kind != KnownKind.REPOST) {
-                                db.observationLinkDao().insert(ObservationLinkEntity(messageId = id, eventId = snapshot.eventId, kind = decision.kind.name, observedAtEpochMs = now))
-                                db.messageDao().incrementObservation(id)
-                            }
+                        storedIds[index] = id
+                        if (id != null && decision.kind != KnownKind.REPOST) {
+                            db.observationLinkDao().insert(ObservationLinkEntity(messageId = id, eventId = snapshot.eventId, kind = decision.kind.name, observedAtEpochMs = now))
+                            db.messageDao().incrementObservation(id)
                         }
                     }
                     is Decision.Revision -> {
@@ -308,7 +311,9 @@ class IngestRepository @Inject constructor(
             // Checkpoint with real ids so later windows can link back. Items carried over from the
             // previous window keep their ids; items from this batch map through their decision index.
             val items = reconcile.newWindow.items.map { item ->
-                WindowItemJson(item.fingerprint, item.sourceMessageId, item.decisionIndex?.let { storedIds[it] } ?: item.messageId)
+                val index = item.decisionIndex
+                val id = if (index != null && storedIds.containsKey(index)) storedIds[index] else item.messageId
+                WindowItemJson(item.fingerprint, item.sourceMessageId, id)
             }
             db.checkpointDao().upsert(
                 CheckpointEntity(

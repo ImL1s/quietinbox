@@ -19,6 +19,7 @@ First installable vertical slice (plan §3 "v0.1"). Not published to any store.
 
 ### Fixed (pre-release review round 1, 2026-09-06)
 - Vault open failure could hang callers forever; pause did not rotate the capture generation; deleting a conversation did not suppress replays; restored media was garbage-collected; restore collapsed legitimate duplicates; journal replay raced live capture; FK violations rolled back whole batches; window alignment drifted with mixed ids; stale replays shrank checkpoints; resync produced spurious "possible repeat" rows; app lock could be bypassed on cold start; 4+ letter Latin and single CJK searches returned nothing; key files were not fsync'd. Database schema is now v2 with an explicit migration.
+- Round 2 review: an ambiguous single repeat no longer shrinks the checkpoint window (a following post could duplicate messages); the key-directory fsync now really runs (`Os.fsync`; the java.io attempt silently failed on Android) and its failure is reported; export stages the ciphertext in a private temp file before touching the chosen document; restore staging bounds total text; the checkpoint-loss guard keeps multiplicity; stale window ids are dropped from checkpoints; capture no longer swallows coroutine cancellation.
 
 ### Known limitations
 See `docs/SCOPE.md` and the in-app "Known limitations".

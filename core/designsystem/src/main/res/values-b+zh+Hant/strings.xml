@@ -252,7 +252,7 @@
     <string name="backup_failed_no_key">沒有可用的復原金鑰。</string>
     <string name="backup_failed_key">復原金鑰錯誤，或檔案已被修改。</string>
     <string name="backup_failed_truncated">備份檔不完整。</string>
-    <string name="backup_failed_io">無法讀取或寫入檔案。若你選擇覆寫既有檔案，該檔案已被覆寫，不再是有效備份。</string>
+    <string name="backup_failed_io">無法讀取或寫入檔案。備份未寫出；除非最後的複製步驟本身失敗，否則既有的目標檔案不會被更動。</string>
     <string name="backup_failed_version">不支援的備份版本。</string>
     <string name="backup_failed_counts">紀錄數量與 manifest 不符。</string>
     <string name="backup_failed_too_large">備份超過大小限制。</string>

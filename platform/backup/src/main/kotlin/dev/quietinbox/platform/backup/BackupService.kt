@@ -25,6 +25,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.BufferedReader
 import java.io.BufferedWriter
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.security.SecureRandom
@@ -71,25 +74,28 @@ class BackupService @Inject constructor(
         } catch (e: Exception) {
             return@withContext BackupResult.Failed(BackupResult.Reason.VAULT_UNAVAILABLE)
         }
+        // The ciphertext is produced into a private temp file first and copied to the user's
+        // document only once it is complete, so a failure never damages a pre-existing backup.
+        val staging = File(context.cacheDir, "backup-" + UUID.randomUUID().toString().replace("-", "") + ".qibk")
         try {
             val salt = ByteArray(BackupCrypto.SALT_BYTES).also { SecureRandom().nextBytes(it) }
             val header = BackupCrypto.header(salt)
             val saead = BackupCrypto.streamingAead(key, salt)
-            val out: OutputStream = context.contentResolver.openOutputStream(target, "wt")
-                ?: return@withContext BackupResult.Failed(BackupResult.Reason.IO, "open")
-            out.use { raw ->
+            val counts = FileOutputStream(staging).use { raw ->
                 raw.write(header)
                 saead.newEncryptingStream(raw, header).use { enc ->
-                    val counts = writeRecords(db, enc.bufferedWriter(Charsets.UTF_8), appVersion)
-                    return@withContext BackupResult.Ok(counts)
+                    writeRecords(db, enc.bufferedWriter(Charsets.UTF_8), appVersion)
                 }
             }
+            val out: OutputStream = context.contentResolver.openOutputStream(target, "wt")
+                ?: return@withContext BackupResult.Failed(BackupResult.Reason.IO, "open")
+            out.use { dest -> FileInputStream(staging).use { it.copyTo(dest) } }
+            BackupResult.Ok(counts)
         } catch (e: Exception) {
-            // Never delete a document the user chose (it may pre-exist); truncate the partial output.
-            runCatching { context.contentResolver.openOutputStream(target, "wt")?.close() }
             BackupResult.Failed(BackupResult.Reason.IO, e::class.java.simpleName)
         } finally {
             key.fill(0)
+            staging.delete()
         }
     }
 
@@ -210,11 +216,18 @@ class BackupService @Inject constructor(
         var end: BackupRecord.End? = null
         var records = 0
         var stagedMediaBytes = 0L
+        var stagedTextChars = 0L
         while (true) {
             val line = readBoundedLine(reader, BackupLimits.MAX_LINE_CHARS) ?: break
             if (end != null) throw StagingException(BackupResult.Reason.COUNT_MISMATCH, "data after end")
             if (++records > BackupLimits.MAX_RECORDS) throw StagingException(BackupResult.Reason.TOO_LARGE, "records")
-            when (val r = json.decodeFromString(BackupRecord.serializer(), line)) {
+            val r = json.decodeFromString(BackupRecord.serializer(), line)
+            if (r !is BackupRecord.Media) {
+                // Staging holds every record until the counts check out; bound the total, not just each line.
+                stagedTextChars += line.length
+                if (stagedTextChars > BackupLimits.MAX_STAGED_TEXT_CHARS) throw StagingException(BackupResult.Reason.TOO_LARGE, "text")
+            }
+            when (r) {
                 is BackupRecord.Manifest -> {
                     if (manifest != null) throw StagingException(BackupResult.Reason.BAD_HEADER, "duplicate manifest")
                     if (r.formatVersion != BackupCrypto.FORMAT_VERSION.toInt() || r.schemaVersion > QuietInboxDatabase.VERSION) {

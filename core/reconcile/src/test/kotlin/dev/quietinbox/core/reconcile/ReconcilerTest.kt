@@ -179,3 +179,32 @@ class ReconcilerWindowKeptTest : FunSpec({
         (next.decisions[0] as Decision.Known).existingMessageId shouldBe 102L
     }
 })
+
+class ReconcilerAmbiguousKeepTest : FunSpec({
+    val r = Reconciler()
+    val noIds: (String) -> KnownMessage? = { null }
+
+    test("an ambiguous single repeat after a closed window keeps the window, so the next post cannot duplicate") {
+        // Same key, closed by onRemoved, a NEW post time, one item equal to the old tail.
+        val closed = window("A", "B", "C", closed = true).copy(postedAtEpochMs = 5_000)
+        val repeat = r.reconcile("k1", listOf(msg("C")), closed, noIds, postedAtEpochMs = 6_000)
+        repeat.decisions shouldHaveSize 1
+        repeat.decisions[0].shouldBeInstanceOf<Decision.AmbiguousRepeat>().existingMessageId shouldBe 102L
+        repeat.notes shouldContain ReconcileNote.WINDOW_KEPT
+        repeat.newWindow.items.map { it.messageId } shouldBe listOf(100L, 101L, 102L)
+        repeat.newWindow.postedAtEpochMs shouldBe 6_000L
+        // The next real update aligns against the kept content: B and C are known, only D is new.
+        val next = r.reconcile("k1", listOf(msg("B", 0), msg("C", 1), msg("D", 2)), repeat.newWindow, noIds, postedAtEpochMs = 7_000)
+        next.decisions.map { it::class.simpleName } shouldBe listOf("Known", "Known", "New")
+        (next.decisions[0] as Decision.Known).existingMessageId shouldBe 101L
+        (next.decisions[1] as Decision.Known).existingMessageId shouldBe 102L
+    }
+
+    test("an ambiguous repeat of a single-item window still records the new post time") {
+        val closed = window("C", closed = true).copy(postedAtEpochMs = 5_000)
+        val repeat = r.reconcile("k1", listOf(msg("C")), closed, noIds, postedAtEpochMs = 6_000)
+        repeat.decisions[0].shouldBeInstanceOf<Decision.AmbiguousRepeat>()
+        repeat.newWindow.items shouldHaveSize 1
+        repeat.newWindow.postedAtEpochMs shouldBe 6_000L
+    }
+})

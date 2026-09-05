@@ -25,6 +25,7 @@ import dev.quietinbox.platform.storage.repo.IngestRepository
 import dev.quietinbox.platform.storage.repo.SourceRepository
 import dev.quietinbox.platform.storage.repo.VaultRepository
 import dev.quietinbox.platform.storage.settings.SettingsRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -135,6 +136,7 @@ class CaptureCoordinator @Inject constructor(
                     for (item in queue) process(item)
                     break
                 } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
                     lastError = t::class.java.simpleName
                     _status.update { it.copy(listenerState = if (it.listenerState == ListenerState.CONNECTED) ListenerState.DEGRADED else it.listenerState) }
                 }
@@ -197,6 +199,7 @@ class CaptureCoordinator @Inject constructor(
         scope.launch {
             runCatching {
                 sessionId?.let { health.endSession(it, now, "DISCONNECTED") }
+                sessionId = null
                 health.openGap(now, if (listenerAccess.isGranted()) GapReason.LISTENER_DISCONNECTED else GapReason.NOT_GRANTED, GapPrecision.BOUNDED, now)
                 ingest.closeAllWindows(now)
             }
@@ -342,12 +345,14 @@ class CaptureCoordinator @Inject constructor(
                 processJournaled(snapshot, item.generation, item.captured.bitmap)
             } catch (e: VaultUnavailableException) {
                 _status.update { it.copy(vaultLocked = true, listenerState = ListenerState.DEGRADED) }
-                // The event was not journaled: record an observable gap once per lock-out.
+                // The vault went away before the commit (an event journaled first is replayed later;
+                // one not journaled is lost): record an observable gap once per lock-out.
                 if (!vaultGapOpen) {
                     vaultGapOpen = true
                     runCatching { health.openGap(snapshot.observedAtEpochMs, GapReason.UNKNOWN, GapPrecision.BOUNDED, snapshot.observedAtEpochMs) }
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 runCatching { ingest.markJournalRetryable(snapshot.eventId, e::class.java.simpleName) }
             }
         }
@@ -416,6 +421,7 @@ class CaptureCoordinator @Inject constructor(
                         try {
                             processJournaled(replay, generation, null)
                         } catch (e: Exception) {
+                            if (e is CancellationException) throw e
                             ingest.markJournalRetryable(snapshot.eventId, "REPLAY_${e::class.java.simpleName}")
                         }
                     }

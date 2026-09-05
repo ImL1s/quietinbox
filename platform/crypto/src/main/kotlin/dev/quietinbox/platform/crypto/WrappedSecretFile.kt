@@ -1,7 +1,9 @@
 package dev.quietinbox.platform.crypto
 
+import android.system.ErrnoException
+import android.system.Os
+import android.system.OsConstants
 import java.io.File
-import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.security.SecureRandom
@@ -23,7 +25,11 @@ class WrappedSecretFile(
 
     fun exists(): Boolean = file.exists()
 
-    /** Returns the secret, creating it when absent. Never overwrites an existing, unreadable file. */
+    /**
+     * Returns the secret, creating it when absent. Never overwrites an existing, unreadable file.
+     * The secret is only handed out once its file is durable: a vault created with a key whose
+     * file was lost on power failure could never be opened again.
+     */
     @Synchronized
     fun getOrCreate(): KeyResult<ByteArray> {
         if (file.exists()) return read()
@@ -60,10 +66,14 @@ class WrappedSecretFile(
         if (file.exists()) file.delete()
     }
 
-    /** Durable write: data fsync'd before the rename, directory fsync'd after; never overwrites in place. */
+    /**
+     * Durable write: data fsync'd before the rename, the directory (and its parent when the
+     * directory was just created) fsync'd after; never overwrites in place. A directory fsync
+     * failure is an [IOException]: an unproven rename must not be reported as success.
+     */
     private fun writeAtomically(bytes: ByteArray) {
         val dir = file.parentFile ?: error("key file has no parent")
-        dir.mkdirs()
+        val createdDir = !dir.exists() && dir.mkdirs()
         val tmp = File(dir, file.name + ".tmp")
         FileOutputStream(tmp).use { out ->
             out.write(bytes)
@@ -73,7 +83,22 @@ class WrappedSecretFile(
             tmp.delete()
             throw IOException("rename failed for ${file.name}")
         }
-        runCatching { FileInputStream(dir).use { it.fd.sync() } }
+        fsyncDirectory(dir)
+        if (createdDir) dir.parentFile?.let { fsyncDirectory(it) }
+    }
+
+    private fun fsyncDirectory(dir: File) {
+        // java.io streams refuse to open a directory (EISDIR); the POSIX layer does not.
+        try {
+            val fd = Os.open(dir.path, OsConstants.O_RDONLY, 0)
+            try {
+                Os.fsync(fd)
+            } finally {
+                Os.close(fd)
+            }
+        } catch (e: ErrnoException) {
+            throw IOException("fsync ${dir.name}: ${e.message}", e)
+        }
     }
 
     companion object {

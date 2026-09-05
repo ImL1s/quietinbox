@@ -252,7 +252,7 @@
     <string name="backup_failed_no_key">No recovery key available.</string>
     <string name="backup_failed_key">Wrong recovery key, or the file was modified.</string>
     <string name="backup_failed_truncated">The backup file is incomplete.</string>
-    <string name="backup_failed_io">Could not read or write the file. If you chose an existing file as the target, it has been overwritten and is no longer a valid backup.</string>
+    <string name="backup_failed_io">Could not read or write the file. The backup was not written; an existing target file was left unchanged unless the final copy itself failed.</string>
     <string name="backup_failed_version">Unsupported backup version.</string>
     <string name="backup_failed_counts">Record counts do not match the manifest.</string>
     <string name="backup_failed_too_large">The backup exceeds size limits.</string>

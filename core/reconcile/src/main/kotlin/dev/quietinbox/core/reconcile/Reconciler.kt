@@ -97,6 +97,9 @@ data class ReconcileResult(
  * - equal items inside one window keep their multiplicity;
  * - a replay that adds nothing never shrinks the checkpoint: the previous window is kept, so the
  *   next real update still aligns (plan: old content re-appearing never deletes newer content).
+ *   An ambiguous repeat is a re-observation of an existing position, not a new position, so it
+ *   keeps the window too (otherwise `[C]` after a closed `[A,B,C]` would let `[B,C,D]` duplicate
+ *   B and C).
  */
 class Reconciler(
     private val maxWindow: Int = Limits.MAX_WINDOW_ITEMS,
@@ -173,8 +176,9 @@ class Reconciler(
         }
 
         // 3. New window. A replay that adds nothing keeps the previous (longer) window so the
-        //    next real update still aligns; otherwise the current content is the window.
-        val addsNothing = decisions.none { it is Decision.New || it is Decision.Revision || it is Decision.AmbiguousRepeat }
+        //    next real update still aligns; otherwise the current content is the window. An
+        //    ambiguous repeat occupies an existing position and therefore "adds nothing" here.
+        val addsNothing = decisions.none { it is Decision.New || it is Decision.Revision }
         val window = if (addsNothing && prevItems.size > fps.size) {
             notes += ReconcileNote.WINDOW_KEPT
             MessageWindow(notificationKey, prevItems.map { it.copy(decisionIndex = null) }, closed = false, postedAtEpochMs = postedAtEpochMs ?: previous?.postedAtEpochMs)

@@ -30,7 +30,9 @@ streams are never merged automatically.
 - alignment runs over the complete window (id-less and id-bearing items alike) and a proven id
   then overrides the positional decision, so positions never drift;
 - a replay that adds nothing keeps the previous checkpoint window (`WINDOW_KEPT`), so `[A]` after
-  `[A,B,C]` cannot make the next `[B,C,D]` duplicate B and C;
+  `[A,B,C]` cannot make the next `[B,C,D]` duplicate B and C. "Adds nothing" means no `New` and no
+  `Revision`: an ambiguous single repeat (`[C]` after a closed `[A,B,C]` with a new post time)
+  re-observes an existing position and keeps the window too (`ReconcilerAmbiguousKeepTest`);
 - a re-observation with the same notification key *and* the same `postTime` (active-notification
   resync after a reconnect) is a repost even though the window was closed on disconnect.
 
