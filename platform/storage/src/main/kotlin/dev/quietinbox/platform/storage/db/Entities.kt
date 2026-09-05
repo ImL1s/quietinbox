@@ -69,6 +69,8 @@ data class CheckpointEntity(
     val parserVersion: String,
     val generation: String,
     val updatedAtEpochMs: Long,
+    /** Post time of the notification that produced the window (resync detection). */
+    val postedAtEpochMs: Long? = null,
 )
 
 @Entity(
@@ -186,10 +188,14 @@ data class MediaBlobEntity(
     val createdAtEpochMs: Long,
 )
 
-/** Prevents replay of active notifications from resurrecting user-deleted content. */
-@Entity(tableName = "deletion_suppression", primaryKeys = ["conversationId", "fingerprint"], indices = [Index("expiresAtEpochMs")])
+/**
+ * Prevents replay of active notifications from resurrecting user-deleted content. Keyed by the
+ * stable conversation identity (`SourceScope.key + "#" + identityKey`), not the row id, so it still
+ * applies after the whole conversation row was deleted and a replay re-creates it.
+ */
+@Entity(tableName = "deletion_suppression", primaryKeys = ["scopeKey", "fingerprint"], indices = [Index("expiresAtEpochMs")])
 data class DeletionSuppressionEntity(
-    val conversationId: Long,
+    val scopeKey: String,
     val fingerprint: String,
     val expiresAtEpochMs: Long,
 )

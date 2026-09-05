@@ -36,7 +36,7 @@ sealed interface BackupResult {
     data class Ok(val counts: Counts) : BackupResult
     data class Failed(val reason: Reason, val detail: String? = null) : BackupResult
 
-    enum class Reason { NO_RECOVERY_KEY, KEY_UNAVAILABLE, IO, BAD_HEADER, WRONG_KEY_OR_TAMPERED, TRUNCATED, COUNT_MISMATCH, TOO_LARGE, UNSUPPORTED_VERSION, VAULT_UNAVAILABLE }
+    enum class Reason { NO_RECOVERY_KEY, KEY_UNAVAILABLE, IO, BAD_HEADER, WRONG_KEY_OR_TAMPERED, CORRUPT, TRUNCATED, COUNT_MISMATCH, TOO_LARGE, UNSUPPORTED_VERSION, VAULT_UNAVAILABLE }
 }
 
 /**
@@ -85,7 +85,8 @@ class BackupService @Inject constructor(
                 }
             }
         } catch (e: Exception) {
-            runCatching { context.contentResolver.delete(target, null, null) }
+            // Never delete a document the user chose (it may pre-exist); truncate the partial output.
+            runCatching { context.contentResolver.openOutputStream(target, "wt")?.close() }
             BackupResult.Failed(BackupResult.Reason.IO, e::class.java.simpleName)
         } finally {
             key.fill(0)
@@ -97,12 +98,21 @@ class BackupService @Inject constructor(
             w.write(json.encodeToString(BackupRecord.serializer(), r))
             w.write("\n")
         }
-        // Snapshot inside one read transaction so counts and rows agree.
-        val sources = db.sourceDao().all()
-        val conversations = db.conversationDao().allForExport()
-        val messages = db.messageDao().allForExport()
-        val revisions = db.revisionDao().allForExport()
-        val media = db.mediaDao().allForExport()
+        // Snapshot inside one transaction so counts and rows agree even while capture continues.
+        val snapshot = db.withTransaction {
+            Snapshot(
+                sources = db.sourceDao().all(),
+                conversations = db.conversationDao().allForExport(),
+                messages = db.messageDao().allForExport(),
+                revisions = db.revisionDao().allForExport(),
+                media = db.mediaDao().allForExport(),
+            )
+        }
+        val sources = snapshot.sources
+        val conversations = snapshot.conversations
+        val messages = snapshot.messages
+        val revisions = snapshot.revisions
+        val media = snapshot.media
         val expected = Counts(sources.size, conversations.size, messages.size, revisions.size, media.size)
         line(BackupRecord.Manifest(BackupCrypto.FORMAT_VERSION.toInt(), QuietInboxDatabase.VERSION, appVersion, System.currentTimeMillis(), expected))
         for (s in sources) line(BackupRecord.Source(s.packageName, s.displayName, s.enabled, s.paused, s.retentionDays, s.mediaEnabled, s.addedAtEpochMs, s.adapterId))
@@ -158,6 +168,8 @@ class BackupService @Inject constructor(
             return@withContext BackupResult.Failed(BackupResult.Reason.WRONG_KEY_OR_TAMPERED, e::class.java.simpleName)
         } catch (e: java.security.GeneralSecurityException) {
             return@withContext BackupResult.Failed(BackupResult.Reason.WRONG_KEY_OR_TAMPERED, e::class.java.simpleName)
+        } catch (e: kotlinx.serialization.SerializationException) {
+            return@withContext BackupResult.Failed(BackupResult.Reason.CORRUPT, "record")
         } catch (e: StagingException) {
             return@withContext BackupResult.Failed(e.reason, e.message)
         } catch (e: Exception) {
@@ -169,6 +181,14 @@ class BackupService @Inject constructor(
     }
 
     private class StagingException(val reason: BackupResult.Reason, message: String? = null) : Exception(message)
+
+    private class Snapshot(
+        val sources: List<SourceConfigurationEntity>,
+        val conversations: List<ConversationEntity>,
+        val messages: List<MessageEntity>,
+        val revisions: List<MessageRevisionEntity>,
+        val media: List<MediaBlobEntity>,
+    )
 
     private class Staged(
         val manifest: BackupRecord.Manifest,
@@ -191,9 +211,8 @@ class BackupService @Inject constructor(
         var records = 0
         var stagedMediaBytes = 0L
         while (true) {
-            val line = reader.readLine() ?: break
+            val line = readBoundedLine(reader, BackupLimits.MAX_LINE_CHARS) ?: break
             if (end != null) throw StagingException(BackupResult.Reason.COUNT_MISMATCH, "data after end")
-            if (line.length > BackupLimits.MAX_LINE_BYTES) throw StagingException(BackupResult.Reason.TOO_LARGE, "line")
             if (++records > BackupLimits.MAX_RECORDS) throw StagingException(BackupResult.Reason.TOO_LARGE, "records")
             when (val r = json.decodeFromString(BackupRecord.serializer(), line)) {
                 is BackupRecord.Manifest -> {
@@ -224,7 +243,24 @@ class BackupService @Inject constructor(
         return Staged(m, sources, conversations, messages, revisions, media, e)
     }
 
-    /** Merge-restore: existing conversations are matched by scope + identity; duplicate fingerprints are skipped. */
+    /** Reads one line but refuses to buffer more than [maxChars]; a bomb cannot exhaust the heap first. */
+    private fun readBoundedLine(reader: BufferedReader, maxChars: Int): String? {
+        val sb = StringBuilder()
+        while (true) {
+            val c = reader.read()
+            if (c < 0) return if (sb.isEmpty()) null else sb.toString()
+            if (c == '\n'.code) return sb.toString()
+            if (c == '\r'.code) continue
+            sb.append(c.toChar())
+            if (sb.length > maxChars) throw StagingException(BackupResult.Reason.TOO_LARGE, "line")
+        }
+    }
+
+    /**
+     * Merge-restore: existing conversations are matched by scope + identity. Only messages that
+     * already existed *before* this import are skipped (same fingerprint + sort key + observed
+     * time), so legitimate duplicates inside the backup keep their multiplicity.
+     */
     private suspend fun apply(db: QuietInboxDatabase, s: Staged): BackupResult {
         val writtenFiles = ArrayList<String>()
         return try {
@@ -248,39 +284,48 @@ class BackupService @Inject constructor(
                 }
                 val msgMap = HashMap<Long, Long>()
                 val mediaByOldMessage = s.media.filter { it.messageId != null }.associateBy { it.messageId!! }
+                // Pre-existing content per conversation, computed once (O(n)), before any insert.
+                val preExisting = HashMap<Long, HashSet<String>>()
+                for (cid in convMap.values.distinct()) {
+                    preExisting[cid] = db.messageDao().forConversation(cid).mapTo(HashSet()) { "${it.fingerprint}|${it.sortKey}|${it.observedAtEpochMs}" }
+                }
                 var inserted = 0
+                var skippedOrphans = 0
                 for (m in s.messages) {
-                    val cid = convMap[m.conversationId] ?: continue
-                    val existingFingerprints = db.messageDao().forConversation(cid).map { it.fingerprint }.toHashSet()
-                    if (m.fingerprint in existingFingerprints) continue
-                    var mediaState = m.mediaState
-                    var blobId: Long? = null
-                    val media = mediaByOldMessage[m.id]
-                    if (media != null) {
-                        val bytes = runCatching { Base64.decode(media.dataBase64, Base64.NO_WRAP) }.getOrNull()
-                        if (bytes != null && bytes.size <= BackupLimits.MAX_MEDIA_BYTES) {
-                            val name = UUID.randomUUID().toString().replace("-", "")
-                            if (blobCipher.encryptToFile(bytes, mediaDir.file(name)) is KeyResult.Ok) {
-                                writtenFiles += name
-                                blobId = db.mediaDao().insert(MediaBlobEntity(messageId = null, fileName = name, thumbFileName = null, mimeType = media.mimeType, byteCount = bytes.size.toLong(), width = media.width, height = media.height, state = MediaState.LOCAL_COPY.name, failureReason = null, createdAtEpochMs = media.createdAtEpochMs))
-                                mediaState = MediaState.LOCAL_COPY.name
-                            }
-                        } else {
-                            mediaState = MediaState.FAILED.name
-                        }
-                    } else if (m.mediaState == MediaState.LOCAL_COPY.name) {
-                        mediaState = MediaState.FAILED.name
+                    val cid = convMap[m.conversationId]
+                    if (cid == null) {
+                        skippedOrphans++
+                        continue
                     }
+                    if ("${m.fingerprint}|${m.sortKey}|${m.observedAtEpochMs}" in preExisting.getValue(cid)) continue
+                    // Insert the message first, then the blob bound to its new id (retention treats
+                    // messageId == null blobs as orphans and would delete them otherwise).
+                    var mediaState = m.mediaState
+                    val media = mediaByOldMessage[m.id]
+                    val mediaBytes = media?.let { runCatching { Base64.decode(it.dataBase64, Base64.NO_WRAP) }.getOrNull() }
+                    if (media != null && (mediaBytes == null || mediaBytes.size > BackupLimits.MAX_MEDIA_BYTES)) mediaState = MediaState.FAILED.name
+                    if (media == null && m.mediaState == MediaState.LOCAL_COPY.name) mediaState = MediaState.FAILED.name
+                    if (media != null && mediaBytes != null && mediaBytes.size <= BackupLimits.MAX_MEDIA_BYTES) mediaState = MediaState.PENDING.name
                     val newId = db.messageDao().insert(
                         MessageEntity(
                             conversationId = cid, sourceMessageId = m.sourceMessageId, senderName = m.senderName, senderKey = m.senderKey, isSelf = m.isSelf,
                             body = m.body, kind = m.kind, sourceTimestampEpochMs = m.sourceTimestampEpochMs, timestampQuality = m.timestampQuality,
                             observedAtEpochMs = m.observedAtEpochMs, postedAtEpochMs = m.postedAtEpochMs, origin = m.origin, contentStatus = m.contentStatus,
                             dedupState = m.dedupState, revisionCount = m.revisionCount, observationCount = m.observationCount, mediaState = mediaState,
-                            mediaBlobId = blobId, mediaUri = null, mediaMimeType = m.mediaMimeType, fingerprint = m.fingerprint, eventId = "restore:${s.manifest.createdAtEpochMs}",
+                            mediaBlobId = null, mediaUri = null, mediaMimeType = m.mediaMimeType, fingerprint = m.fingerprint, eventId = "restore:${s.manifest.createdAtEpochMs}",
                             sortKey = m.sortKey, expiresAtEpochMs = m.expiresAtEpochMs,
                         ),
                     )
+                    if (media != null && mediaBytes != null && mediaBytes.size <= BackupLimits.MAX_MEDIA_BYTES) {
+                        val name = UUID.randomUUID().toString().replace("-", "")
+                        if (blobCipher.encryptToFile(mediaBytes, mediaDir.file(name)) is KeyResult.Ok) {
+                            writtenFiles += name
+                            val blobId = db.mediaDao().insert(MediaBlobEntity(messageId = newId, fileName = name, thumbFileName = null, mimeType = media.mimeType, byteCount = mediaBytes.size.toLong(), width = media.width, height = media.height, state = MediaState.LOCAL_COPY.name, failureReason = null, createdAtEpochMs = media.createdAtEpochMs))
+                            db.messageDao().setMedia(newId, MediaState.LOCAL_COPY.name, blobId)
+                        } else {
+                            db.messageDao().setMedia(newId, MediaState.FAILED.name, null)
+                        }
+                    }
                     msgMap[m.id] = newId
                     inserted++
                     val tokens = SearchNormalizer.tokens(SearchNormalizer.normalize(m.body))
@@ -304,6 +349,9 @@ class BackupService @Inject constructor(
                             lastSenderName = last?.senderName ?: c.lastSenderName,
                         ),
                     )
+                }
+                if (skippedOrphans > 0) {
+                    db.diagnosticsDao().insert(dev.quietinbox.platform.storage.db.DiagnosticEventEntity(code = "RESTORE_ORPHAN_MESSAGES", detail = skippedOrphans.toString(), packageName = null, atEpochMs = System.currentTimeMillis()))
                 }
                 Counts(s.sources.size, convMap.size, inserted, s.revisions.size, writtenFiles.size)
             }

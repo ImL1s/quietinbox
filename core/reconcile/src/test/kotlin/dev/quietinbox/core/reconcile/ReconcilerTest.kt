@@ -108,3 +108,74 @@ class ReconcilerTest : FunSpec({
         s.newWindow.items.size shouldBe Limits.MAX_WINDOW_ITEMS
     }
 })
+
+class ReconcilerReviewFixesTest : FunSpec({
+    val r = Reconciler()
+    val noIds: (String) -> KnownMessage? = { null }
+
+    test("stale replay [A] after [A,B,C] keeps the checkpoint window so [B,C,D] still aligns") {
+        val w = window("A", "B", "C")
+        val stale = r.reconcile("k1", listOf(msg("A")), w, noIds)
+        stale.notes shouldContain ReconcileNote.WINDOW_KEPT
+        stale.newWindow.items.map { it.fingerprint } shouldBe w.items.map { it.fingerprint }
+        val next = r.reconcile("k1", listOf(msg("B", 0), msg("C", 1), msg("D", 2)), stale.newWindow, noIds)
+        next.decisions.map { it::class.simpleName } shouldBe listOf("Known", "Known", "New")
+        (next.decisions[0] as Decision.Known).existingMessageId shouldBe 101L
+    }
+
+    test("id items inside the window do not shift positional alignment of id-less items") {
+        // Previous window: [A, id1, B]; new window: [A, id1, B, C] with id1 known.
+        val prev = MessageWindow(
+            "k1",
+            listOf(
+                WindowItem(Fingerprint.of(msg("A", 0)), null, 10L),
+                WindowItem(Fingerprint.of(msg("X", 1, id = "id1")), "id1", 11L),
+                WindowItem(Fingerprint.of(msg("B", 2)), null, 12L),
+            ),
+            closed = false,
+        )
+        val known: (String) -> KnownMessage? = { if (it == "id1") KnownMessage(11L, "fp", "X") else null }
+        val s = r.reconcile("k1", listOf(msg("A", 0), msg("X", 1, id = "id1"), msg("B", 2), msg("C", 3)), prev, known)
+        s.decisions.map { it::class.simpleName } shouldBe listOf("Known", "Known", "Known", "New")
+        (s.decisions[0] as Decision.Known).existingMessageId shouldBe 10L
+        (s.decisions[1] as Decision.Known).kind shouldBe KnownKind.SAME_ID
+        (s.decisions[2] as Decision.Known).existingMessageId shouldBe 12L
+    }
+
+    test("new window items carry their decision index for id mapping") {
+        val s = r.reconcile("k1", listOf(msg("A", 0), msg("B", 1)), null, noIds)
+        s.newWindow.items.map { it.decisionIndex } shouldBe listOf(0, 1)
+    }
+})
+
+class ReconcilerResyncTest : FunSpec({
+    val r = Reconciler()
+    val noIds: (String) -> KnownMessage? = { null }
+
+    test("active-notification resync of the same post after a reconnect is a repost, not ambiguous") {
+        val first = r.reconcile("k1", listOf(msg("好")), null, noIds, postedAtEpochMs = 5_000)
+        val closed = first.newWindow.copy(closed = true, items = first.newWindow.items.map { it.copy(messageId = 9L) })
+        val resync = r.reconcile("k1", listOf(msg("好")), closed, noIds, postedAtEpochMs = 5_000)
+        resync.decisions[0].shouldBeInstanceOf<Decision.Known>().kind shouldBe KnownKind.REPOST
+        // A genuinely new post (new post time) of the same single text stays ambiguous.
+        val newPost = r.reconcile("k1", listOf(msg("好")), closed, noIds, postedAtEpochMs = 6_000)
+        newPost.decisions[0].shouldBeInstanceOf<Decision.AmbiguousRepeat>()
+    }
+})
+
+class ReconcilerWindowKeptTest : FunSpec({
+    val r = Reconciler()
+    val noIds: (String) -> KnownMessage? = { null }
+
+    test("a kept window carries the previous message ids and no decision indices") {
+        val kept = r.reconcile("k2", listOf(msg("B")), window("A", "B", "C"), noIds)
+        kept.notes shouldContain ReconcileNote.WINDOW_KEPT
+        kept.newWindow.items.map { it.messageId } shouldBe listOf(100L, 101L, 102L)
+        kept.newWindow.items.all { it.decisionIndex == null } shouldBe true
+        kept.newWindow.notificationKey shouldBe "k2"
+        // The next real post under the new key still aligns against the kept content.
+        val next = r.reconcile("k2", listOf(msg("C", 0), msg("D", 1)), kept.newWindow, noIds)
+        next.decisions.map { it::class.simpleName } shouldBe listOf("Known", "New")
+        (next.decisions[0] as Decision.Known).existingMessageId shouldBe 102L
+    }
+})

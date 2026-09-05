@@ -22,7 +22,11 @@ object RecoveryKeyCodec {
         return (data + check).chunked(4).joinToString("-")
     }
 
-    /** Returns the key bytes or null when the text is malformed or the checksum fails. */
+    /**
+     * Returns the key bytes or null when the text is malformed or the checksum fails.
+     * The confusable folding (O→0, I/L→1) is applied to the whole string, checksum included; the
+     * alphabet never contains those letters, so the fold is lossless.
+     */
     fun decode(text: String): ByteArray? {
         val cleaned = text.uppercase()
             .replace("O", "0").replace("I", "1").replace("L", "1")

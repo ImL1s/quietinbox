@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
+import androidx.core.os.BundleCompat
 import dev.quietinbox.core.model.ActionShape
 import dev.quietinbox.core.model.BoundedText
 import dev.quietinbox.core.model.CaptureOrigin
@@ -34,6 +35,10 @@ class CapturedNotification(
 class SnapshotFactory(
     private val bootSessionId: String,
 ) {
+    private companion object {
+        const val MAX_BITMAP_BYTES = 4 * 1024 * 1024
+    }
+
     fun create(sbn: StatusBarNotification, origin: CaptureOrigin, generation: String, nowEpochMs: Long): CapturedNotification {
         val n = sbn.notification
         val extras: Bundle = n.extras ?: Bundle.EMPTY
@@ -80,7 +85,12 @@ class SnapshotFactory(
                 uri
             }
         }
-        val bitmap = if (pictureUri == null) runCatching { extras.getParcelable(Notification.EXTRA_PICTURE) as? Bitmap }.getOrNull() else null
+        // A referenced Bitmap is kept only when small enough to sit in the queue safely (no decode here).
+        val bitmap = if (pictureUri == null) {
+            runCatching { extras.getParcelable(Notification.EXTRA_PICTURE) as? Bitmap }.getOrNull()?.takeIf { it.byteCount <= MAX_BITMAP_BYTES }
+        } else {
+            null
+        }
 
         val shape = NotificationShape(
             id = sbn.id,
@@ -154,7 +164,7 @@ class SnapshotFactory(
 
     private fun pictureUri(extras: Bundle): String? {
         if (Build.VERSION.SDK_INT < 31) return null
-        val icon = runCatching { extras.getParcelable(Notification.EXTRA_PICTURE_ICON, Icon::class.java) }.getOrNull() ?: return null
+        val icon = runCatching { BundleCompat.getParcelable(extras, Notification.EXTRA_PICTURE_ICON, Icon::class.java) }.getOrNull() ?: return null
         if (icon.type != Icon.TYPE_URI && icon.type != Icon.TYPE_URI_ADAPTIVE_BITMAP) return null
         val uri = runCatching { icon.uri }.getOrNull() ?: return null
         return uri.takeIf { it.scheme == "content" }?.toString()

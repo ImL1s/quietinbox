@@ -67,10 +67,11 @@ class IdentityResolver {
     }
 
     /** The notification stream a window is kept under: scope + notification key (tag/id). */
-    fun streamKey(snapshot: NotificationSnapshot): String = buildString {
-        append(snapshot.source.key).append('#')
-        val s = snapshot.shape
-        if (s.tag != null) append("t:").append(s.tag).append('/')
-        append("i:").append(s.id)
+    fun streamKey(snapshot: NotificationSnapshot): String = streamKey(snapshot.source, snapshot.shape.tag, snapshot.shape.id)
+
+    fun streamKey(scope: SourceScope, tag: String?, id: Int): String = buildString {
+        append(scope.key).append('#')
+        if (tag != null) append("t:").append(tag).append('/')
+        append("i:").append(id)
     }
 }

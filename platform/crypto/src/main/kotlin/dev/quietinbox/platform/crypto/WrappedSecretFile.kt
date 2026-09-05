@@ -1,6 +1,9 @@
 package dev.quietinbox.platform.crypto
 
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.IOException
 import java.security.SecureRandom
 
 /**
@@ -27,9 +30,11 @@ class WrappedSecretFile(
         val secret = ByteArray(sizeBytes).also { SecureRandom().nextBytes(it) }
         return when (val wrapped = wrapper.wrap(secret, aad)) {
             is KeyResult.Failed -> wrapped
-            is KeyResult.Ok -> {
+            is KeyResult.Ok -> try {
                 writeAtomically(byteArrayOf(VERSION) + wrapped.value)
                 KeyResult.Ok(secret)
+            } catch (e: IOException) {
+                KeyResult.Failed(KeyFailure.Unavailable("write:${e::class.java.simpleName}"))
             }
         }
     }
@@ -55,14 +60,20 @@ class WrappedSecretFile(
         if (file.exists()) file.delete()
     }
 
+    /** Durable write: data fsync'd before the rename, directory fsync'd after; never overwrites in place. */
     private fun writeAtomically(bytes: ByteArray) {
-        file.parentFile?.mkdirs()
-        val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writeBytes(bytes)
-        if (!tmp.renameTo(file)) {
-            file.writeBytes(bytes)
-            tmp.delete()
+        val dir = file.parentFile ?: error("key file has no parent")
+        dir.mkdirs()
+        val tmp = File(dir, file.name + ".tmp")
+        FileOutputStream(tmp).use { out ->
+            out.write(bytes)
+            out.fd.sync()
         }
+        if (!tmp.renameTo(file)) {
+            tmp.delete()
+            throw IOException("rename failed for ${file.name}")
+        }
+        runCatching { FileInputStream(dir).use { it.fd.sync() } }
     }
 
     companion object {

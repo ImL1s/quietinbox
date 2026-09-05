@@ -84,7 +84,7 @@ class VaultRoundTripTest {
         ingest.journal(s1, "gen", 60_000) shouldBe true
         val b1 = parser.parse(s1)
         val id1 = identity.resolve(s1, b1)
-        val r1 = reconciler.reconcile(s1.notificationKey, b1.messages, ingest.checkpoint(id1.streamKey)) { null }
+        val r1 = reconciler.reconcile(s1.notificationKey, b1.messages, ingest.checkpoint(id1.streamKey), lookupById = { null })
         val out1 = ingest.commit(s1, b1, id1, r1, "gen", 30L * 86_400_000, mediaAllowed = true)
         out1.newMessageIds shouldHaveSize 2
 
@@ -102,7 +102,7 @@ class VaultRoundTripTest {
         ingest.journal(s2, "gen", 60_000) shouldBe true
         val b2 = parser.parse(s2)
         val id2 = identity.resolve(s2, b2)
-        val r2 = reconciler.reconcile(s2.notificationKey, b2.messages, ingest.checkpoint(id2.streamKey)) { null }
+        val r2 = reconciler.reconcile(s2.notificationKey, b2.messages, ingest.checkpoint(id2.streamKey), lookupById = { null })
         val out2 = ingest.commit(s2, b2, id2, r2, "gen", 30L * 86_400_000, mediaAllowed = true)
         out2.newMessageIds shouldHaveSize 1
         out2.conversationId shouldBe out1.conversationId
@@ -123,7 +123,7 @@ class VaultRoundTripTest {
 
         // Deleting suppresses replay of the same fingerprint.
         inbox.deleteMessages(listOf(messages[2].id), s2.observedAtEpochMs, 86_400_000)
-        val r3 = reconciler.reconcile(s2.notificationKey, b2.messages, null) { null }
+        val r3 = reconciler.reconcile(s2.notificationKey, b2.messages, null, lookupById = { null })
         val out3 = ingest.commit(s2.copy(eventId = "e3"), b2, id2, r3, "gen", 30L * 86_400_000, mediaAllowed = true)
         out3.suppressedCount shouldBe 1
         // A and B already exist: with no checkpoint they are matched by fingerprint, not duplicated.
@@ -140,7 +140,7 @@ class VaultRoundTripTest {
         val parser = StandardParser()
         val b = parser.parse(s)
         val id = IdentityResolver().resolve(s, b)
-        val r = Reconciler().reconcile(s.notificationKey, b.messages, null) { null }
+        val r = Reconciler().reconcile(s.notificationKey, b.messages, null, lookupById = { null })
         ingest.journal(s, "gen", 60_000)
         ingest.commit(s, b, id, r, "gen", null, mediaAllowed = false)
 

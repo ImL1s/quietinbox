@@ -10,6 +10,11 @@ data class WindowItem(
     val sourceMessageId: String?,
     /** Persisted message id, when this item was stored as a message. */
     val messageId: Long?,
+    /**
+     * Index into [ReconcileResult.decisions] when this item came from the current batch, or null
+     * when it was carried over from the previous window. Lets the store map freshly inserted ids.
+     */
+    val decisionIndex: Int? = null,
 )
 
 /** The last known content of a notification stream, persisted as a checkpoint. */
@@ -18,6 +23,8 @@ data class MessageWindow(
     val items: List<WindowItem>,
     /** True after `onNotificationRemoved` for this key. */
     val closed: Boolean,
+    /** `StatusBarNotification.postTime` of the post that produced this window, when known. */
+    val postedAtEpochMs: Long? = null,
 )
 
 /** What the reconciler knows about a previously stored message with a source id. */
@@ -64,7 +71,7 @@ sealed interface Decision {
     ) : Decision
 }
 
-enum class ReconcileNote { WINDOW_TRUNCATED, DEGRADED_RESOURCE_LIMIT, NO_PREVIOUS_WINDOW, FULL_OVERLAP, STALE_REPLAY }
+enum class ReconcileNote { WINDOW_TRUNCATED, DEGRADED_RESOURCE_LIMIT, NO_PREVIOUS_WINDOW, FULL_OVERLAP, STALE_REPLAY, WINDOW_KEPT }
 
 data class ReconcileResult(
     val decisions: List<Decision>,
@@ -79,14 +86,17 @@ data class ReconcileResult(
  * Bounded, deterministic deduplication over notification windows.
  *
  * Rules (see plan section 7.2):
- * - a fixture-proven `sourceMessageId` decides identity; same id + new body = revision;
- * - otherwise align the new window against the previous one (suffix/prefix overlap);
- *   items after the overlap are new; items inside a fully-contained stale window are known;
+ * - the whole new window is aligned against the previous one by the largest suffix/prefix
+ *   overlap (all items, with or without ids, so positions never drift); items after the overlap
+ *   are new; a window fully contained in the previous one is a stale replay;
+ * - a fixture-proven `sourceMessageId` then overrides the positional decision for that item:
+ *   same id + same body = known, same id + new body = revision;
  * - a single, id-less, timestamp-less item identical to the last known item of a *closed or
- *   different* notification is ambiguous: it is recorded as [Decision.AmbiguousRepeat], never
- *   silently dropped and never counted as a confirmed second message;
+ *   different* notification is ambiguous: [Decision.AmbiguousRepeat], never silently dropped and
+ *   never counted as a confirmed second message;
  * - equal items inside one window keep their multiplicity;
- * - old content re-appearing never deletes newer stored content (this class never deletes).
+ * - a replay that adds nothing never shrinks the checkpoint: the previous window is kept, so the
+ *   next real update still aligns (plan: old content re-appearing never deletes newer content).
  */
 class Reconciler(
     private val maxWindow: Int = Limits.MAX_WINDOW_ITEMS,
@@ -96,6 +106,7 @@ class Reconciler(
         candidates: List<MessageCandidate>,
         previous: MessageWindow?,
         lookupById: (String) -> KnownMessage?,
+        postedAtEpochMs: Long? = null,
     ): ReconcileResult {
         val notes = LinkedHashSet<ReconcileNote>()
         if (previous == null) notes += ReconcileNote.NO_PREVIOUS_WINDOW
@@ -107,76 +118,79 @@ class Reconciler(
             working = working.takeLast(maxWindow)
         }
         val fps = working.map { Fingerprint.of(it) }
-
-        // 1. id path
-        val decisions = arrayOfNulls<Decision>(working.size)
-        for ((i, c) in working.withIndex()) {
-            val sid = c.sourceMessageId ?: continue
-            val known = lookupById(sid)
-            decisions[i] = when {
-                known == null -> Decision.New(c, fps[i], confirmedById = true)
-                known.body == c.body -> Decision.Known(c, fps[i], known.messageId, KnownKind.SAME_ID)
-                else -> Decision.Revision(c, fps[i], known.messageId)
-            }
-        }
-
-        // 2. window alignment for id-less items
         val prevItems = previous?.items.orEmpty()
         val prevFps = prevItems.map { it.fingerprint }
-        val idless = working.indices.filter { decisions[it] == null }
 
-        if (idless.isNotEmpty()) {
-            val newFps = idless.map { fps[it] }
-            var overlap = suffixPrefixOverlap(prevFps, newFps)
-            var stale = false
-            var staleAt = -1
-            if (overlap == 0 && prevFps.isNotEmpty()) {
-                staleAt = containedAt(prevFps, newFps)
-                if (staleAt >= 0) {
-                    stale = true
-                    overlap = newFps.size
-                    notes += ReconcileNote.STALE_REPLAY
-                }
+        // 1. Positional alignment over the complete window.
+        var overlap = suffixPrefixOverlap(prevFps, fps)
+        var stale = false
+        var staleAt = -1
+        if (overlap == 0 && fps.isNotEmpty() && prevFps.isNotEmpty()) {
+            staleAt = containedAt(prevFps, fps)
+            if (staleAt >= 0) {
+                stale = true
+                overlap = fps.size
+                notes += ReconcileNote.STALE_REPLAY
             }
-            if (overlap == newFps.size) notes += ReconcileNote.FULL_OVERLAP
+        }
+        if (fps.isNotEmpty() && overlap == fps.size) notes += ReconcileNote.FULL_OVERLAP
 
-            val samePost = previous != null && previous.notificationKey == notificationKey && !previous.closed
-            for ((k, idx) in idless.withIndex()) {
-                val c = working[idx]
-                val fp = fps[idx]
-                if (k < overlap) {
-                    val existing = if (stale) {
-                        prevItems.getOrNull(staleAt + k)?.messageId
-                    } else {
-                        prevItems.getOrNull(prevItems.size - overlap + k)?.messageId
-                    }
-                    val hasSourceTime = c.sourceTimestampEpochMs != null && c.timestampQuality == TimestampQuality.SOURCE_MESSAGE
-                    val singleIdentical = newFps.size == 1 && !samePost && !hasSourceTime && !stale
-                    decisions[idx] = if (singleIdentical) {
-                        Decision.AmbiguousRepeat(c, fp, existing)
-                    } else {
-                        Decision.Known(c, fp, existing, if (stale) KnownKind.STALE_WINDOW else KnownKind.REPOST)
-                    }
+        // The same post re-observed (active-notification resync after a reconnect keeps the key
+        // and the post time) is a repost even though the window was closed on disconnect.
+        val samePost = previous != null && previous.notificationKey == notificationKey &&
+            (!previous.closed || (postedAtEpochMs != null && postedAtEpochMs == previous.postedAtEpochMs))
+        val decisions = ArrayList<Decision>(working.size)
+        for ((i, c) in working.withIndex()) {
+            val fp = fps[i]
+            val positional: Decision = if (i < overlap) {
+                val prevIndex = if (stale) staleAt + i else prevItems.size - overlap + i
+                val existing = prevItems.getOrNull(prevIndex)?.messageId
+                val hasSourceTime = c.sourceTimestampEpochMs != null && c.timestampQuality == TimestampQuality.SOURCE_MESSAGE
+                val singleIdentical = fps.size == 1 && !samePost && !hasSourceTime && !stale && c.sourceMessageId == null
+                if (singleIdentical) {
+                    Decision.AmbiguousRepeat(c, fp, existing)
                 } else {
-                    decisions[idx] = Decision.New(c, fp, confirmedById = false)
+                    Decision.Known(c, fp, existing, if (stale) KnownKind.STALE_WINDOW else KnownKind.REPOST)
+                }
+            } else {
+                Decision.New(c, fp, confirmedById = false)
+            }
+
+            // 2. A proven source id overrides the positional decision.
+            val sid = c.sourceMessageId
+            val decision = if (sid == null) {
+                positional
+            } else {
+                val known = lookupById(sid)
+                when {
+                    known == null && positional is Decision.New -> Decision.New(c, fp, confirmedById = true)
+                    known == null -> positional
+                    known.body == c.body -> Decision.Known(c, fp, known.messageId, KnownKind.SAME_ID)
+                    else -> Decision.Revision(c, fp, known.messageId)
                 }
             }
+            decisions += decision
         }
 
-        val finalDecisions = decisions.map { requireNotNull(it) }
-
-        // 3. new window
-        val newItems = finalDecisions.map { d ->
-            val existing = when (d) {
-                is Decision.Known -> d.existingMessageId
-                is Decision.Revision -> d.existingMessageId
-                is Decision.AmbiguousRepeat -> d.existingMessageId
-                is Decision.New -> null
+        // 3. New window. A replay that adds nothing keeps the previous (longer) window so the
+        //    next real update still aligns; otherwise the current content is the window.
+        val addsNothing = decisions.none { it is Decision.New || it is Decision.Revision || it is Decision.AmbiguousRepeat }
+        val window = if (addsNothing && prevItems.size > fps.size) {
+            notes += ReconcileNote.WINDOW_KEPT
+            MessageWindow(notificationKey, prevItems.map { it.copy(decisionIndex = null) }, closed = false, postedAtEpochMs = postedAtEpochMs ?: previous?.postedAtEpochMs)
+        } else {
+            val items = decisions.mapIndexed { i, d ->
+                val existing = when (d) {
+                    is Decision.Known -> d.existingMessageId
+                    is Decision.Revision -> d.existingMessageId
+                    is Decision.AmbiguousRepeat -> d.existingMessageId
+                    is Decision.New -> null
+                }
+                WindowItem(d.fingerprint, d.candidate.sourceMessageId, existing, decisionIndex = i)
             }
-            WindowItem(d.fingerprint, d.candidate.sourceMessageId, existing)
+            MessageWindow(notificationKey, items.takeLast(maxWindow), closed = false, postedAtEpochMs = postedAtEpochMs)
         }
-        val window = MessageWindow(notificationKey, newItems.takeLast(maxWindow), closed = false)
-        return ReconcileResult(finalDecisions, window, notes)
+        return ReconcileResult(decisions, window, notes)
     }
 
     /** Largest k such that prev.takeLast(k) == next.take(k). */

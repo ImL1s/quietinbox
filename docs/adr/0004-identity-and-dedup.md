@@ -26,7 +26,14 @@ streams are never merged automatically.
   different notification, is `AMBIGUOUS_REPEAT`: stored as its own row, linked to the original,
   counted separately in the UI, never silently dropped;
 - identical items within one window keep their multiplicity;
-- oversized windows degrade (truncate + `DEGRADED_RESOURCE_LIMIT`) instead of blocking.
+- oversized windows degrade (truncate + `DEGRADED_RESOURCE_LIMIT`) instead of blocking;
+- alignment runs over the complete window (id-less and id-bearing items alike) and a proven id
+  then overrides the positional decision, so positions never drift;
+- a replay that adds nothing keeps the previous checkpoint window (`WINDOW_KEPT`), so `[A]` after
+  `[A,B,C]` cannot make the next `[B,C,D]` duplicate B and C;
+- a re-observation with the same notification key *and* the same `postTime` (active-notification
+  resync after a reconnect) is a repost even though the window was closed on disconnect.
 
-User deletion writes a body-free suppression token (conversation id + fingerprint, 30-day TTL) so an
-active-notification replay cannot resurrect the message. Restoring a backup can, and the UI says so.
+User deletion writes a body-free suppression token (`SourceScope.key + "#" + identityKey` +
+fingerprint, 30-day TTL, DB v2) so an active-notification replay cannot resurrect the message even
+after the conversation row itself was deleted. Restoring a backup can, and the UI says so.

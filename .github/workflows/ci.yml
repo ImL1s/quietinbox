@@ -28,7 +28,7 @@ jobs:
           ./gradlew --no-daemon --console=plain
           :core:model:test :core:parser:test :core:identity:test :core:reconcile:test
           :core:analytics:test :parsers:apps:test
-          :platform:crypto:testDebugUnitTest :platform:backup:testDebugUnitTest
+          :platform:crypto:testDebugUnitTest :platform:backup:testDebugUnitTest :app:testDebugUnitTest
       - uses: actions/upload-artifact@v4
         if: always()
         with:

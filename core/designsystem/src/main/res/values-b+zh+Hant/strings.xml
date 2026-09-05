@@ -252,11 +252,13 @@
     <string name="backup_failed_no_key">沒有可用的復原金鑰。</string>
     <string name="backup_failed_key">復原金鑰錯誤，或檔案已被修改。</string>
     <string name="backup_failed_truncated">備份檔不完整。</string>
-    <string name="backup_failed_io">無法讀取或寫入檔案。</string>
+    <string name="backup_failed_io">無法讀取或寫入檔案。若你選擇覆寫既有檔案，該檔案已被覆寫，不再是有效備份。</string>
     <string name="backup_failed_version">不支援的備份版本。</string>
     <string name="backup_failed_counts">紀錄數量與 manifest 不符。</string>
     <string name="backup_failed_too_large">備份超過大小限制。</string>
     <string name="backup_failed_vault">資料庫已鎖定。</string>
+    <string name="hours_short">%1$d 小時</string>
+    <string name="backup_failed_corrupt">備份檔已損毀（有一筆紀錄無法讀取）。</string>
     <string name="backup_file_name">quietinbox-backup-%1$s.qibk</string>
     <string name="section_data">資料</string>
     <string name="delete_everything">刪除所有資料</string>

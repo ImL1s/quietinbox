@@ -28,8 +28,9 @@ class LockController @Inject constructor(
     private val settings: SettingsRepository,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val _locked = MutableStateFlow(false)
-    val locked: StateFlow<Boolean> = _locked
+    /** null until the lock setting is known; the UI shows nothing sensitive before that. */
+    private val _locked = MutableStateFlow<Boolean?>(null)
+    val locked: StateFlow<Boolean?> = _locked
 
     @Volatile
     private var enabled = false
@@ -42,8 +43,11 @@ class LockController @Inject constructor(
             settings.settings.collect { s ->
                 val was = enabled
                 enabled = s.uiLockEnabled
-                if (!enabled) _locked.value = false
-                if (!was && enabled) backgroundedAt = 0L
+                when {
+                    !enabled -> _locked.value = false
+                    _locked.value == null -> _locked.value = true // cold start with the lock on
+                    !was -> backgroundedAt = 0L
+                }
             }
         }
     }

@@ -24,9 +24,68 @@ object SearchNormalizer {
     }
 
     /**
-     * Tokenises normalised text into index tokens: whole Latin/digit words plus their 3-grams,
-     * and CJK bigrams (plus single characters for one-character runs). Deterministic and
-     * side-effect free, so the same function builds the index and the query.
+     * Query tokens: the subset of index tokens a query must match. Latin runs of 3+ characters use
+     * only their 3-grams (so "hell" finds "hello"); shorter runs use the whole word. CJK runs use
+     * bigrams, or the single character when the run is one character long.
+     */
+    fun queryTokens(normalized: String): Set<String> {
+        val out = LinkedHashSet<String>()
+        for (run in runs(normalized)) {
+            when (run.kind) {
+                RunKind.CJK -> if (run.chars.size == 1) out += run.chars[0] else for (k in 0 until run.chars.size - 1) out += run.chars[k] + run.chars[k + 1]
+                RunKind.LATIN -> {
+                    val w = run.text
+                    if (w.length >= 3) for (k in 0..w.length - 3) out += w.substring(k, k + 3) else out += w
+                }
+            }
+        }
+        return out
+    }
+
+    private enum class RunKind { CJK, LATIN }
+    private class Run(val kind: RunKind, val text: String, val chars: List<String>)
+
+    private fun runs(normalized: String): List<Run> {
+        val out = ArrayList<Run>()
+        var i = 0
+        val n = normalized.length
+        while (i < n) {
+            val cp = normalized.codePointAt(i)
+            val len = Character.charCount(cp)
+            when {
+                isCjk(cp) -> {
+                    var j = i
+                    val run = ArrayList<String>()
+                    while (j < n) {
+                        val c = normalized.codePointAt(j)
+                        if (!isCjk(c)) break
+                        run += String(Character.toChars(c))
+                        j += Character.charCount(c)
+                    }
+                    out += Run(RunKind.CJK, run.joinToString(""), run)
+                    i = j
+                }
+                Character.isLetterOrDigit(cp) -> {
+                    var j = i
+                    val sb = StringBuilder()
+                    while (j < n) {
+                        val c = normalized.codePointAt(j)
+                        if (!Character.isLetterOrDigit(c) || isCjk(c)) break
+                        sb.appendCodePoint(c)
+                        j += Character.charCount(c)
+                    }
+                    out += Run(RunKind.LATIN, sb.toString(), emptyList())
+                    i = j
+                }
+                else -> i += len
+            }
+        }
+        return out
+    }
+
+    /**
+     * Index tokens: whole Latin/digit words plus their 3-grams; every CJK character plus CJK
+     * bigrams. Deterministic and side-effect free; [queryTokens] produces a subset of these.
      */
     fun tokens(normalized: String): Set<String> {
         val out = LinkedHashSet<String>()
@@ -45,7 +104,7 @@ object SearchNormalizer {
                         run += String(Character.toChars(c))
                         j += Character.charCount(c)
                     }
-                    if (run.size == 1) out += run[0]
+                    for (c in run) out += c
                     for (k in 0 until run.size - 1) out += run[k] + run[k + 1]
                     i = j
                 }

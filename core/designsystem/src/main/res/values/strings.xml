@@ -252,11 +252,13 @@
     <string name="backup_failed_no_key">No recovery key available.</string>
     <string name="backup_failed_key">Wrong recovery key, or the file was modified.</string>
     <string name="backup_failed_truncated">The backup file is incomplete.</string>
-    <string name="backup_failed_io">Could not read or write the file.</string>
+    <string name="backup_failed_io">Could not read or write the file. If you chose an existing file as the target, it has been overwritten and is no longer a valid backup.</string>
     <string name="backup_failed_version">Unsupported backup version.</string>
     <string name="backup_failed_counts">Record counts do not match the manifest.</string>
     <string name="backup_failed_too_large">The backup exceeds size limits.</string>
     <string name="backup_failed_vault">The vault is locked.</string>
+    <string name="hours_short">%1$d h</string>
+    <string name="backup_failed_corrupt">The backup file is corrupt (a record could not be read).</string>
     <string name="backup_file_name">quietinbox-backup-%1$s.qibk</string>
     <string name="section_data">Data</string>
     <string name="delete_everything">Delete all data</string>

@@ -52,7 +52,9 @@ class KeystoreWrapper(private val alias: String = DEFAULT_ALIAS) {
         val iv = wrapped.copyOfRange(0, IV_BYTES)
         val ct = wrapped.copyOfRange(IV_BYTES, wrapped.size)
         val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_BYTES, iv))
+        // A missing KEK means the Keystore lost it: report that, never mint a new key here.
+        val key = existingKey() ?: throw KeyPermanentlyInvalidatedException()
+        cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BYTES, iv))
         cipher.updateAAD(aad)
         cipher.doFinal(ct)
     }
@@ -69,9 +71,13 @@ class KeystoreWrapper(private val alias: String = DEFAULT_ALIAS) {
         KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }.containsAlias(alias)
     }.getOrDefault(false)
 
-    private fun getOrCreateKey(): SecretKey {
+    private fun existingKey(): SecretKey? {
         val ks = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-        (ks.getKey(alias, null) as? SecretKey)?.let { return it }
+        return ks.getKey(alias, null) as? SecretKey
+    }
+
+    private fun getOrCreateKey(): SecretKey {
+        existingKey()?.let { return it }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
         val spec = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)

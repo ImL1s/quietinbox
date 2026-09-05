@@ -153,7 +153,7 @@ fun SettingsScreen(
                     Text(stringResource(R.string.journal_ttl, s.journalTtlHours), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 12.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         for (preset in listOf(6, 24, 72)) {
-                            FilterChip(selected = s.journalTtlHours == preset, onClick = { viewModel.setJournalTtl(preset) }, label = { Text("$preset h") })
+                            FilterChip(selected = s.journalTtlHours == preset, onClick = { viewModel.setJournalTtl(preset) }, label = { Text(stringResource(R.string.hours_short, preset)) })
                         }
                     }
                 }
@@ -364,6 +364,7 @@ private fun backupResultText(result: BackupResult?): String? = when (result) {
     is BackupResult.Failed -> when (result.reason) {
         BackupResult.Reason.NO_RECOVERY_KEY, BackupResult.Reason.KEY_UNAVAILABLE -> stringResource(R.string.backup_failed_no_key)
         BackupResult.Reason.WRONG_KEY_OR_TAMPERED -> stringResource(R.string.backup_failed_key)
+        BackupResult.Reason.CORRUPT -> stringResource(R.string.backup_failed_corrupt)
         BackupResult.Reason.TRUNCATED -> stringResource(R.string.backup_failed_truncated)
         BackupResult.Reason.IO, BackupResult.Reason.BAD_HEADER -> stringResource(R.string.backup_failed_io)
         BackupResult.Reason.UNSUPPORTED_VERSION -> stringResource(R.string.backup_failed_version)

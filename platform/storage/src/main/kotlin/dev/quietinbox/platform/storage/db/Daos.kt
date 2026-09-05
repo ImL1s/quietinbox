@@ -49,6 +49,12 @@ interface JournalDao {
     @Query("UPDATE event_journal SET state = :state, attempts = attempts + 1, failureCode = :failure WHERE eventId = :eventId")
     suspend fun setState(eventId: String, state: String, failure: String?)
 
+    @Query("SELECT attempts FROM event_journal WHERE eventId = :eventId")
+    suspend fun attempts(eventId: String): Int?
+
+    @Query("SELECT state FROM event_journal WHERE eventId = :eventId")
+    suspend fun state(eventId: String): String?
+
     @Query("DELETE FROM event_journal WHERE expiresAtEpochMs < :now AND state != 'PENDING'")
     suspend fun deleteExpired(now: Long): Int
 
@@ -251,11 +257,14 @@ interface MediaDao {
     @Query("SELECT * FROM media_blob WHERE id = :id")
     suspend fun get(id: Long): MediaBlobEntity?
 
-    @Query("SELECT * FROM media_blob WHERE messageId NOT IN (SELECT id FROM message) OR messageId IS NULL")
+    @Query("SELECT b.* FROM media_blob b LEFT JOIN message m ON m.id = b.messageId WHERE m.id IS NULL")
     suspend fun orphans(): List<MediaBlobEntity>
 
     @Query("DELETE FROM media_blob WHERE id IN (:ids)")
     suspend fun delete(ids: List<Long>)
+
+    @Query("UPDATE media_blob SET messageId = :messageId WHERE id = :blobId")
+    suspend fun setMessageId(blobId: Long, messageId: Long)
 
     @Query("SELECT COALESCE(SUM(byteCount), 0) FROM media_blob")
     fun observeTotalBytes(): Flow<Long>
@@ -266,8 +275,8 @@ interface MediaDao {
 
 @Dao
 interface SuppressionDao {
-    @Query("SELECT COUNT(*) FROM deletion_suppression WHERE conversationId = :conversationId AND fingerprint = :fingerprint AND expiresAtEpochMs > :now")
-    suspend fun isSuppressed(conversationId: Long, fingerprint: String, now: Long): Int
+    @Query("SELECT COUNT(*) FROM deletion_suppression WHERE scopeKey = :scopeKey AND fingerprint = :fingerprint AND expiresAtEpochMs > :now")
+    suspend fun isSuppressed(scopeKey: String, fingerprint: String, now: Long): Int
 
     @Upsert
     suspend fun upsert(entity: DeletionSuppressionEntity)
@@ -333,8 +342,8 @@ interface HealthDao {
     @Query("SELECT * FROM gap_interval ORDER BY createdAtEpochMs DESC LIMIT :limit")
     fun observeGaps(limit: Int): Flow<List<GapIntervalEntity>>
 
-    @Query("SELECT * FROM gap_interval WHERE endEpochMs IS NULL AND createdAtEpochMs = (SELECT MAX(createdAtEpochMs) FROM gap_interval WHERE endEpochMs IS NULL)")
-    suspend fun openGap(): GapIntervalEntity?
+    @Query("SELECT * FROM gap_interval WHERE endEpochMs IS NULL AND reason IN (:reasons)")
+    suspend fun openGaps(reasons: List<String>): List<GapIntervalEntity>
 
     @Query("DELETE FROM gap_interval WHERE createdAtEpochMs < :before")
     suspend fun deleteGapsBefore(before: Long): Int

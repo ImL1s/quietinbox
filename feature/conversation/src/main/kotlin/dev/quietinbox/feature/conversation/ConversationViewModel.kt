@@ -93,8 +93,8 @@ class ConversationViewModel @AssistedInject constructor(
     }
 
     fun deleteConversation(onDone: () -> Unit) = viewModelScope.launch {
-        runCatching { inbox.deleteConversation(conversationId, System.currentTimeMillis(), SUPPRESSION_TTL_MS) }
-        onDone()
+        val ok = runCatching { inbox.deleteConversation(conversationId, System.currentTimeMillis(), SUPPRESSION_TTL_MS) }.isSuccess
+        if (ok) onDone()
     }
 
     /**

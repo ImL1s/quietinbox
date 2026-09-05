@@ -6,12 +6,12 @@ are test tools, never evidence about a real source app.
 | Layer | Oracle | What exists | Run |
 | --- | --- | --- | --- |
 | L0 contracts & fixtures | Hand-written expectations | `core:testing` Fixtures DSL; every parser test is a synthetic fixture with an explicit expected batch | JVM |
-| L1 JVM replay | Pure Kotlin parser / identity / reconcile / analytics | 31 tests in `core:*`, 43 in `parsers:apps`; 1,000-seed property test on sliding windows (seed 20260905) | `./gradlew :core:model:test :core:parser:test :core:identity:test :core:reconcile:test :core:analytics:test :parsers:apps:test` |
+| L1 JVM replay | Pure Kotlin parser / identity / reconcile / analytics | 36 tests in `core:*`, 43 in `parsers:apps`, 4 in `app` (reminders); 1,000-seed property test on sliding windows (seed 20260905) | `./gradlew :core:model:test :core:parser:test :core:identity:test :core:reconcile:test :core:analytics:test :parsers:apps:test` |
 | L2 Android publisher | Real notification callbacks through our own package | `SyntheticNotifications` (MessagingStyle, BigText); onboarding step 4 | Device, manual |
 | L3 real source apps | Two consenting test accounts, recordings | **Not run** | — |
 | L4 fault & performance | Process kill, Doze, first unlock, revoke, disk limits | **Not run** (commit fence exists in code; no injected-failure test yet) | — |
 | L5 release artifact | Merged manifest, permission dump, reproducible build | `tools/check-permissions.sh` (CI); no SBOM / rebuild comparison yet | CI |
-| Instrumented storage | Real SQLCipher | `VaultRoundTripTest` (journal → commit → search → suppression → reopen with persisted key) | `./gradlew :platform:storage:connectedDebugAndroidTest` |
+| Instrumented storage | Real SQLCipher + Room migrations | `VaultRoundTripTest` (journal → commit → search → suppression → reopen with persisted key), `MigrationTest` (1→2 against exported schema) | `./gradlew :platform:storage:connectedDebugAndroidTest` |
 | Crypto | RFC 5869 vectors, codec round trips | `HkdfTest`, `RecoveryKeyCodecTest` | JVM |
 
 ## Scenario ids referenced by the plan (subset implemented as tests)

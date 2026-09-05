@@ -87,8 +87,8 @@ fun QuietInboxApp(activity: FragmentActivity, viewModel: AppViewModel = hiltView
     ) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             when {
-                s == null -> LoadingScreen()
-                locked -> LockScreen(onUnlock = { viewModel.lock.prompt(activity, activity.getString(R.string.lock_prompt_title)) }, canAuthenticate = viewModel.lock.canAuthenticate())
+                s == null || locked == null -> LoadingScreen()
+                locked == true -> LockScreen(onUnlock = { viewModel.lock.prompt(activity, activity.getString(R.string.lock_prompt_title)) }, canAuthenticate = viewModel.lock.canAuthenticate())
                 !s.onboardingCompleted -> OnboardingScreen(onFinished = {})
                 else -> MainNavigation()
             }

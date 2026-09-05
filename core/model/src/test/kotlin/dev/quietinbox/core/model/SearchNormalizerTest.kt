@@ -17,6 +17,15 @@ class SearchNormalizerTest : FunSpec({
 
     test("single CJK character is indexed on its own") {
         SearchNormalizer.tokens("好") shouldContain "好"
+        SearchNormalizer.tokens("明天開會") shouldContain "開"
+    }
+
+    test("query tokens are always a subset of the index tokens of a matching body") {
+        val index = SearchNormalizer.tokens(SearchNormalizer.normalize("Hello meeting 明天開會"))
+        for (q in listOf("hell", "meet", "eeting", "開", "開會", "hello")) {
+            val qt = SearchNormalizer.queryTokens(SearchNormalizer.normalize(q))
+            (qt - index).isEmpty() shouldBe true
+        }
     }
 
     test("BoundedText truncates and flags") {

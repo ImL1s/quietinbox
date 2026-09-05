@@ -13,8 +13,8 @@ records what the repository **actually delivers today** and what it does **not**
 | NotificationListenerService capture, bounded snapshot | Done | `platform:capture`; no DB/network/decoding on callback thread |
 | Multi-message parser (MessagingStyle / Inbox / BigText / summary) | Done | 10 JVM tests in `core:parser` |
 | Identity without cross-stream merging | Done | 5 JVM tests in `core:identity` |
-| Dedup with `AMBIGUOUS_REPEAT`, revisions, stale-window handling | Done | 12 JVM tests + 1,000-seed property test in `core:reconcile` (the six §7.2 examples are literal test cases) |
-| Encrypted vault (Room + SQLCipher, per-install random key, Keystore-wrapped) | Done | Instrumented test `VaultRoundTripTest` (device); `KeystoreWrapper` sets `setUserAuthenticationRequired(false)` |
+| Dedup with `AMBIGUOUS_REPEAT`, revisions, stale-window handling, resync-as-repost | Done | 16 JVM tests in `core:reconcile` including a 1,000-seed property test (the six §7.2 examples are literal test cases) |
+| Encrypted vault (Room + SQLCipher, per-install random key, Keystore-wrapped) | Done | Instrumented tests `VaultRoundTripTest` + `MigrationTest` (1→2) on device; `KeystoreWrapper` sets `setUserAuthenticationRequired(false)` |
 | Journal-first commit, commit fence on revoke | Done | `IngestRepository.commit`, `CaptureCoordinator.process` generation check |
 | Inbox / conversation UI with quality labels | Done | Device screenshots |
 | Search (CJK bigram + Latin trigram, parameterised, paged) | Done | Instrumented test covers 開會 / hel; UI on device |
@@ -39,6 +39,19 @@ records what the repository **actually delivers today** and what it does **not**
 - **Golden corpus diff reports** for parser changes (plan §14): fixtures are Kotest cases, no separate corpus tooling yet.
 - **Diagnostic bundle export with redaction preview** (plan §14): only a body-free clipboard summary exists.
 - **Name / trademark / package-id clearance**: `dev.quietinbox` is a placeholder.
+
+## Review round 1 (2026-09-06): findings fixed before the first push
+
+Four independent reviewers (Gemini 3.8 Flash high via agy, a Claude subagent, Claude Fable 5; Codex and Kimi were blocked by usage limits — see `.omc/research/`) returned REQUEST CHANGES. Every Critical and Important finding was fixed and covered where a unit test could express it:
+
+- `DatabaseHolder.db()` no longer hangs when the vault ends up Locked while a caller waits.
+- Deletion suppression is keyed by scope + identity (DB v2, explicit migration), so deleting a whole conversation survives active-notification replay.
+- Pause/source-disable rotate the generation and are re-checked in `process()`; the consumer loop restarts after any throwable; bitmaps in flight are bounded.
+- Journal replay and live processing share one mutex; failed commits stay PENDING for up to 3 attempts; FK-safe observation links.
+- Reconciler aligns the whole window (ids as overrides), keeps the checkpoint on stale replays, and treats a same-post resync as a repost.
+- Restore links media blobs to the restored message, dedupes only against pre-existing rows, reads bounded lines, and never deletes the user's target document.
+- Key files are fsync'd; a missing Keystore key is reported as invalidated rather than minting a new one.
+- App lock is closed until the setting is known; search queries use 3-grams / single CJK characters so "hell" finds "hello" and "開" finds "開會".
 
 ## Known defects and rough edges found during device verification
 

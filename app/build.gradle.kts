@@ -37,7 +37,7 @@ android {
     }
 
     androidResources {
-        localeFilters += listOf("en", "zh-rTW", "b+zh+Hant")
+        localeFilters += listOf("en", "b+zh+Hant")
     }
 
     compileOptions {

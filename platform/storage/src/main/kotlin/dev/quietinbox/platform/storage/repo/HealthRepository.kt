@@ -52,10 +52,10 @@ class HealthRepository @Inject constructor(
     suspend fun openGap(startEpochMs: Long?, reason: GapReason, precision: GapPrecision, now: Long): Long =
         holder.db().healthDao().insertGap(GapIntervalEntity(startEpochMs = startEpochMs, endEpochMs = null, reason = reason.name, precision = precision.name, createdAtEpochMs = now))
 
-    suspend fun closeOpenGap(endEpochMs: Long?) {
+    /** Closes the open gaps with the given reasons only, so a pause gap survives a reconnect and vice versa. */
+    suspend fun closeOpenGaps(endEpochMs: Long?, vararg reasons: GapReason) {
         val db = holder.db()
-        val open = db.healthDao().openGap() ?: return
-        db.healthDao().closeGap(open.id, endEpochMs)
+        for (gap in db.healthDao().openGaps(reasons.map { it.name })) db.healthDao().closeGap(gap.id, endEpochMs)
     }
 
     suspend fun recordGap(startEpochMs: Long?, endEpochMs: Long?, reason: GapReason, precision: GapPrecision, now: Long) {

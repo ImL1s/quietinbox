@@ -11,7 +11,9 @@ import dev.quietinbox.platform.crypto.KeyResult
 import dev.quietinbox.platform.storage.db.DatabaseHolder
 import dev.quietinbox.platform.storage.db.MediaBlobEntity
 import dev.quietinbox.platform.storage.retention.MediaDirectory
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -75,6 +77,10 @@ class MediaCopier @Inject constructor(
             return MediaState.PERMISSION_DENIED to null
         } catch (e: FileNotFoundException) {
             return MediaState.URI_EXPIRED to null
+        } catch (e: TimeoutCancellationException) {
+            return MediaState.FAILED to null
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             return MediaState.FAILED to null
         }

@@ -27,7 +27,7 @@ class SearchRepository @Inject constructor(
     ): List<SearchHit> {
         val normalized = SearchNormalizer.normalize(query)
         if (normalized.isBlank()) return emptyList()
-        val tokens = SearchNormalizer.tokens(normalized).toList()
+        val tokens = SearchNormalizer.queryTokens(normalized).toList()
         if (tokens.isEmpty()) return emptyList()
         val db = holder.db()
         val rows = db.searchDao().search(tokens, tokens.size, packages.isEmpty(), packages.toList(), fromMs, toMs, limit, offset)

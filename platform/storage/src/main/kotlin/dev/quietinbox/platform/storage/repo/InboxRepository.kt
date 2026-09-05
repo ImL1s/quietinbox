@@ -4,6 +4,8 @@ import androidx.room.withTransaction
 import dev.quietinbox.core.model.Conversation
 import dev.quietinbox.core.model.Message
 import dev.quietinbox.core.model.MessageRevision
+import dev.quietinbox.core.model.SourceScope
+import dev.quietinbox.platform.storage.db.ConversationEntity
 import dev.quietinbox.platform.storage.db.DatabaseHolder
 import dev.quietinbox.platform.storage.db.DeletionSuppressionEntity
 import dev.quietinbox.platform.storage.db.VaultState
@@ -60,8 +62,10 @@ class InboxRepository @Inject constructor(
         val db = holder.db()
         db.withTransaction {
             val rows = db.messageDao().getAll(ids)
+            val scopeKeys = HashMap<Long, String>()
             for (row in rows) {
-                db.suppressionDao().upsert(DeletionSuppressionEntity(row.conversationId, row.fingerprint, now + suppressionTtlMs))
+                val key = scopeKeys.getOrPut(row.conversationId) { db.conversationDao().get(row.conversationId)?.suppressionScopeKey() ?: "" }
+                if (key.isNotEmpty()) db.suppressionDao().upsert(DeletionSuppressionEntity(key, row.fingerprint, now + suppressionTtlMs))
             }
             db.messageDao().delete(ids)
             val byConversation = rows.groupBy { it.conversationId }
@@ -82,10 +86,19 @@ class InboxRepository @Inject constructor(
     suspend fun deleteConversation(conversationId: Long, now: Long, suppressionTtlMs: Long) {
         val db = holder.db()
         db.withTransaction {
-            for (row in db.messageDao().forConversation(conversationId)) {
-                db.suppressionDao().upsert(DeletionSuppressionEntity(conversationId, row.fingerprint, now + suppressionTtlMs))
+            val key = db.conversationDao().get(conversationId)?.suppressionScopeKey()
+            if (key != null) {
+                for (row in db.messageDao().forConversation(conversationId)) {
+                    db.suppressionDao().upsert(DeletionSuppressionEntity(key, row.fingerprint, now + suppressionTtlMs))
+                }
             }
             db.conversationDao().delete(conversationId)
         }
     }
 }
+
+/** Stable identity of a conversation for suppression: scope + identity key, independent of the row id. */
+internal fun ConversationEntity.suppressionScopeKey(): String =
+    suppressionScopeKey(SourceScope(packageName, profileKey, accountKey), identityKey)
+
+internal fun suppressionScopeKey(scope: SourceScope, identityKey: String): String = scope.key + "#" + identityKey

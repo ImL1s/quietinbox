@@ -17,5 +17,8 @@ First installable vertical slice (plan §3 "v0.1"). Not published to any store.
 - Tests: 74 JVM tests including a 1,000-seed property test; instrumented SQLCipher round-trip test; RFC 5869 vectors.
 - CI: JVM tests, assemble, network-permission gate, emulator lanes (API 29/35).
 
+### Fixed (pre-release review round 1, 2026-09-06)
+- Vault open failure could hang callers forever; pause did not rotate the capture generation; deleting a conversation did not suppress replays; restored media was garbage-collected; restore collapsed legitimate duplicates; journal replay raced live capture; FK violations rolled back whole batches; window alignment drifted with mixed ids; stale replays shrank checkpoints; resync produced spurious "possible repeat" rows; app lock could be bypassed on cold start; 4+ letter Latin and single CJK searches returned nothing; key files were not fsync'd. Database schema is now v2 with an explicit migration.
+
 ### Known limitations
 See `docs/SCOPE.md` and the in-app "Known limitations".

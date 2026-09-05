@@ -111,7 +111,8 @@ data class Counts(
 )
 
 object BackupLimits {
-    const val MAX_LINE_BYTES = 16 * 1024 * 1024
+    /** Upper bound per record line in UTF-16 code units, enforced while reading (not after). */
+    const val MAX_LINE_CHARS = 16 * 1024 * 1024
     const val MAX_RECORDS = 2_000_000
     const val MAX_MEDIA_BYTES = 8L * 1024 * 1024
     const val MAX_STAGED_MEDIA_BYTES = 256L * 1024 * 1024
