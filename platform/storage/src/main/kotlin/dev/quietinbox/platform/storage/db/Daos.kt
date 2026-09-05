@@ -321,8 +321,8 @@ interface HealthDao {
     @Query("SELECT * FROM capture_session ORDER BY startedAtEpochMs DESC LIMIT :limit")
     fun observeSessions(limit: Int): Flow<List<CaptureSessionEntity>>
 
-    @Query("SELECT * FROM capture_session WHERE endedAtEpochMs IS NULL ORDER BY startedAtEpochMs DESC LIMIT 1")
-    suspend fun openSession(): CaptureSessionEntity?
+    @Query("SELECT * FROM capture_session WHERE endedAtEpochMs IS NULL AND id != :exceptId ORDER BY startedAtEpochMs DESC")
+    suspend fun openSessionsExcept(exceptId: Long): List<CaptureSessionEntity>
 
     @Insert
     suspend fun insertGap(entity: GapIntervalEntity): Long

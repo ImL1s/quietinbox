@@ -37,11 +37,12 @@ class HealthRepository @Inject constructor(
     suspend fun startSession(generation: String, bootSessionId: String, now: Long): Long {
         val db = holder.db()
         val id = db.healthDao().insertSession(CaptureSessionEntity(generation = generation, bootSessionId = bootSessionId, startedAtEpochMs = now, endedAtEpochMs = null, endReason = null))
-        // Any other open session means the process died without closing: an unknown-length gap.
-        val dangling = db.healthDao().openSession()
-        if (dangling != null && dangling.id != id) {
-            db.healthDao().endSession(dangling.id, null, "PROCESS_RESTART")
-            openGap(null, GapReason.PROCESS_RESTART, GapPrecision.UNKNOWN, now)
+        // Any other open session means the process died without closing: an unknown-length gap
+        // (its start is unknown — we only know it ended some time before now).
+        val dangling = db.healthDao().openSessionsExcept(id)
+        if (dangling.isNotEmpty()) {
+            for (d in dangling) db.healthDao().endSession(d.id, null, "PROCESS_RESTART")
+            recordGap(null, now, GapReason.PROCESS_RESTART, GapPrecision.UNKNOWN, now)
         }
         return id
     }

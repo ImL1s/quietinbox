@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.Search
@@ -38,6 +39,7 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import androidx.window.core.layout.WindowSizeClass
 import dev.quietinbox.core.designsystem.R
+import dev.quietinbox.core.designsystem.components.EmptyState
 import dev.quietinbox.feature.analytics.AnalyticsScreen
 import dev.quietinbox.feature.conversation.ConversationScreen
 import dev.quietinbox.feature.health.HealthScreen
@@ -96,7 +98,17 @@ fun MainNavigation() {
             ),
             sceneStrategies = listOf(listDetail),
             entryProvider = entryProvider {
-                entry<InboxRoute>(metadata = ListDetailSceneStrategy.listPane()) {
+                entry<InboxRoute>(
+                    metadata = ListDetailSceneStrategy.listPane(
+                        detailPlaceholder = {
+                            EmptyState(
+                                title = stringResource(R.string.detail_placeholder_title),
+                                body = stringResource(R.string.detail_placeholder_body),
+                                icon = Icons.Outlined.Forum,
+                            )
+                        },
+                    ),
+                ) {
                     InboxScreen(
                         onOpenConversation = { id ->
                             if (backStack.lastOrNull() is ConversationRoute) backStack.removeLastOrNull()

@@ -13,6 +13,7 @@ import dev.quietinbox.platform.storage.repo.VaultRepository
 import dev.quietinbox.platform.storage.settings.AppSettings
 import dev.quietinbox.platform.storage.settings.SettingsRepository
 import dev.quietinbox.platform.storage.settings.ThemeMode
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -69,8 +70,9 @@ class SettingsViewModel @Inject constructor(
         reminders.reschedule()
     }
 
-    fun showRecoveryKey() {
-        local.update { it.copy(recoveryKey = (backup.recoveryKeyText() as? KeyResult.Ok)?.value ?: "") }
+    fun showRecoveryKey() = viewModelScope.launch(Dispatchers.IO) {
+        val text = (backup.recoveryKeyText() as? KeyResult.Ok)?.value ?: ""
+        local.update { it.copy(recoveryKey = text) }
     }
 
     fun hideRecoveryKey() = local.update { it.copy(recoveryKey = null) }

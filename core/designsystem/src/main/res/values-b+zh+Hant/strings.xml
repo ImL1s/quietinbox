@@ -66,6 +66,9 @@
     <string name="inbox_delete_body">這個對話裡所有已保存的副本會從本機移除，來源 App 不受影響；之後重播活動通知也不會復活它們。</string>
     <string name="inbox_group">群組</string>
 
+    <string name="detail_placeholder_title">選一個對話</string>
+    <string name="detail_placeholder_body">在寬螢幕上，副本會與收件匣並排顯示在這裡。</string>
+
     <!-- Conversation -->
     <string name="conv_source">來源：%1$s</string>
     <string name="conv_saved_count">已保存 %1$d 則</string>

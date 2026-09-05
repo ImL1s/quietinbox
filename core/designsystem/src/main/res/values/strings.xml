@@ -66,6 +66,9 @@
     <string name="inbox_delete_body">All saved copies in this conversation are removed from this device. The source app is not affected. Replays of active notifications will not restore them.</string>
     <string name="inbox_group">Group</string>
 
+    <string name="detail_placeholder_title">Pick a conversation</string>
+    <string name="detail_placeholder_body">Copies open here, side by side with the inbox, on wide screens.</string>
+
     <!-- Conversation -->
     <string name="conv_source">Source: %1$s</string>
     <string name="conv_saved_count">%1$d saved</string>

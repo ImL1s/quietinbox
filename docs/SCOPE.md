@@ -27,12 +27,12 @@ records what the repository **actually delivers today** and what it does **not**
 | UI lock (BiometricPrompt), screenshot protection | Implemented, **partially verified** | FLAG_SECURE verified to block `screencap` in debug before the debug-only exemption was added; biometric flow not exercised |
 | No INTERNET permission | Done | `aapt2 dump permissions` on debug APK; `tools/check-permissions.sh` in CI |
 | zh-Hant + en localisation | Done | `core/designsystem/res/values*` |
-| Adaptive layout (rail + list-detail on wide windows) | Implemented, **not verified on tablet/foldable** | `MainNavigation` uses `ListDetailSceneStrategy`; only phone tested |
+| Adaptive layout (rail + list-detail on wide windows) | Done (emulator) | Foldable_Test AVD (API 36, 2076×2152): `NavigationRail` + `ListDetailSceneStrategy` show inbox and conversation side by side; phone shows bottom bar |
 
 ## Not done (plan v1.0 items explicitly out of this milestone)
 
 - **Real-source E2E (L3)** for LINE / WhatsApp / Telegram / Instagram / Messenger with two consenting test accounts. All five adapters are `SYNTHETIC_ONLY`; nothing has been observed from the real apps. See `docs/COMPATIBILITY.md`.
-- **72-hour soak, OEM matrix, foldable/tablet runs, API 26 lane, 16 KB page-size verification** (plan §15). Only one device (Samsung SM-S9280, Android 16) and no emulator lanes were run locally; the CI workflow defines API 29/35 emulator lanes but has not been executed yet.
+- **72-hour soak, OEM matrix, API 26 lane, 16 KB page-size verification** (plan §15). One physical device (Samsung SM-S9280, Android 16) and one foldable emulator (API 36) were exercised locally; the CI workflow defines API 29/35 emulator lanes but has not been executed yet.
 - **Release signing, reproducible-build comparison, SBOM, F-Droid submission** (plan §17). `assembleRelease` is configured with R8 but no keystore exists in the repo.
 - **Password-based backup (Argon2id)**, high-security lock-vault mode, remote-config rule updates, networked media variant — all P2 by plan.
 - **Original-notification `PendingIntent` reuse** when opening the source app: v0.1 always falls back to the launcher intent (the snapshot deliberately never retains `PendingIntent`s).
