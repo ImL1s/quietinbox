@@ -73,4 +73,5 @@
     <string name="analytics_empty_messages_title">觀測到的訊息不足</string>
     <string name="analytics_empty_messages_body">這個檢視需要所選期間內有更多訊息。QuietInbox 只計算通知裡實際帶到的內容。</string>
     <string name="analytics_capped">這段期間超過 %1$d 則觀測訊息；只統計最新的 %1$d 則。</string>
+    <string name="analytics_degraded">部分資料無法讀取；此報表可能不完整。</string>
 </resources>

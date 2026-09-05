@@ -15,42 +15,43 @@ import dev.quietinbox.core.analytics.PeriodKind
 import dev.quietinbox.core.analytics.QuietRank
 import dev.quietinbox.core.analytics.RankingBoards
 import dev.quietinbox.core.analytics.SenderPhrases
-import dev.quietinbox.platform.storage.repo.VaultRepository
 import dev.quietinbox.platform.storage.db.VaultState
 import dev.quietinbox.platform.storage.repo.AnalyticsRepository
-import dev.quietinbox.platform.storage.repo.InboxCounts
 import dev.quietinbox.platform.storage.repo.ConversationLabel
 import dev.quietinbox.platform.storage.repo.HealthRepository
+import dev.quietinbox.platform.storage.repo.InboxCounts
 import dev.quietinbox.platform.storage.repo.InboxRepository
+import dev.quietinbox.platform.storage.repo.VaultRepository
+import javax.inject.Inject
+import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.shareIn
-import kotlinx.coroutines.flow.transformLatest
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.take
-import kotlinx.coroutines.flow.merge
-import kotlinx.coroutines.flow.sample
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.retryWhen
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.retryWhen
+import kotlinx.coroutines.flow.sample
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
-import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
-import javax.inject.Inject
 
 /** The five views of the same period; the period selector is shared by all of them. */
 enum class AnalyticsTab { OVERVIEW, RANKINGS, BEST_TIME, CHATTINESS, QUIET }
@@ -80,6 +81,8 @@ data class AnalyticsUiState(
     val capped: Boolean = false,
     /** The encrypted vault could not be opened; nothing can be computed until it is unlocked. */
     val vaultLocked: Boolean = false,
+    /** A query failed during this computation, so the report may be incomplete (shown as an honesty label). */
+    val degraded: Boolean = false,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -137,14 +140,15 @@ class AnalyticsViewModel @Inject constructor(
     private suspend fun compute(s: PeriodSelection): AnalyticsUiState {
         val zone = TimeZone.currentSystemDefault()
         val now = System.currentTimeMillis()
-        val period = period(s, now, zone)
+        val degradation = Degradation()
+        val period = period(s, now, zone, degradation)
         val messages: List<ObservedMessage> =
-            orDefault(emptyList()) { analytics.messagesBetween(period.startEpochMs, period.endEpochMsInclusive) }
-        val gaps = orDefault(emptyList()) { health.observeGaps(GAP_LIMIT).first() }.filter { gap ->
+            degradation.orDefault(emptyList()) { analytics.messagesBetween(period.startEpochMs, period.endEpochMsInclusive) }
+        val gaps = degradation.orDefault(emptyList()) { health.observeGaps(GAP_LIMIT).first() }.filter { gap ->
             (gap.startEpochMs ?: period.startEpochMs) < period.endEpochMsExclusive &&
                 (gap.endEpochMs ?: period.endEpochMsInclusive) >= period.startEpochMs
         }
-        val summaries = orDefault(0) { analytics.summaryCountBetween(period.startEpochMs, period.endEpochMsInclusive) }
+        val summaries = degradation.orDefault(0) { analytics.summaryCountBetween(period.startEpochMs, period.endEpochMsInclusive) }
 
         coroutineContext.ensureActive()
         val report = ActivityAnalytics.compute(
@@ -181,7 +185,7 @@ class AnalyticsViewModel @Inject constructor(
             addAll(chattiness.map { it.conversationId })
             addAll(quiet.map { it.conversationId })
         }
-        val labels = orDefault(emptyMap()) { analytics.labels(ids) }
+        val labels = degradation.orDefault(emptyMap()) { analytics.labels(ids) }
 
         return AnalyticsUiState(
             loading = false,
@@ -198,28 +202,34 @@ class AnalyticsViewModel @Inject constructor(
             catchphrases = catchphrases,
             emoji = emoji,
             labels = labels,
+            degraded = degradation.any,
         )
     }
 
+    /** Records whether any query in one computation failed, so the report can say it may be incomplete. */
+    private class Degradation { var any = false }
+
     /**
-     * A failed query degrades the report to [default] instead of crashing the screen, but a
-     * cancellation (period switched, screen left) must still unwind the whole computation.
+     * A failed query degrades the report to [default] instead of crashing the screen — and marks the
+     * computation as degraded so the UI can say so — but a cancellation (period switched, screen
+     * left) must still unwind the whole computation.
      */
-    private inline fun <T> orDefault(default: T, block: () -> T): T = try {
+    private inline fun <T> Degradation.orDefault(default: T, block: () -> T): T = try {
         block()
     } catch (e: CancellationException) {
         throw e
     } catch (e: Throwable) {
+        any = true
         default
     }
 
-    private suspend fun period(s: PeriodSelection, now: Long, zone: TimeZone): Period = when (s.kind) {
+    private suspend fun period(s: PeriodSelection, now: Long, zone: TimeZone, degradation: Degradation): Period = when (s.kind) {
         PeriodKind.LAST_7_DAYS -> Period.last7Days(now, zone)
         PeriodKind.THIS_MONTH -> Period.thisMonth(now, zone)
         PeriodKind.LAST_MONTH -> Period.lastMonth(now, zone)
         PeriodKind.LAST_3_MONTHS -> Period.last3Months(now, zone)
         PeriodKind.ALL -> Period.all(
-            earliestEpochMs = orDefault(null) { analytics.earliestTimestamp() },
+            earliestEpochMs = degradation.orDefault(null) { analytics.earliestTimestamp() },
             nowEpochMs = now,
             zone = zone,
         )
@@ -245,10 +255,12 @@ class AnalyticsViewModel @Inject constructor(
      */
     @OptIn(kotlinx.coroutines.FlowPreview::class)
     private fun vaultSignals(): Flow<VaultState> {
+        var consecutiveFailures = 0
         val counts = inbox.observeCounts()
-            .retryWhen { _, attempt ->
+            .onEach { consecutiveFailures = 0 } // back-off restarts after any successful emission
+            .retryWhen { _, _ ->
                 emit(InboxCounts(0, 0, 0, 0))
-                delay((1_000L shl minOf(attempt, 5L).toInt()).coerceAtMost(30_000L))
+                delay((1_000L shl minOf(consecutiveFailures++, 5)).coerceAtMost(30_000L))
                 true
             }
             .distinctUntilChanged()

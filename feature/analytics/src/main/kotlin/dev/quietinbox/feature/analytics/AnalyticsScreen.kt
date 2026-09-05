@@ -148,6 +148,15 @@ fun AnalyticsScreen(
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
                 )
             }
+            if (state.degraded && !state.loading) {
+                // Honesty label: a query failed during this computation, so the report may be incomplete.
+                Text(
+                    stringResource(R.string.analytics_degraded),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
+                )
+            }
             if (state.vaultLocked) {
                 EmptyState(
                     title = stringResource(R.string.vault_locked_title),

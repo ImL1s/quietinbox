@@ -16,7 +16,6 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.collections.shouldNotBeEmpty
-import io.kotest.matchers.ints.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
@@ -124,17 +123,19 @@ class AnalyticsViewModelTest : FunSpec({
 
     test("a vault change recomputes quietly, without a loading state") {
         val h = Harness(ready())
-        val seen = CopyOnWriteArrayList<AnalyticsUiState>()
-        val collector = CoroutineScope(Dispatchers.Default).launch { h.vm.state.collect { seen += it } }
+        val collector = CoroutineScope(Dispatchers.Default).launch { h.vm.state.collect {} }
         try {
             withTimeout(10_000) { h.vm.state.first { !it.loading } }
             val before = h.queries.get()
+            h.gate = CompletableDeferred() // hold the recompute open at its first query
             h.counts.value = InboxCounts(2, 2, 0, 0)
             withTimeout(10_000) { while (h.queries.get() <= before) delay(20) }
-            withTimeout(10_000) { h.vm.state.first { !it.loading } }
-            val afterFirstReport = seen.indexOfFirst { !it.loading }
-            afterFirstReport shouldBeGreaterThanOrEqual 0
-            seen.drop(afterFirstReport).none { it.loading }.shouldBeTrue()
+            // The recompute is in flight and blocked before it can emit: a loading placeholder, had one
+            // been emitted, would be the current state right now.
+            h.vm.state.value.loading.shouldBeFalse()
+            h.vm.state.value.report.shouldNotBeNull()
+            h.gate.complete(Unit)
+            withTimeout(10_000) { h.vm.state.first { !it.loading && it.report != null } }
         } finally {
             collector.cancel()
         }
@@ -173,5 +174,14 @@ class AnalyticsViewModelTest : FunSpec({
         val h = Harness(ready(), countsFlow = flow { throw IllegalStateException("db") })
         val s = withTimeout(10_000) { h.vm.state.first { !it.loading } }
         s.report.shouldNotBeNull()
+        s.degraded.shouldBeFalse() // the report itself was computed from healthy queries
+    }
+
+    test("a failing query marks the report as degraded instead of passing it off as complete") {
+        val h = Harness(ready())
+        coEvery { h.analytics.labels(any()) } throws IllegalStateException("db")
+        val s = withTimeout(10_000) { h.vm.state.first { !it.loading } }
+        s.report.shouldNotBeNull()
+        s.degraded.shouldBeTrue()
     }
 })
