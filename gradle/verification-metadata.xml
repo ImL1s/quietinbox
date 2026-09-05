@@ -4,6 +4,7 @@
       <verify-metadata>true</verify-metadata>
       <verify-signatures>false</verify-signatures>
       <trusted-artifacts>
+         <!-- aapt2 ships one jar per host OS; only the current host's variant is ever resolved locally. -->
          <trust group="com.android.tools.build" name="aapt2"/>
       </trusted-artifacts>
    </configuration>

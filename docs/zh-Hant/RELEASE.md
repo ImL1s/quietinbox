@@ -7,7 +7,7 @@
 | 管道 | 價格 | 簽章 | 方式 |
 | --- | --- | --- | --- |
 | GitHub Releases | 免費（GPL-3.0-or-later） | 專案 upload key | 打 `v*` tag 觸發 `release.yml` |
-| Google Play（`dev.quietinbox.app`） | 付費、一次性 | Google Play App Signing（upload key 同上） | `release.yml` → internal 軌道；production 由 `workflow_dispatch` 或 `gplay` 推進 |
+| Google Play（`dev.quietinbox.app`） | 付費、一次性 | Google Play App Signing（upload key 同上） | 以 `workflow_dispatch` 執行 `release.yml`（`track=internal` 或 `production`），或在維護者機器用 `gplay`；只打 tag 不會動到 Play |
 
 Play 會重新簽章商店版本，所以兩種安裝無法互相更新；使用者擇一即可。
 
@@ -39,3 +39,17 @@ Play 會重新簽章商店版本，所以兩種安裝無法互相更新；使用
 
 `tools/demo-screenshots.sh <serial> <locale> <out-dir>` 會把完全虛構的示範資料載入 debug 版並逐頁截圖；
 商店用的副本放在 `fastlane/metadata/android/<locale>/images/`，參考用的副本放在 `docs/screenshots/`。
+
+## 相依套件驗證
+
+`gradle/verification-metadata.xml` 為每個解析到的 artifact 固定 sha256，CI 遇到未列出的就會失敗。
+變更相依套件後，請用**冷**快取重新產生，這樣 Linux CI 會解析到的 parent / BOM pom 與 module 才會被記錄（熱快取會略過它們）：
+
+```sh
+GRADLE_USER_HOME=/tmp/gradle-cold JAVA_HOME=<jdk17> ./gradlew --no-daemon \
+  --write-verification-metadata sha256 --dry-run \
+  test :app:assembleDebug :app:assembleRelease :app:bundleRelease :app:lintDebug \
+  :platform:storage:assembleDebugAndroidTest :platform:crypto:assembleDebugAndroidTest
+```
+
+把 `gradle/verification-metadata.dryrun.xml` 與已提交的檔案比對後採用。`aapt2` 以名稱信任，因為每種主機 OS 解析到的 jar 不同。

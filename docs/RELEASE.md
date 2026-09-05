@@ -7,7 +7,7 @@ QuietInbox ships the **same binary** in two places (see ADR-0006):
 | Channel | Price | Signing | How |
 | --- | --- | --- | --- |
 | GitHub Releases | free (GPL-3.0-or-later) | project upload key | `release.yml` on a `v*` tag |
-| Google Play (`dev.quietinbox.app`) | paid, one-time | Google Play App Signing (upload key = the same project key) | `release.yml` → internal track; production by `workflow_dispatch` or `gplay` |
+| Google Play (`dev.quietinbox.app`) | paid, one-time | Google Play App Signing (same upload key) | `workflow_dispatch` of `release.yml` with `track=internal` or `production`, or `gplay` from a maintainer machine; a tag alone never touches Play |
 
 The two installs cannot update over each other because Play re-signs the store copy; users pick one.
 
@@ -42,3 +42,19 @@ The two installs cannot update over each other because Play re-signs the store c
 `tools/demo-screenshots.sh <serial> <locale> <out-dir>` seeds the debug build with fully synthetic
 demo data and captures every screen; store copies live under
 `fastlane/metadata/android/<locale>/images/` and reference copies under `docs/screenshots/`.
+
+## Dependency verification
+
+`gradle/verification-metadata.xml` pins a sha256 for every resolved artifact and CI fails on anything
+unlisted. After changing dependencies, regenerate it from a **cold** cache so the parent/BOM poms and
+modules that Linux CI resolves are recorded too (a warm cache skips them):
+
+```sh
+GRADLE_USER_HOME=/tmp/gradle-cold JAVA_HOME=<jdk17> ./gradlew --no-daemon \
+  --write-verification-metadata sha256 --dry-run \
+  test :app:assembleDebug :app:assembleRelease :app:bundleRelease :app:lintDebug \
+  :platform:storage:assembleDebugAndroidTest :platform:crypto:assembleDebugAndroidTest
+```
+
+Diff `gradle/verification-metadata.dryrun.xml` against the checked-in file, then adopt it. `aapt2` is
+trusted by name because each host OS resolves a different jar.
