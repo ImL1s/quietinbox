@@ -1,0 +1,20 @@
+# Gradle
+.gradle/
+build/
+.kotlin/
+!gradle/wrapper/gradle-wrapper.jar
+# IDE
+.idea/
+*.iml
+.DS_Store
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+# Signing / secrets (never commit)
+*.jks
+*.keystore
+keystore.properties
+# OMC / agent runtime state
+.omc/
+.octo-continue.md
