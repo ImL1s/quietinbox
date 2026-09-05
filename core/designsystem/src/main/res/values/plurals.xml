@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="ambiguous_count_plural">
+        <item quantity="one">%1$d possible repeat</item>
+        <item quantity="other">%1$d possible repeats</item>
+    </plurals>
+    <plurals name="messages_count_plural">
+        <item quantity="one">%1$d message</item>
+        <item quantity="other">%1$d messages</item>
+    </plurals>
+</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="quiet_teal">#1F6F6B</color>
+    <color name="quiet_paper">#F6FAF9</color>
+    <color name="quiet_night">#0F1414</color>
+    <color name="ic_launcher_background">#1F6F6B</color>
+</resources>
