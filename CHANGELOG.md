@@ -14,7 +14,7 @@ First installable vertical slice (plan §3 "v0.1"). Not published to any store.
 - Encrypted vault: Room + SQLCipher, per-installation Keystore-wrapped keys, retention worker, CJK/Latin n-gram search index.
 - UI (Material 3 Expressive, zh-Hant + en): inbox with filters and quality labels, conversation with source/capture times and floating toolbar, search, activity statistics, capture health with sources/gaps/diagnostics, settings (theme, app lock, screenshot protection, retention, media disclosure, reminders, recovery key, encrypted backup/restore, delete all).
 - Backup: Tink streaming-AEAD container keyed from a recovery key; verified import with atomic merge.
-- Tests: 74 JVM tests including a 1,000-seed property test; instrumented SQLCipher round-trip test; RFC 5869 vectors.
+- Tests: 97 JVM tests including two 1,000-iteration property tests; instrumented SQLCipher round-trip, schema migration and durable key-write tests; RFC 5869 vectors.
 - CI: JVM tests, assemble, network-permission gate, emulator lanes (API 29/35).
 
 ### Fixed (pre-release review round 1, 2026-09-06)

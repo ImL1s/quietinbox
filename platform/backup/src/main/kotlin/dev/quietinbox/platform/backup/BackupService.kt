@@ -20,6 +20,7 @@ import dev.quietinbox.platform.storage.db.SearchTokenEntity
 import dev.quietinbox.platform.storage.db.SourceConfigurationEntity
 import dev.quietinbox.platform.storage.retention.MediaDirectory
 import dev.quietinbox.core.model.SearchNormalizer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -72,6 +73,7 @@ class BackupService @Inject constructor(
         val db = try {
             holder.db()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             return@withContext BackupResult.Failed(BackupResult.Reason.VAULT_UNAVAILABLE)
         }
         // The ciphertext is produced into a private temp file first and copied to the user's
@@ -92,6 +94,7 @@ class BackupService @Inject constructor(
             out.use { dest -> FileInputStream(staging).use { it.copyTo(dest) } }
             BackupResult.Ok(counts)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             BackupResult.Failed(BackupResult.Reason.IO, e::class.java.simpleName)
         } finally {
             key.fill(0)
@@ -152,6 +155,7 @@ class BackupService @Inject constructor(
         val db = try {
             holder.db()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             return@withContext BackupResult.Failed(BackupResult.Reason.VAULT_UNAVAILABLE)
         }
         val staged = try {
@@ -179,6 +183,7 @@ class BackupService @Inject constructor(
         } catch (e: StagingException) {
             return@withContext BackupResult.Failed(e.reason, e.message)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             return@withContext BackupResult.Failed(BackupResult.Reason.IO, e::class.java.simpleName)
         } finally {
             key.fill(0)
@@ -370,7 +375,10 @@ class BackupService @Inject constructor(
             }
             BackupResult.Ok(counts)
         } catch (e: Exception) {
+            // The transaction rolled back; blobs written outside it are removed on every failure,
+            // cancellation included, before the cancellation is propagated.
             for (f in writtenFiles) mediaDir.delete(f)
+            if (e is CancellationException) throw e
             BackupResult.Failed(BackupResult.Reason.IO, "apply:${e::class.java.simpleName}")
         }
     }

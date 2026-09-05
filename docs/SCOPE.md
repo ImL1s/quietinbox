@@ -13,7 +13,7 @@ records what the repository **actually delivers today** and what it does **not**
 | NotificationListenerService capture, bounded snapshot | Done | `platform:capture`; no DB/network/decoding on callback thread |
 | Multi-message parser (MessagingStyle / Inbox / BigText / summary) | Done | 10 JVM tests in `core:parser` |
 | Identity without cross-stream merging | Done | 5 JVM tests in `core:identity` |
-| Dedup with `AMBIGUOUS_REPEAT`, revisions, stale-window handling, resync-as-repost | Done | 16 JVM tests in `core:reconcile` including a 1,000-seed property test (the six §7.2 examples are literal test cases) |
+| Dedup with `AMBIGUOUS_REPEAT`, revisions, stale-window handling, resync-as-repost | Done | 20 JVM tests in `core:reconcile` including two 1,000-iteration property tests (the six §7.2 examples plus the closed-window ambiguous repeat are literal test cases) |
 | Encrypted vault (Room + SQLCipher, per-install random key, Keystore-wrapped) | Done | Instrumented tests `VaultRoundTripTest` + `MigrationTest` (1→2) on device; `KeystoreWrapper` sets `setUserAuthenticationRequired(false)` |
 | Journal-first commit, commit fence on revoke | Done | `IngestRepository.commit`, `CaptureCoordinator.process` generation check |
 | Inbox / conversation UI with quality labels | Done | Device screenshots |
@@ -61,3 +61,6 @@ Round 2 (re-review of those fixes, `docs/reviews/2026-09-06-round2/`) found no C
 - `ShortNavigationBar` / `WideNavigationRail` from material3 1.5.0-alpha27 rendered a single item; replaced with `NavigationBar` / `NavigationRail` (see ADR-0002).
 - Pipeline counters on the Capture page are per-process (reset on restart); the persisted journal count is shown separately.
 - Package visibility on Android 11+ required `<queries>`; sources not listed there and without a launcher activity can be added by exact package name.
+- Restore stages the whole backup in memory before the atomic merge. The limits (2,000,000 records, 16M chars of text, 256 MB of media held as base64 text) are nominal: a deliberately huge file can exhaust the heap before a limit triggers, and a genuine vault larger than these limits cannot be restored. Streaming staging to a temp file is a v1.0 item. The vault itself is never touched before the counts check out.
+- During cold start, until the first source list has loaded, `offer()` snapshots notifications of every package and drops the non-sources in `process()`; content is never persisted, but the bounded bitmap budget can be consumed by non-source notifications.
+- `closeWindow` / `closeAllWindows` run outside the pipeline mutex, so a close can race the checkpoint upsert of a commit in flight (the same-post-time rule limits the effect to a possible `AMBIGUOUS_REPEAT` label).

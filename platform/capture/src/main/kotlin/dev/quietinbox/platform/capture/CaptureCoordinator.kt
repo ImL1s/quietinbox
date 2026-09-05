@@ -154,7 +154,7 @@ class CaptureCoordinator @Inject constructor(
                 if (s is VaultState.Ready) {
                     if (vaultGapOpen) {
                         vaultGapOpen = false
-                        runCatching { health.closeOpenGaps(System.currentTimeMillis(), GapReason.UNKNOWN) }
+                        guarded { health.closeOpenGaps(System.currentTimeMillis(), GapReason.UNKNOWN) }
                     }
                     replayJournal()
                 }
@@ -179,7 +179,7 @@ class CaptureCoordinator @Inject constructor(
         val resync = runCatching { service.activeNotifications?.toList() }.getOrNull().orEmpty()
         // One coroutine: windows must be closed before the active-notification resync is queued.
         scope.launch {
-            runCatching {
+            guarded {
                 sessionId = health.startSession(generation, bootSessionId, now)
                 health.closeOpenGaps(now, GapReason.LISTENER_DISCONNECTED, GapReason.NOT_GRANTED, GapReason.PROCESS_RESTART)
                 ingest.closeAllWindows(now)
@@ -196,10 +196,13 @@ class CaptureCoordinator @Inject constructor(
         activeGeneration = null
         listenerBound = false
         _status.update { it.copy(listenerState = if (listenerAccess.isGranted()) ListenerState.RECONNECTING else ListenerState.NOT_GRANTED, activeGeneration = null) }
+        // Cleared synchronously so a reconnect that starts a new session cannot be wiped by this
+        // coroutine, and a failing endSession cannot leave the old id behind.
+        val endedSession = sessionId
+        sessionId = null
         scope.launch {
-            runCatching {
-                sessionId?.let { health.endSession(it, now, "DISCONNECTED") }
-                sessionId = null
+            guarded {
+                endedSession?.let { health.endSession(it, now, "DISCONNECTED") }
                 health.openGap(now, if (listenerAccess.isGranted()) GapReason.LISTENER_DISCONNECTED else GapReason.NOT_GRANTED, GapPrecision.BOUNDED, now)
                 ingest.closeAllWindows(now)
             }
@@ -213,7 +216,7 @@ class CaptureCoordinator @Inject constructor(
         val now = System.currentTimeMillis()
         if (!isCapturable(sbn)) return
         scope.launch {
-            runCatching {
+            guarded {
                 val streamKey = identity.streamKey(SourceScope(sbn.packageName, "user:${sbn.user.hashCode()}", null), sbn.tag, sbn.id)
                 ingest.closeWindow(streamKey, now)
                 if (reason == REASON_LOCKDOWN) ingest.diagnostic("LOCKDOWN_REMOVAL", null, sbn.packageName, now)
@@ -231,7 +234,7 @@ class CaptureCoordinator @Inject constructor(
         val resumedGeneration = if (!value && listenerBound) UUID.randomUUID().toString() else null
         activeGeneration = if (value) null else resumedGeneration
         scope.launch {
-            runCatching {
+            guarded {
                 if (value) {
                     sessionId?.let { health.endSession(it, now, "PAUSED") }
                     sessionId = null
@@ -253,7 +256,7 @@ class CaptureCoordinator @Inject constructor(
             )
         }
         scope.launch {
-            runCatching {
+            guarded {
                 if (value) health.openGap(now, GapReason.PAUSED_BY_USER, GapPrecision.EXACT, now) else health.closeOpenGaps(now, GapReason.PAUSED_BY_USER)
             }
         }
@@ -318,7 +321,7 @@ class CaptureCoordinator @Inject constructor(
                 it.copy(overflowCount = it.overflowCount + 1, listenerState = ListenerState.DEGRADED)
             }
         }
-        if (!ok) scope.launch { runCatching { health.recordGap(now, now, GapReason.QUEUE_OVERFLOW, GapPrecision.EXACT, now) } }
+        if (!ok) scope.launch { guarded { health.recordGap(now, now, GapReason.QUEUE_OVERFLOW, GapPrecision.EXACT, now) } }
     }
 
     private suspend fun process(item: Queued) {
@@ -349,11 +352,11 @@ class CaptureCoordinator @Inject constructor(
                 // one not journaled is lost): record an observable gap once per lock-out.
                 if (!vaultGapOpen) {
                     vaultGapOpen = true
-                    runCatching { health.openGap(snapshot.observedAtEpochMs, GapReason.UNKNOWN, GapPrecision.BOUNDED, snapshot.observedAtEpochMs) }
+                    guarded { health.openGap(snapshot.observedAtEpochMs, GapReason.UNKNOWN, GapPrecision.BOUNDED, snapshot.observedAtEpochMs) }
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                runCatching { ingest.markJournalRetryable(snapshot.eventId, e::class.java.simpleName) }
+                guarded { ingest.markJournalRetryable(snapshot.eventId, e::class.java.simpleName) }
             }
         }
     }
@@ -404,7 +407,7 @@ class CaptureCoordinator @Inject constructor(
     }
 
     private suspend fun replayJournal() = withContext(Dispatchers.Default) {
-        runCatching {
+        guarded {
             // Drain in batches until nothing is pending (a long lock-out can leave > 200 rows).
             var rounds = 0
             while (rounds++ < 100) {
@@ -427,6 +430,16 @@ class CaptureCoordinator @Inject constructor(
                     }
                 }
             }
+        }
+    }
+
+    /** Best-effort bookkeeping: failures are swallowed, a coroutine cancellation never is. */
+    private inline fun guarded(block: () -> Unit) {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
         }
     }
 

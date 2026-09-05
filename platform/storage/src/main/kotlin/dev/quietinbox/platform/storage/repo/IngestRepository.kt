@@ -194,11 +194,12 @@ class IngestRepository @Inject constructor(
             val suppressionKey = suppressionScopeKey(identity.scope, identity.identityKey)
             // Checkpoint-loss guard input: rows that existed BEFORE this batch, one consumable id
             // per stored row, so equal items inside one window keep their multiplicity and a batch
-            // with two identical items links at most as many rows as already exist.
+            // with two identical items links at most as many rows as already exist. The newest k
+            // rows are the ones a k-item window can be showing; they are consumed oldest first.
             val preExisting: Map<String, ArrayDeque<Long>> = if (ReconcileNote.NO_PREVIOUS_WINDOW in reconcile.notes) {
                 reconcile.decisions.filter { it is Decision.New && !it.confirmedById }
-                    .map { it.fingerprint }.distinct()
-                    .associateWith { fp -> ArrayDeque(db.messageDao().findIdsByFingerprint(conversationId, fp)) }
+                    .groupingBy { it.fingerprint }.eachCount()
+                    .mapValues { (fp, k) -> ArrayDeque(db.messageDao().findLatestIdsByFingerprint(conversationId, fp, k).asReversed()) }
                     .filterValues { it.isNotEmpty() }
             } else {
                 emptyMap()
@@ -218,6 +219,8 @@ class IngestRepository @Inject constructor(
                     is Decision.New, is Decision.AmbiguousRepeat -> {
                         if (db.suppressionDao().isSuppressed(suppressionKey, decision.fingerprint, now) > 0) {
                             suppressed++
+                            // Nothing stored for this position; keep a verified link only.
+                            storedIds[index] = (decision as? Decision.AmbiguousRepeat)?.existingMessageId?.takeIf { db.messageDao().get(it) != null }
                             continue
                         }
                         // Checkpoint loss guard: with no previous window (e.g. checkpoint pruned) an
@@ -303,6 +306,8 @@ class IngestRepository @Inject constructor(
                             db.searchDao().deleteForMessage(id)
                             indexTokens(db, id, c.body)
                             storedIds[index] = id
+                        } else {
+                            storedIds[index] = null
                         }
                     }
                 }

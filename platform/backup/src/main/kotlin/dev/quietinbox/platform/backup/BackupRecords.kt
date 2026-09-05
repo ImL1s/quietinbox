@@ -117,6 +117,6 @@ object BackupLimits {
     const val MAX_MEDIA_BYTES = 8L * 1024 * 1024
     const val MAX_STAGED_MEDIA_BYTES = 256L * 1024 * 1024
 
-    /** Total characters of non-media records held in memory while staging a restore. */
-    const val MAX_STAGED_TEXT_CHARS = 64L * 1024 * 1024
+    /** Total characters of non-media records held in memory while staging a restore (≈ 32 MB of UTF-16 plus record overhead). */
+    const val MAX_STAGED_TEXT_CHARS = 16L * 1024 * 1024
 }

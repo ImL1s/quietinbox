@@ -82,7 +82,7 @@ jobs:
           api-level: ${{ matrix.api }}
           arch: x86_64
           profile: pixel_6
-          script: ./gradlew --no-daemon --console=plain :platform:storage:connectedDebugAndroidTest
+          script: ./gradlew --no-daemon --console=plain :platform:storage:connectedDebugAndroidTest :platform:crypto:connectedDebugAndroidTest
       - uses: actions/upload-artifact@v4
         if: always()
         with:

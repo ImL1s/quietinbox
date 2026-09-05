@@ -173,9 +173,9 @@ interface MessageDao {
     @Query("SELECT id FROM message WHERE conversationId = :conversationId AND fingerprint = :fingerprint ORDER BY id DESC LIMIT 1")
     suspend fun findIdByFingerprint(conversationId: Long, fingerprint: String): Long?
 
-    /** Every stored row with this fingerprint, oldest first (checkpoint-loss guard, one link per row). */
-    @Query("SELECT id FROM message WHERE conversationId = :conversationId AND fingerprint = :fingerprint ORDER BY id ASC")
-    suspend fun findIdsByFingerprint(conversationId: Long, fingerprint: String): List<Long>
+    /** The newest [limit] stored rows with this fingerprint, newest first (checkpoint-loss guard, one link per row). */
+    @Query("SELECT id FROM message WHERE conversationId = :conversationId AND fingerprint = :fingerprint ORDER BY id DESC LIMIT :limit")
+    suspend fun findLatestIdsByFingerprint(conversationId: Long, fingerprint: String, limit: Int): List<Long>
 
     @Insert
     suspend fun insert(entity: MessageEntity): Long
