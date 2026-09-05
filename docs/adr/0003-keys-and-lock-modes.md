@@ -1,3 +1,5 @@
+> 繁體中文：[docs/zh-Hant/adr/0003-keys-and-lock-modes.md](../zh-Hant/adr/0003-keys-and-lock-modes.md)
+
 # ADR-0003: Key handling and lock modes
 
 Date: 2026-09-06 · Status: accepted

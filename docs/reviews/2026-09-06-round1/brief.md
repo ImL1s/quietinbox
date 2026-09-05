@@ -3,7 +3,7 @@
 DO NOT activate workflow modes; READ-ONLY review only. Do not modify any file except your own report file.
 
 ## Context
-- Repo: /Users/iml1s/Documents/mine/quietinbox (git, branch main, no remote yet). HEAD = output of `git log -1 --oneline`.
+- Repo: <repo> (git, branch main, no remote yet). HEAD = output of `git log -1 --oneline`.
 - Product: "QuietInbox／靜讀" — an Android app (Kotlin, Jetpack Compose, Material 3 Expressive, Nav3, Hilt, Room + SQLCipher, Tink) that keeps encrypted on-device copies of messaging-app notifications via NotificationListenerService. The governing spec is `/Users/iml1s/Downloads/QuietInbox_開源專案完整計劃.md` (read §2, §5, §6, §7, §8, §9, §11, §12 at minimum; it is long — skim the rest).
 - Hard product rules from the spec (violations are CRITICAL):
   1. No INTERNET permission, no analytics/crash SDKs, no automatic upload; message bodies/titles/URIs must never reach logs or diagnostics.

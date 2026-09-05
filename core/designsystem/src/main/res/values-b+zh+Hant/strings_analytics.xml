@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  擴充版「活動統計」畫面用字（分頁、期間、熱區圖、時段、好聊度、神隱率、口頭禪）。
+  所有標籤只描述「觀測到的訊息」：來源 App 放進通知、QuietInbox 才複製到的內容。
+  不得宣稱回覆、已讀或真實訊息總量。鍵名須與 values/strings_analytics.xml 完全一致。
+-->
+<resources>
+    <string name="analytics_tab_overview">概觀</string>
+    <string name="analytics_tab_rankings">排行榜</string>
+    <string name="analytics_tab_best_time">最佳時段</string>
+    <string name="analytics_tab_chattiness">好聊度</string>
+    <string name="analytics_tab_quiet">神隱率</string>
+
+    <string name="analytics_sub_overview">僅計算所選期間內觀測到的訊息。</string>
+    <string name="analytics_sub_rankings">僅計算觀測到的訊息，不排「誰回覆了誰」。</string>
+    <string name="analytics_sub_best_time">僅計算觀測到的訊息，指對話出現的時段。</string>
+    <string name="analytics_sub_chattiness">僅計算觀測到的訊息，除以有訊息的日子。</string>
+    <string name="analytics_sub_quiet">僅計算觀測到的訊息；沒有訊息也可能只是沒被捕捉到。</string>
+
+    <string name="analytics_period_7d">近 7 天</string>
+    <string name="analytics_period_this_month">本月</string>
+    <string name="analytics_period_last_month">上個月</string>
+    <string name="analytics_period_3m">近 3 個月</string>
+    <string name="analytics_period_all">全部</string>
+    <string name="analytics_period_custom">自訂</string>
+    <string name="analytics_period_pick">選擇日期區間</string>
+    <string name="analytics_period_days">共 %1$d 天</string>
+    <string name="analytics_dialog_confirm">完成</string>
+    <string name="analytics_dialog_cancel">取消</string>
+
+    <string name="analytics_heatmap_title">星期 × 時段</string>
+    <string name="analytics_heatmap_desc">各星期與時段的觀測訊息數：%1$s</string>
+    <string name="analytics_heatmap_less">少</string>
+    <string name="analytics_heatmap_more">多</string>
+    <string name="analytics_heatmap_row_desc">%1$s：%2$s</string>
+    <string name="analytics_weekday_mon">週一</string>
+    <string name="analytics_weekday_tue">週二</string>
+    <string name="analytics_weekday_wed">週三</string>
+    <string name="analytics_weekday_thu">週四</string>
+    <string name="analytics_weekday_fri">週五</string>
+    <string name="analytics_weekday_sat">週六</string>
+    <string name="analytics_weekday_sun">週日</string>
+
+    <string name="analytics_band_morning">晨光型 6–10</string>
+    <string name="analytics_band_leisure">悠閒型 10–14</string>
+    <string name="analytics_band_afternoon">下午型 14–18</string>
+    <string name="analytics_band_evening">傍晚型 18–22</string>
+    <string name="analytics_band_night">夜貓型 22–6</string>
+    <string name="analytics_band_distribution_title">訊息出現的時段</string>
+    <string name="analytics_band_desc">各時段的觀測訊息數：%1$s</string>
+    <string name="analytics_band_dominant">%1$s · 佔 %2$d%%（觀測 %3$d 則）</string>
+
+    <string name="analytics_board_all">全部日子</string>
+    <string name="analytics_board_weekdays">平日</string>
+    <string name="analytics_board_weekends">週末</string>
+    <string name="analytics_observed_count">觀測 %1$d 則</string>
+
+    <string name="analytics_chattiness_title">每個活躍日的訊息數</string>
+    <string name="analytics_chattiness_value">每活躍日 %1$s 則</string>
+    <string name="analytics_chattiness_days">%1$d 個活躍日 · 觀測 %2$d 則</string>
+    <string name="analytics_chattiness_formula">觀測到的訊息數，除以「至少有一則訊息」的本地日數。完全沒有觀測到訊息的日子不列入分母。</string>
+
+    <string name="analytics_quiet_title">沒有觀測到訊息的日子</string>
+    <string name="analytics_quiet_value">神隱 %1$d%%</string>
+    <string name="analytics_quiet_days">%2$d 天中有 %1$d 天</string>
+    <string name="analytics_quiet_streak">最長連續 %1$d 天</string>
+    <string name="analytics_quiet_formula">所選期間內沒有觀測到訊息的天數，除以該期間的所有天數（含對話第一次出現之前的日子）。沒有訊息也可能只是來源 App 當天沒有推播通知。</string>
+
+    <string name="analytics_catchphrase_title">口頭禪</string>
+    <string name="analytics_catchphrase_note">發送者在觀測訊息中重複至少兩次的字串與詞彙。你自己送出的訊息不會被掃描。</string>
+    <string name="analytics_catchphrase_sender">%1$s · 觀測 %2$d 則</string>
+
+    <string name="analytics_empty_messages_title">觀測到的訊息不足</string>
+    <string name="analytics_empty_messages_body">這個檢視需要所選期間內有更多訊息。QuietInbox 只計算通知裡實際帶到的內容。</string>
+</resources>

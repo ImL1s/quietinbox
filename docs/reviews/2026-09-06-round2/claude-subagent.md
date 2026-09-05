@@ -1,7 +1,7 @@
 # QuietInbox 第二輪 Code Review（獨立唯讀 subagent）
 
 審查對象：`git diff 3ef8fb8..8050e05`（37 檔，+1883/−215），置於整個 codebase 的脈絡中。
-審查依據：`.omc/research/dual-review-round2-brief-safe.md`、round-1 三份報告（agy / subagent / fable）、brief 的九條硬性產品規則。
+審查依據：`docs/reviews/2026-09-06-round2/brief.md`、round-1 三份報告（agy / subagent / fable）、brief 的九條硬性產品規則。
 
 ## 執行過的驗證
 

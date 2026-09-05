@@ -169,7 +169,11 @@ class IngestRepository @Inject constructor(
 
             val convDao = db.conversationDao()
             val existing = convDao.find(identity.scope.packageName, identity.scope.profileKey, identity.scope.accountKey, identity.identityKey)
-            val conversationId = existing?.id ?: convDao.insert(
+            // The conversation row is created only when something is actually stored, so a replay
+            // whose items are all suppressed or already deleted cannot resurrect a deleted
+            // conversation as an empty row that still carries the other party's name.
+            var conversationId: Long? = existing?.id
+            suspend fun conversationIdOrCreate(): Long = conversationId ?: convDao.insert(
                 ConversationEntity(
                     packageName = identity.scope.packageName,
                     profileKey = identity.scope.profileKey,
@@ -189,17 +193,18 @@ class IngestRepository @Inject constructor(
                     lastMessagePreview = null,
                     lastSenderName = null,
                 ),
-            )
+            ).also { conversationId = it }
 
             val suppressionKey = suppressionScopeKey(identity.scope, identity.identityKey)
             // Checkpoint-loss guard input: rows that existed BEFORE this batch, one consumable id
             // per stored row, so equal items inside one window keep their multiplicity and a batch
             // with two identical items links at most as many rows as already exist. The newest k
             // rows are the ones a k-item window can be showing; they are consumed oldest first.
-            val preExisting: Map<String, ArrayDeque<Long>> = if (ReconcileNote.NO_PREVIOUS_WINDOW in reconcile.notes) {
+            val ownerId = existing?.id
+            val preExisting: Map<String, ArrayDeque<Long>> = if (ownerId != null && ReconcileNote.NO_PREVIOUS_WINDOW in reconcile.notes) {
                 reconcile.decisions.filter { it is Decision.New && !it.confirmedById }
                     .groupingBy { it.fingerprint }.eachCount()
-                    .mapValues { (fp, k) -> ArrayDeque(db.messageDao().findLatestIdsByFingerprint(conversationId, fp, k).asReversed()) }
+                    .mapValues { (fp, k) -> ArrayDeque(db.messageDao().findLatestIdsByFingerprint(ownerId, fp, k).asReversed()) }
                     .filterValues { it.isNotEmpty() }
             } else {
                 emptyMap()
@@ -242,7 +247,7 @@ class IngestRepository @Inject constructor(
                         val wantsMedia = c.media != null
                         val id = db.messageDao().insert(
                             MessageEntity(
-                                conversationId = conversationId,
+                                conversationId = conversationIdOrCreate(),
                                 sourceMessageId = c.sourceMessageId,
                                 senderName = c.sender?.displayName,
                                 senderKey = c.sender?.senderKey,
@@ -336,7 +341,7 @@ class IngestRepository @Inject constructor(
             )
 
             // Conversation projection.
-            val current = convDao.get(conversationId)
+            val current = conversationId?.let { convDao.get(it) }
             if (current != null) {
                 val touched = newIds.isNotEmpty() || ambiguousIds.isNotEmpty()
                 convDao.update(

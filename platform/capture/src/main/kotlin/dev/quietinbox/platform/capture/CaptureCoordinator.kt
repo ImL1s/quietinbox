@@ -217,7 +217,7 @@ class CaptureCoordinator @Inject constructor(
         if (!isCapturable(sbn)) return
         scope.launch {
             guarded {
-                val streamKey = identity.streamKey(SourceScope(sbn.packageName, "user:${sbn.user.hashCode()}", null), sbn.tag, sbn.id)
+                val streamKey = identity.streamKey(SourceScope(sbn.packageName, "user:${sbn.user.hashCode()}", null), sbn.tag?.take(Limits.MAX_KEY_CHARS), sbn.id)
                 ingest.closeWindow(streamKey, now)
                 if (reason == REASON_LOCKDOWN) ingest.diagnostic("LOCKDOWN_REMOVAL", null, sbn.packageName, now)
             }
@@ -299,12 +299,35 @@ class CaptureCoordinator @Inject constructor(
             return
         }
         val now = System.currentTimeMillis()
-        var captured = runCatching { snapshotFactory.create(sbn, if (sbn.packageName == context.packageName) CaptureOrigin.SYNTHETIC else origin, gen, now) }
+        val captured = runCatching { snapshotFactory.create(sbn, if (sbn.packageName == context.packageName) CaptureOrigin.SYNTHETIC else origin, gen, now) }
             .getOrElse {
                 _status.update { it.copy(captureErrors = it.captureErrors + 1) }
                 lastError = it::class.java.simpleName
                 return
             }
+        enqueue(captured, gen, now)
+    }
+
+    /**
+     * Test seam. A `StatusBarNotification` cannot be built outside the framework, so JVM tests
+     * enter the pipeline with an already-built snapshot. The admission rules are the ones [offer]
+     * applies, restated against the snapshot: own-package events must be synthetic, and other
+     * packages are filtered here only once the source list is known.
+     */
+    internal fun offerCaptured(captured: CapturedNotification) {
+        val gen = activeGeneration ?: return
+        if (paused) return
+        val pkg = captured.snapshot.source.packageName
+        if (pkg == context.packageName) {
+            if (captured.snapshot.origin != CaptureOrigin.SYNTHETIC) return
+        } else if (sourcesLoaded && pkg !in enabledPackages) {
+            return
+        }
+        enqueue(captured, gen, System.currentTimeMillis())
+    }
+
+    private fun enqueue(built: CapturedNotification, gen: String, now: Long) {
+        var captured = built
         if (captured.bitmap != null) {
             // Keep at most a few bitmaps in flight; later ones fall back to a placeholder state.
             if (queuedBitmaps.incrementAndGet() > MAX_QUEUED_BITMAPS) {

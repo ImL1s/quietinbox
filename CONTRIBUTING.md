@@ -1,3 +1,5 @@
+> 繁體中文：[docs/zh-Hant/CONTRIBUTING.md](docs/zh-Hant/CONTRIBUTING.md)
+
 # Contributing
 
 Thanks for helping. A few rules keep this project honest and its users safe.
@@ -28,5 +30,5 @@ Thanks for helping. A few rules keep this project honest and its users safe.
 - Colour is never the only signal for a state; add text + icon.
 
 ## Maintainer
-Provisional maintainer: the repository owner (see git history). Package id `dev.quietinbox` and the
+Provisional maintainer: the maintainer at <aa22396584@gmail.com> (security issues: see `SECURITY.md`). Package id `dev.quietinbox` and the
 name are placeholders until clearance.

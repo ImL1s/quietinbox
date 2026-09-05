@@ -1,3 +1,5 @@
+> 繁體中文：[docs/zh-Hant/adr/0005-backup-container.md](../zh-Hant/adr/0005-backup-container.md)
+
 # ADR-0005: Backup container
 
 Date: 2026-09-06 · Status: accepted

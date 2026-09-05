@@ -1,0 +1,1 @@
+Encrypted on-device copies of your chat notifications. No internet permission.

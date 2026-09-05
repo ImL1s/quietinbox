@@ -4,8 +4,14 @@ All notable changes to this project are documented here. The format follows Keep
 
 ## [Unreleased]
 
+### Added
+- Demo mode (debug builds only): `DemoDataRepository` fills the vault with fully synthetic, bilingual conversations — including one `AMBIGUOUS_REPEAT` pair, a revised message, a placeholder image, a preview-restricted body, capture gaps and diagnostics — so the app can be demonstrated and screenshotted without exposing a real notification. Triggered from Settings → Developer or from a debug-only broadcast receiver; `seed()` is idempotent and `clear()` deletes strictly by the `demo.quietinbox.` and `demo-` tags. Adds `tools/demo-screenshots.sh` (installs, walks onboarding, seeds, captures seven screens per locale) and the instrumented `DemoDataTest`. No schema change and no new permission.
+- Activity statistics extended to five free tabs over one shared period selector (7 days / this month / last month / 3 months / all / custom range): a weekday x hour heat map, overall / weekday / weekend rankings, the dominant time band per conversation, observed messages per active day, the share of days with nothing observed plus the longest quiet run, repeated-phrase (CJK n-gram and Latin word) ranking per sender, and the emoji ranking re-scored per period. Nothing is locked behind a purchase and every label still describes observed messages only.
+
 ### Changed
 - Licence changed from Apache-2.0 to GPL-3.0-or-later (LICENSE, NOTICE, README, in-app licence text).
+- Round 3 review minors: the checkpoint-loss guard links the newest matching rows (not the oldest); restore text staging limit lowered from 64M to 16M chars; best-effort bookkeeping in capture uses `guarded {}` (failures swallowed, cancellation propagated); disconnected session id cleared synchronously.
+- Whole-repository review: a deleted conversation can no longer come back as an empty row after a notification replay (the conversation row is created only when something is stored); restoring a backup older than the retention window re-bases message expiry on the current setting instead of letting the next retention run delete everything; messages sent by the device owner are now recognised (`isSelf`) from MessagingStyle semantics; restore encrypts media before the write transaction and keeps duplicate multiplicity; restored sources come back disabled; `onRemoved` uses the same bounded tag as capture; SECURITY.md has a real reporting channel.
 - Added `CLAUDE.md` (repository guidance for AI-assisted contributions).
 
 ## [0.1.0] — 2026-09-06

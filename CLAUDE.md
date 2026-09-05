@@ -61,6 +61,22 @@ Tests are Kotest (JUnit Platform); property tests use fixed seeds.
 - Strings: add to both `values/strings.xml` and `values-b+zh+Hant/strings.xml`, same names.
 - Do not add real-app notification captures, decompiled sources, or vendor assets to the repo.
 
+## Demo mode and screenshots
+
+Debug builds only: Settings → Developer → "Load demo data", or
+`adb shell am broadcast -a dev.quietinbox.debug.DEMO --es op seed -n dev.quietinbox.app.debug/dev.quietinbox.debug.DemoReceiver`
+(`--es op clear` removes it). Everything seeded is fictional (`demo.quietinbox.*` sources).
+`tools/demo-screenshots.sh <serial> <en-US|zh-TW> <out-dir>` installs, seeds and captures every screen;
+store copies live in `fastlane/metadata/android/<locale>/images/`, reference copies in `docs/screenshots/`.
+Use the project's own AVDs (`QuietInbox_Phone`, `Foldable_Test`); never a phone with real notifications.
+
+## Release
+
+`docs/RELEASE.md`: tag `vX.Y.Z` → `release.yml` builds the signed APK/AAB, runs the permission gate,
+publishes the GitHub release and uploads to the Play internal track; production is a deliberate
+`workflow_dispatch`. Play edition is paid, GitHub edition free, same binary (ADR-0006). Never add
+Play Billing / Play Services / any SDK that merges `INTERNET`.
+
 ## Device verification recipe
 
 ```bash

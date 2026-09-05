@@ -45,6 +45,9 @@ abstract class QuietInboxDatabase : RoomDatabase() {
     abstract fun healthDao(): HealthDao
     abstract fun diagnosticsDao(): DiagnosticsDao
 
+    /** Debug-only demo seeding/clearing. Adds no table and no column. */
+    abstract fun demoDao(): DemoDao
+
     companion object {
         const val VERSION = 2
         const val FILE_NAME = "quietinbox.vault"

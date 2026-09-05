@@ -1,3 +1,5 @@
+> 繁體中文：[docs/zh-Hant/COMPATIBILITY.md](zh-Hant/COMPATIBILITY.md)
+
 # Source compatibility matrix
 
 Status values (plan §14): `UNTESTED / SYNTHETIC_ONLY / REAL_DEVICE_PASSED / PARTIAL / REGRESSED / BLOCKED`.

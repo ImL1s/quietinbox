@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -5,9 +7,38 @@ plugins {
     alias(libs.plugins.quietinbox.android.hilt)
 }
 
+// Release signing: keystore.properties (gitignored) on a maintainer machine, or QUIETINBOX_KEYSTORE_*
+// environment variables in CI. Without either, release builds stay unsigned (CI permission gate only).
+val keystoreProps: Properties? = rootProject.file("keystore.properties").takeIf { it.exists() }?.let { f ->
+    Properties().apply { f.inputStream().use { load(it) } }
+}
+val envKeystore: String? = System.getenv("QUIETINBOX_KEYSTORE_FILE")
+
 android {
     namespace = "dev.quietinbox"
     compileSdk = 37
+
+    signingConfigs {
+        create("release") {
+            when {
+                keystoreProps != null -> {
+                    storeFile = file(keystoreProps.getProperty("storeFile"))
+                    storePassword = keystoreProps.getProperty("storePassword")
+                    keyAlias = keystoreProps.getProperty("keyAlias")
+                    keyPassword = keystoreProps.getProperty("keyPassword")
+                }
+                envKeystore != null -> {
+                    storeFile = file(envKeystore)
+                    storePassword = System.getenv("QUIETINBOX_KEYSTORE_PASSWORD")
+                    keyAlias = System.getenv("QUIETINBOX_KEY_ALIAS")
+                    keyPassword = System.getenv("QUIETINBOX_KEY_PASSWORD")
+                }
+            }
+            enableV1Signing = false
+            enableV2Signing = true
+            enableV3Signing = true
+        }
+    }
 
     defaultConfig {
         applicationId = "dev.quietinbox.app"
@@ -24,6 +55,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("release").takeIf { it.storeFile != null }
         }
         debug {
             applicationIdSuffix = ".debug"

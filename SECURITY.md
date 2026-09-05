@@ -1,10 +1,16 @@
+> 繁體中文：[docs/zh-Hant/SECURITY.md](docs/zh-Hant/SECURITY.md)
+
 # Security policy
 
 ## Reporting a vulnerability
 
-Please do **not** open a public issue for security problems. Until the repository has a public
-home, report privately to the maintainer listed in `CONTRIBUTING.md`; once published, use the
-repository's private vulnerability reporting. Include reproduction steps and the QuietInbox commit.
+Please do **not** open a public issue for security problems. Report privately through one of:
+
+- GitHub private vulnerability reporting (enabled on this repository):
+  <https://github.com/ImL1s/quietinbox/security/advisories/new>
+- Email: <aa22396584@gmail.com> with the subject prefix `[quietinbox security]`.
+
+You will get an acknowledgement within 7 days. Include reproduction steps and the QuietInbox commit.
 Never include real private messages, notification dumps or recovery keys in a report.
 
 ## Threat model (summary of plan §9–§11)

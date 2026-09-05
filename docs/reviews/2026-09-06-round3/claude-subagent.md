@@ -1,7 +1,7 @@
 # QuietInbox 第三輪 Code Review（獨立唯讀 subagent）
 
 審查對象：`git diff c96fbf0..6a9b0ce`（20 檔，+618/−36），置於整個 codebase 的脈絡中。
-審查依據：`.omc/research/dual-review-round3-brief-safe.md`、round-2 兩份報告（agy `APPROVE WITH MINOR FIXES`、subagent `REQUEST CHANGES`）。
+審查依據：`docs/reviews/2026-09-06-round3/brief.md`、round-2 兩份報告（agy `APPROVE WITH MINOR FIXES`、subagent `REQUEST CHANGES`）。
 
 > **審查基準線**：本報告的每一個 file:line 都指向 **commit `6a9b0ce`**，不是工作區。
 > 審查進行中有其他 agent 在同一個 repo 上編輯，交報告當下 `git status` 顯示 4 個未提交檔案
@@ -331,7 +331,7 @@ is Decision.Revision -> {
 - **`WrappedSecretFileTest` 的斷言與 durability 宣稱一致**：`WrappedSecretFileTest.kt:20-23` 的 KDoc 老實寫了「only runs on a device: java.io cannot open a directory, so this cannot be proven on the JVM」。誠實。
 - **`ReconcilerAmbiguousKeepTest` 用的 `window()` helper**（`ReconcilerTest.kt:22-26`）給 id 100/101/102 且不帶 `postedAtEpochMs`，測試自己 `.copy(postedAtEpochMs = 5_000)` 補上——測試意圖與 harness 復現的情境完全一致。
 - **雙語字串 parity 未破**：兩個 locale 各 298 條，`name` 的順序與集合完全一致，本 commit 的 `backup_failed_io` 兩邊同步修改。
-- **`docs/reviews/2026-09-06-round2/claude-subagent.md` 與 `.omc/research/dual-review-round2-subagent.md` 逐位元組相同**，歸檔沒有被裁剪或美化。`docs/reviews/README.md:10` 也誠實記錄了 round 2 的兩個 verdict 與「Codex and Kimi still blocked」。
+- **`docs/reviews/2026-09-06-round2/claude-subagent.md` 與 `docs/reviews/2026-09-06-round2/claude-subagent.md` 逐位元組相同**，歸檔沒有被裁剪或美化。`docs/reviews/README.md:10` 也誠實記錄了 round 2 的兩個 verdict 與「Codex and Kimi still blocked」。
 
 ---
 

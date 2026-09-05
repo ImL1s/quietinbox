@@ -16,4 +16,14 @@ dependencies {
     implementation(libs.tink.android)
     implementation(libs.androidx.documentfile)
     implementation(libs.kotlinx.serialization.json)
+
+    testImplementation(libs.kotest.runner.junit5)
 }
+
+// Kotest specs run on the JUnit Platform; every test in this module is a Kotest spec, so no
+// JUnit4 vintage engine is needed.
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+    systemProperty("kotest.framework.classpath.scanning.autoscan.disable", "true")
+}
+

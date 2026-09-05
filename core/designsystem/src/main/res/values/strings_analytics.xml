@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Strings for the extended Activity views (tabs, periods, heat map, bands, chattiness, quiet rate,
+  catchphrases). Every label describes *observed* messages: what a source app put in a notification
+  and QuietInbox copied. Nothing here may claim a reply, a read receipt or a true message total.
+  Keys must stay in sync with values-b+zh+Hant/strings_analytics.xml.
+-->
+<resources>
+    <string name="analytics_tab_overview">Overview</string>
+    <string name="analytics_tab_rankings">Rankings</string>
+    <string name="analytics_tab_best_time">Best time</string>
+    <string name="analytics_tab_chattiness">Chattiness</string>
+    <string name="analytics_tab_quiet">Quiet rate</string>
+
+    <string name="analytics_sub_overview">Observed messages only, in the selected period.</string>
+    <string name="analytics_sub_rankings">Observed messages only; no ranking of who replied to whom.</string>
+    <string name="analytics_sub_best_time">Observed messages only; the hours a conversation appeared in.</string>
+    <string name="analytics_sub_chattiness">Observed messages only, per day that had any.</string>
+    <string name="analytics_sub_quiet">Observed messages only; a quiet day may just mean nothing was captured.</string>
+
+    <string name="analytics_period_7d">7 days</string>
+    <string name="analytics_period_this_month">This month</string>
+    <string name="analytics_period_last_month">Last month</string>
+    <string name="analytics_period_3m">3 months</string>
+    <string name="analytics_period_all">All</string>
+    <string name="analytics_period_custom">Custom</string>
+    <string name="analytics_period_pick">Pick a date range</string>
+    <string name="analytics_period_days">%1$d days</string>
+    <string name="analytics_dialog_confirm">Done</string>
+    <string name="analytics_dialog_cancel">Cancel</string>
+
+    <string name="analytics_heatmap_title">Weekday × hour</string>
+    <string name="analytics_heatmap_desc">Observed messages by weekday and hour: %1$s</string>
+    <string name="analytics_heatmap_less">Less</string>
+    <string name="analytics_heatmap_more">More</string>
+    <string name="analytics_heatmap_row_desc">%1$s: %2$s</string>
+    <string name="analytics_weekday_mon">Mon</string>
+    <string name="analytics_weekday_tue">Tue</string>
+    <string name="analytics_weekday_wed">Wed</string>
+    <string name="analytics_weekday_thu">Thu</string>
+    <string name="analytics_weekday_fri">Fri</string>
+    <string name="analytics_weekday_sat">Sat</string>
+    <string name="analytics_weekday_sun">Sun</string>
+
+    <string name="analytics_band_morning">Early 6–10</string>
+    <string name="analytics_band_leisure">Midday 10–14</string>
+    <string name="analytics_band_afternoon">Afternoon 14–18</string>
+    <string name="analytics_band_evening">Evening 18–22</string>
+    <string name="analytics_band_night">Night 22–6</string>
+    <string name="analytics_band_distribution_title">When messages showed up</string>
+    <string name="analytics_band_desc">Observed messages by time band: %1$s</string>
+    <string name="analytics_band_dominant">%1$s · %2$d%% of %3$d observed</string>
+
+    <string name="analytics_board_all">All days</string>
+    <string name="analytics_board_weekdays">Weekdays</string>
+    <string name="analytics_board_weekends">Weekends</string>
+    <string name="analytics_observed_count">%1$d observed</string>
+
+    <string name="analytics_chattiness_title">Messages per active day</string>
+    <string name="analytics_chattiness_value">%1$s per active day</string>
+    <string name="analytics_chattiness_days">%1$d active days · %2$d observed</string>
+    <string name="analytics_chattiness_formula">Observed messages divided by the number of local days that had at least one. Days with nothing observed are left out of the divisor.</string>
+
+    <string name="analytics_quiet_title">Days with nothing observed</string>
+    <string name="analytics_quiet_value">%1$d%% quiet</string>
+    <string name="analytics_quiet_days">%1$d of %2$d days</string>
+    <string name="analytics_quiet_streak">Longest quiet run: %1$d days</string>
+    <string name="analytics_quiet_formula">Days in the selected period with no observed message, divided by every day in the period — including days before the conversation first appeared. A quiet day can also mean the source app posted nothing to the shade.</string>
+
+    <string name="analytics_catchphrase_title">Repeated phrases</string>
+    <string name="analytics_catchphrase_note">Character sequences and words a sender repeated at least twice in observed messages. Messages you sent yourself are never scanned.</string>
+    <string name="analytics_catchphrase_sender">%1$s · %2$d observed</string>
+
+    <string name="analytics_empty_messages_title">Not enough observed messages</string>
+    <string name="analytics_empty_messages_body">This view needs more messages in the selected period. QuietInbox counts only what a notification actually contained.</string>
+</resources>

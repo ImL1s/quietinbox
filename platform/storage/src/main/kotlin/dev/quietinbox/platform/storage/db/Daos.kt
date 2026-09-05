@@ -384,3 +384,102 @@ interface DiagnosticsDao {
 }
 
 data class DiagnosticCount(val code: String, val n: Int)
+
+/**
+ * Queries used only by the debug demo seeder (`DemoDataRepository`). They address rows by the
+ * recognisable demo tags — a `demo.quietinbox.` package prefix, or a `demo-` capture generation —
+ * so seeding and clearing can never touch captured data. No schema change: every column already
+ * exists.
+ */
+@Dao
+interface DemoDao {
+    // Deletion order matters: media_blob has no cascade, so it is cleared through the join while
+    // the conversations still exist.
+    @Query(
+        """
+        DELETE FROM media_blob WHERE messageId IN (
+            SELECT m.id FROM message m JOIN conversation c ON c.id = m.conversationId
+            WHERE c.packageName LIKE :packagePrefix
+        )
+        """,
+    )
+    suspend fun deleteMediaBlobs(packagePrefix: String): Int
+
+    @Query("DELETE FROM deletion_suppression WHERE scopeKey LIKE :packagePrefix")
+    suspend fun deleteSuppression(packagePrefix: String): Int
+
+    @Query("DELETE FROM notification_checkpoint WHERE packageName LIKE :packagePrefix")
+    suspend fun deleteCheckpoints(packagePrefix: String): Int
+
+    /** Cascades to message, and from there to message_revision, observation_link and search_token. */
+    @Query("DELETE FROM conversation WHERE packageName LIKE :packagePrefix")
+    suspend fun deleteConversations(packagePrefix: String): Int
+
+    @Query("DELETE FROM source_configuration WHERE packageName LIKE :packagePrefix")
+    suspend fun deleteSources(packagePrefix: String): Int
+
+    @Query("DELETE FROM local_diagnostic_event WHERE packageName LIKE :packagePrefix")
+    suspend fun deleteDiagnostics(packagePrefix: String): Int
+
+    @Query("DELETE FROM summary_observation WHERE packageName LIKE :packagePrefix")
+    suspend fun deleteSummaries(packagePrefix: String): Int
+
+    /**
+     * `gap_interval` has no taggable column (`reason` and `precision` are mapped onto enums, so an
+     * invented value would render as "unknown"), hence demo gaps are stamped with the demo
+     * session's start time and deleted through that join — before the sessions themselves.
+     */
+    @Query(
+        "DELETE FROM gap_interval WHERE createdAtEpochMs IN " +
+            "(SELECT startedAtEpochMs FROM capture_session WHERE generation LIKE :generationPrefix)",
+    )
+    suspend fun deleteGaps(generationPrefix: String): Int
+
+    @Query("DELETE FROM capture_session WHERE generation LIKE :generationPrefix")
+    suspend fun deleteSessions(generationPrefix: String): Int
+
+    @Query("SELECT COUNT(*) FROM source_configuration WHERE packageName LIKE :packagePrefix")
+    suspend fun countSources(packagePrefix: String): Int
+
+    @Query("SELECT COUNT(*) FROM conversation WHERE packageName LIKE :packagePrefix")
+    suspend fun countConversations(packagePrefix: String): Int
+
+    @Query(
+        "SELECT COUNT(*) FROM message m JOIN conversation c ON c.id = m.conversationId " +
+            "WHERE c.packageName LIKE :packagePrefix",
+    )
+    suspend fun countMessages(packagePrefix: String): Int
+
+    @Query(
+        "SELECT COUNT(*) FROM message m JOIN conversation c ON c.id = m.conversationId " +
+            "WHERE c.packageName LIKE :packagePrefix AND m.dedupState = :dedupState",
+    )
+    suspend fun countMessagesWithDedupState(packagePrefix: String, dedupState: String): Int
+
+    @Query(
+        "SELECT COUNT(*) FROM message_revision r JOIN message m ON m.id = r.messageId " +
+            "JOIN conversation c ON c.id = m.conversationId WHERE c.packageName LIKE :packagePrefix",
+    )
+    suspend fun countRevisions(packagePrefix: String): Int
+
+    @Query(
+        "SELECT COUNT(*) FROM observation_link l JOIN message m ON m.id = l.messageId " +
+            "JOIN conversation c ON c.id = m.conversationId WHERE c.packageName LIKE :packagePrefix AND l.kind = :kind",
+    )
+    suspend fun countObservationLinks(packagePrefix: String, kind: String): Int
+
+    @Query(
+        "SELECT COUNT(*) FROM search_token t JOIN message m ON m.id = t.messageId " +
+            "JOIN conversation c ON c.id = m.conversationId WHERE c.packageName LIKE :packagePrefix",
+    )
+    suspend fun countSearchTokens(packagePrefix: String): Int
+
+    @Query("SELECT COUNT(*) FROM capture_session WHERE generation LIKE :generationPrefix")
+    suspend fun countSessions(generationPrefix: String): Int
+
+    @Query("SELECT COUNT(*) FROM local_diagnostic_event WHERE packageName LIKE :packagePrefix")
+    suspend fun countDiagnostics(packagePrefix: String): Int
+
+    @Query("SELECT COUNT(*) FROM gap_interval")
+    suspend fun countAllGaps(): Int
+}

@@ -1,3 +1,5 @@
+> 繁體中文：[docs/zh-Hant/adr/0002-material3-expressive-alpha.md](../zh-Hant/adr/0002-material3-expressive-alpha.md)
+
 # ADR-0002: Material 3 Expressive from the 1.5.0 alpha line
 
 Date: 2026-09-06 · Status: accepted (revisit at the first 1.5.0 stable)

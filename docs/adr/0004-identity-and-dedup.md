@@ -1,3 +1,5 @@
+> 繁體中文：[docs/zh-Hant/adr/0004-identity-and-dedup.md](../zh-Hant/adr/0004-identity-and-dedup.md)
+
 # ADR-0004: Identity and deduplication model
 
 Date: 2026-09-06 · Status: accepted

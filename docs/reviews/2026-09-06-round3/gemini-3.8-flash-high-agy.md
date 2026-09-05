@@ -1,10 +1,10 @@
 # QuietInbox／靜讀 v0.1 第三輪獨立代碼審查報告（Round 3 Review）
 
-- **審查對象**：Commit [`6a9b0ce`](file:///Users/iml1s/Documents/mine/quietinbox)（`fix: address review round 2 — reconciler keep, fsync directory, export staging, docs`），比對 `git diff c96fbf0..6a9b0ce`（共 20 個檔案變更，+618 / -36）在全專案語境下的實作。
-- **審查基準**：規格書 `QuietInbox_開源專案完整計劃.md`、九大硬性產品規則、第二輪審查報告（`.omc/research/dual-review-round2-agy.md` 與 `.omc/research/dual-review-round2-subagent.md`）、以及第三輪審查指示 [`dual-review-round3-brief-safe.md`](file:///Users/iml1s/Documents/mine/quietinbox/.omc/research/dual-review-round3-brief-safe.md)。
+- **審查對象**：Commit [`6a9b0ce`](file://<repo>)（`fix: address review round 2 — reconciler keep, fsync directory, export staging, docs`），比對 `git diff c96fbf0..6a9b0ce`（共 20 個檔案變更，+618 / -36）在全專案語境下的實作。
+- **審查基準**：規格書 `QuietInbox_開源專案完整計劃.md`、九大硬性產品規則、第二輪審查報告（`docs/reviews/2026-09-06-round2/gemini-3.8-flash-high-agy.md` 與 `docs/reviews/2026-09-06-round2/claude-subagent.md`）、以及第三輪審查指示 [`dual-review-round3-brief-safe.md`](../../../docs/reviews/2026-09-06-round3/brief.md)。
 - **驗證執行**：
   - 在唯讀約束下，執行 `./gradlew :core:reconcile:test :core:model:test --rerun-tasks --console=plain`，全數通過（`:core:reconcile` 共 20 個測試通過，含兩項 1,000 次反覆運算之 Property-based 測試；`:core:model` 共 5 個測試通過）。
-  - 對照雙語資源檔 [`values/strings.xml`](file:///Users/iml1s/Documents/mine/quietinbox/core/designsystem/src/main/res/values/strings.xml) 與 [`values-b+zh+Hant/strings.xml`](file:///Users/iml1s/Documents/mine/quietinbox/core/designsystem/src/main/res/values-b+zh+Hant/strings.xml) 之 parity。
+  - 對照雙語資源檔 [`values/strings.xml`](../../../core/designsystem/src/main/res/values/strings.xml) 與 [`values-b+zh+Hant/strings.xml`](../../../core/designsystem/src/main/res/values-b+zh+Hant/strings.xml) 之 parity。
   - 對 20 個檔案逐行進行回歸漏洞分析（包括 POSIX 目錄 fsync 邊界、Checkpoint 懸空鍵、協程取消傳遞、SAF 暫存生命週期）。
 
 ---
@@ -27,19 +27,19 @@ Commit `6a9b0ce` 非常高水準地修復了第二輪審查中由 Subagent 與 A
 
 | 項次 | 原始報告與編號 | 問題描述 | 驗證結果 | 程式碼修復位置與驗證依據 |
 | :--- | :--- | :--- | :---: | :--- |
-| 1 | Subagent Important 1 | `AmbiguousRepeat` 導致 Checkpoint 縮短，下一則通知重複寫入既有訊息 | **Verified Fixed** | [`Reconciler.kt:181`](file:///Users/iml1s/Documents/mine/quietinbox/core/reconcile/src/main/kotlin/dev/quietinbox/core/reconcile/Reconciler.kt#L181)：`addsNothing` 改為 `decisions.none { it is Decision.New \|\| it is Decision.Revision }`。[`ReconcilerTest.kt:183-209`](file:///Users/iml1s/Documents/mine/quietinbox/core/reconcile/src/test/kotlin/dev/quietinbox/core/reconcile/ReconcilerTest.kt#L183-L209) 新增 `ReconcilerAmbiguousKeepTest`（2 測）完整驗證。 |
-| 2 | Subagent Important 2 | `WrappedSecretFile` 以 `FileInputStream(dir)` fsync 目錄必然拋出 `EISDIR` 被吞掉 | **Verified Fixed** | [`WrappedSecretFile.kt:70-101`](file:///Users/iml1s/Documents/mine/quietinbox/platform/crypto/src/main/kotlin/dev/quietinbox/platform/crypto/WrappedSecretFile.kt#L70-L101)：改用 POSIX 底層 `Os.open(dir.path, O_RDONLY, 0)`、`Os.fsync` 與 `Os.close`，出錯拋出 `IOException` 轉換為 `KeyResult.Failed(Unavailable)`。[`WrappedSecretFileTest.kt:15-37`](file:///Users/iml1s/Documents/mine/quietinbox/platform/crypto/src/androidTest/kotlin/dev/quietinbox/platform/crypto/WrappedSecretFileTest.kt#L15-L37) 新增真實檔案系統測試。 |
-| 3 | Subagent Important 3 | 文件宣稱了程式碼做不到的事（ADR-0004 宣稱無條件不重複、SCOPE.md 宣稱從不刪除目標檔） | **Verified Fixed** | [`0004-identity-and-dedup.md:33-35`](file:///Users/iml1s/Documents/mine/quietinbox/docs/adr/0004-identity-and-dedup.md#L33-L35)：精確界定 adds nothing 語意並指向測試。[`SCOPE.md:52-54`](file:///Users/iml1s/Documents/mine/quietinbox/docs/SCOPE.md#L52-L54)：誠實陳述兩段式匯出與複製階段失敗的影響。 |
-| 4 | Subagent Minor 1 | `BackupService.stage` 未限制記憶體非媒體文字總字元數 | **Verified Fixed** | [`BackupRecords.kt:120`](file:///Users/iml1s/Documents/mine/quietinbox/platform/backup/src/main/kotlin/dev/quietinbox/platform/backup/BackupRecords.kt#L120)：定義 `MAX_STAGED_TEXT_CHARS = 64L * 1024 * 1024`。[`BackupService.kt:222-228`](file:///Users/iml1s/Documents/mine/quietinbox/platform/backup/src/main/kotlin/dev/quietinbox/platform/backup/BackupService.kt#L222-L228)：累加非媒體記錄之 `line.length`，超額拋出 `StagingException(TOO_LARGE, "text")`。 |
-| 5 | Subagent Minor 3 | `CaptureCoordinator` 與 `IngestRepository` 吞掉 `CancellationException` | **Verified Fixed** | [`CaptureCoordinator.kt:139, 354, 424`](file:///Users/iml1s/Documents/mine/quietinbox/platform/capture/src/main/kotlin/dev/quietinbox/platform/capture/CaptureCoordinator.kt#L139)：在消費者迴圈、`process`、`replayJournal` 中均加上 `if (t/e is CancellationException) throw t/e`。[`IngestRepository.kt:132`](file:///Users/iml1s/Documents/mine/quietinbox/platform/storage/repo/IngestRepository.kt#L132) 的 `diagnostic` 亦加上 `.onFailure` 重新拋出。 |
-| 6 | Subagent Minor 4 | Commit 層 checkpoint-loss guard 把同批兩則相同指紋訊息雙雙折疊到同一個 id | **Verified Fixed** | [`Daos.kt:177`](file:///Users/iml1s/Documents/mine/quietinbox/platform/storage/db/Daos.kt#L177)：新增 `findIdsByFingerprint`（`ORDER BY id ASC`）。[`IngestRepository.kt:198-204, 226`](file:///Users/iml1s/Documents/mine/quietinbox/platform/storage/repo/IngestRepository.kt#L198-L204)：`preExisting` 改為 `Map<String, ArrayDeque<Long>>`，每比對一筆即執行 `removeFirstOrNull()` 消耗，保留同批多重性。 |
-| 7 | Subagent Minor 5 | 已刪除訊息之 id 透過 checkpoint fallback 重新寫回 Checkpoint | **Verified Fixed** | [`IngestRepository.kt:212, 291, 314-317`](file:///Users/iml1s/Documents/mine/quietinbox/platform/storage/repo/IngestRepository.kt#L212)：`storedIds` 改為 `HashMap<Int, Long?>`；`Decision.Known` 驗證 `get(id) != null` 失敗時寫入顯式 `null`，checkpoint mapping 依 `containsKey` 取用，不再 fallback 至失效 id。 |
-| 8 | Subagent Minor 6 | `onDisconnected` 未清空 `sessionId`，暫停時重複呼叫 `endSession` | **Verified Fixed** | [`CaptureCoordinator.kt:202`](file:///Users/iml1s/Documents/mine/quietinbox/platform/capture/CaptureCoordinator.kt#L202)：`health.endSession` 後立即補上 `sessionId = null`。 |
-| 9 | Subagent Minor 8 | `process()` 註解稱事件尚未 journal 與實際捕捉範圍不符 | **Verified Fixed** | [`CaptureCoordinator.kt:348-349`](file:///Users/iml1s/Documents/mine/quietinbox/platform/capture/CaptureCoordinator.kt#L348-L349)：註解修訂為明確說明金庫在 commit 前離線（已 journal 者日後 replay，未 journal 者遺失）。 |
-| 10 | Subagent Minor 9 | `docs/SCOPE.md:16` 測試數量計數偏差 | **Partially Fixed** | 詳見新發現 Minor 1：[`docs/SCOPE.md:57`](file:///Users/iml1s/Documents/mine/quietinbox/docs/SCOPE.md#L57) 正文雖更新，但第 16 行表格仍寫為「16 JVM tests」，而目前實際已有 20 個 JVM 測試。 |
-| 11 | Agy M1 | `BackupService.export` 於開檔時直接 truncate 使用者檔案 | **Verified Fixed** | [`BackupService.kt:79-99`](file:///Users/iml1s/Documents/mine/quietinbox/platform/backup/BackupService.kt#L79-L99)：先在 `context.cacheDir` 建立唯一 UUID 暫存檔，成功後再開 SAF 目標寫入複製，`finally` 刪除暫存檔。 |
-| 12 | Agy M2 | `ConversationEntity.summaryOnlyCount` 未維護易生困惑 | **Verified Fixed** | [`Entities.kt:100`](file:///Users/iml1s/Documents/mine/quietinbox/platform/storage/db/Entities.kt#L100)：加入明確 KDoc 註解標記為 v0.1 保留欄位（恆為 0）。 |
-| 13 | Agy M3 | Kotest 實驗性 API 編譯警告 | **Verified Fixed** | [`ReconcilerPropertyTest.kt:24`](file:///Users/iml1s/Documents/mine/quietinbox/core/reconcile/src/test/kotlin/dev/quietinbox/core/reconcile/ReconcilerPropertyTest.kt#L24)：加上 `@OptIn(io.kotest.common.ExperimentalKotest::class)`。 |
+| 1 | Subagent Important 1 | `AmbiguousRepeat` 導致 Checkpoint 縮短，下一則通知重複寫入既有訊息 | **Verified Fixed** | [`Reconciler.kt:181`](../../../core/reconcile/src/main/kotlin/dev/quietinbox/core/reconcile/Reconciler.kt#L181)：`addsNothing` 改為 `decisions.none { it is Decision.New \|\| it is Decision.Revision }`。[`ReconcilerTest.kt:183-209`](../../../core/reconcile/src/test/kotlin/dev/quietinbox/core/reconcile/ReconcilerTest.kt#L183-L209) 新增 `ReconcilerAmbiguousKeepTest`（2 測）完整驗證。 |
+| 2 | Subagent Important 2 | `WrappedSecretFile` 以 `FileInputStream(dir)` fsync 目錄必然拋出 `EISDIR` 被吞掉 | **Verified Fixed** | [`WrappedSecretFile.kt:70-101`](../../../platform/crypto/src/main/kotlin/dev/quietinbox/platform/crypto/WrappedSecretFile.kt#L70-L101)：改用 POSIX 底層 `Os.open(dir.path, O_RDONLY, 0)`、`Os.fsync` 與 `Os.close`，出錯拋出 `IOException` 轉換為 `KeyResult.Failed(Unavailable)`。[`WrappedSecretFileTest.kt:15-37`](../../../platform/crypto/src/androidTest/kotlin/dev/quietinbox/platform/crypto/WrappedSecretFileTest.kt#L15-L37) 新增真實檔案系統測試。 |
+| 3 | Subagent Important 3 | 文件宣稱了程式碼做不到的事（ADR-0004 宣稱無條件不重複、SCOPE.md 宣稱從不刪除目標檔） | **Verified Fixed** | [`0004-identity-and-dedup.md:33-35`](../../../docs/adr/0004-identity-and-dedup.md#L33-L35)：精確界定 adds nothing 語意並指向測試。[`SCOPE.md:52-54`](../../../docs/SCOPE.md#L52-L54)：誠實陳述兩段式匯出與複製階段失敗的影響。 |
+| 4 | Subagent Minor 1 | `BackupService.stage` 未限制記憶體非媒體文字總字元數 | **Verified Fixed** | [`BackupRecords.kt:120`](../../../platform/backup/src/main/kotlin/dev/quietinbox/platform/backup/BackupRecords.kt#L120)：定義 `MAX_STAGED_TEXT_CHARS = 64L * 1024 * 1024`。[`BackupService.kt:222-228`](../../../platform/backup/src/main/kotlin/dev/quietinbox/platform/backup/BackupService.kt#L222-L228)：累加非媒體記錄之 `line.length`，超額拋出 `StagingException(TOO_LARGE, "text")`。 |
+| 5 | Subagent Minor 3 | `CaptureCoordinator` 與 `IngestRepository` 吞掉 `CancellationException` | **Verified Fixed** | [`CaptureCoordinator.kt:139, 354, 424`](../../../platform/capture/src/main/kotlin/dev/quietinbox/platform/capture/CaptureCoordinator.kt#L139)：在消費者迴圈、`process`、`replayJournal` 中均加上 `if (t/e is CancellationException) throw t/e`。[`IngestRepository.kt:132`](../../../platform/storage/repo/IngestRepository.kt#L132) 的 `diagnostic` 亦加上 `.onFailure` 重新拋出。 |
+| 6 | Subagent Minor 4 | Commit 層 checkpoint-loss guard 把同批兩則相同指紋訊息雙雙折疊到同一個 id | **Verified Fixed** | [`Daos.kt:177`](../../../platform/storage/db/Daos.kt#L177)：新增 `findIdsByFingerprint`（`ORDER BY id ASC`）。[`IngestRepository.kt:198-204, 226`](../../../platform/storage/repo/IngestRepository.kt#L198-L204)：`preExisting` 改為 `Map<String, ArrayDeque<Long>>`，每比對一筆即執行 `removeFirstOrNull()` 消耗，保留同批多重性。 |
+| 7 | Subagent Minor 5 | 已刪除訊息之 id 透過 checkpoint fallback 重新寫回 Checkpoint | **Verified Fixed** | [`IngestRepository.kt:212, 291, 314-317`](../../../platform/storage/repo/IngestRepository.kt#L212)：`storedIds` 改為 `HashMap<Int, Long?>`；`Decision.Known` 驗證 `get(id) != null` 失敗時寫入顯式 `null`，checkpoint mapping 依 `containsKey` 取用，不再 fallback 至失效 id。 |
+| 8 | Subagent Minor 6 | `onDisconnected` 未清空 `sessionId`，暫停時重複呼叫 `endSession` | **Verified Fixed** | [`CaptureCoordinator.kt:202`](../../../platform/capture/CaptureCoordinator.kt#L202)：`health.endSession` 後立即補上 `sessionId = null`。 |
+| 9 | Subagent Minor 8 | `process()` 註解稱事件尚未 journal 與實際捕捉範圍不符 | **Verified Fixed** | [`CaptureCoordinator.kt:348-349`](../../../platform/capture/CaptureCoordinator.kt#L348-L349)：註解修訂為明確說明金庫在 commit 前離線（已 journal 者日後 replay，未 journal 者遺失）。 |
+| 10 | Subagent Minor 9 | `docs/SCOPE.md:16` 測試數量計數偏差 | **Partially Fixed** | 詳見新發現 Minor 1：[`docs/SCOPE.md:57`](../../../docs/SCOPE.md#L57) 正文雖更新，但第 16 行表格仍寫為「16 JVM tests」，而目前實際已有 20 個 JVM 測試。 |
+| 11 | Agy M1 | `BackupService.export` 於開檔時直接 truncate 使用者檔案 | **Verified Fixed** | [`BackupService.kt:79-99`](../../../platform/backup/BackupService.kt#L79-L99)：先在 `context.cacheDir` 建立唯一 UUID 暫存檔，成功後再開 SAF 目標寫入複製，`finally` 刪除暫存檔。 |
+| 12 | Agy M2 | `ConversationEntity.summaryOnlyCount` 未維護易生困惑 | **Verified Fixed** | [`Entities.kt:100`](../../../platform/storage/db/Entities.kt#L100)：加入明確 KDoc 註解標記為 v0.1 保留欄位（恆為 0）。 |
+| 13 | Agy M3 | Kotest 實驗性 API 編譯警告 | **Verified Fixed** | [`ReconcilerPropertyTest.kt:24`](../../../core/reconcile/src/test/kotlin/dev/quietinbox/core/reconcile/ReconcilerPropertyTest.kt#L24)：加上 `@OptIn(io.kotest.common.ExperimentalKotest::class)`。 |
 
 ---
 
@@ -127,7 +127,7 @@ Commit `6a9b0ce` 非常高水準地修復了第二輪審查中由 Subagent 與 A
 - **Minor（次要改進建議）**：**3 項**
 
 ### M1. `docs/SCOPE.md:16` 測試數量標記未同步更新（文件真實性偏差）
-- **位置**：[`docs/SCOPE.md:16`](file:///Users/iml1s/Documents/mine/quietinbox/docs/SCOPE.md#L16)
+- **位置**：[`docs/SCOPE.md:16`](../../../docs/SCOPE.md#L16)
 - **問題分析**：
   在本次 commit 中，雖然在 `docs/SCOPE.md:57` 聲稱已修復第二輪 Subagent 指出的 Minor 9，但第 16 行表格內容仍保留為舊字樣：
   ```markdown
@@ -141,9 +141,9 @@ Commit `6a9b0ce` 非常高水準地修復了第二輪審查中由 Subagent 與 A
   ```
 
 ### M2. `IngestRepository.kt:297` 之 `Decision.Revision` 若遇已刪除訊息未將 `storedIds` 設為 null
-- **位置**：[`IngestRepository.kt:297-308`](file:///Users/iml1s/Documents/mine/quietinbox/platform/storage/repo/IngestRepository.kt#L297-L308)
+- **位置**：[`IngestRepository.kt:297-308`](../../../platform/storage/repo/IngestRepository.kt#L297-L308)
 - **問題分析**：
-  在修復 Minor 5（已刪訊息 id 寫回 Checkpoint）時，[`IngestRepository.kt:290-291`](file:///Users/iml1s/Documents/mine/quietinbox/platform/storage/repo/IngestRepository.kt#L290-L291) 對 `Decision.Known` 做了妥善處理：
+  在修復 Minor 5（已刪訊息 id 寫回 Checkpoint）時，[`IngestRepository.kt:290-291`](../../../platform/storage/repo/IngestRepository.kt#L290-L291) 對 `Decision.Known` 做了妥善處理：
   ```kotlin
   val id = decision.existingMessageId?.takeIf { db.messageDao().get(it) != null }
   storedIds[index] = id
@@ -184,7 +184,7 @@ Commit `6a9b0ce` 非常高水準地修復了第二輪審查中由 Subagent 與 A
   ```
 
 ### M3. `BackupService.kt:96, 175` 之 `catch (e: Exception)` 攔截了協程取消
-- **位置**：[`BackupService.kt:96, 175`](file:///Users/iml1s/Documents/mine/quietinbox/platform/backup/BackupService.kt#L96)
+- **位置**：[`BackupService.kt:96, 175`](../../../platform/backup/BackupService.kt#L96)
 - **問題分析**：
   在 `BackupService.export` 與 `import` 中：
   ```kotlin
@@ -207,13 +207,13 @@ Commit `6a9b0ce` 非常高水準地修復了第二輪審查中由 Subagent 與 A
 ## 五、文件誠實性檢驗（Docs-Honesty Check）
 
 比對程式碼與相關文件的宣稱：
-1. **[`docs/adr/0004-identity-and-dedup.md`](file:///Users/iml1s/Documents/mine/quietinbox/docs/adr/0004-identity-and-dedup.md)**：已精準修正，明確指出 "Adds nothing" 涵蓋了無 `New` 與無 `Revision`，包含關閉後的單則模糊重複，並指涉 `ReconcilerAmbiguousKeepTest`。與代碼 100% 吻合。
-2. **[`CHANGELOG.md`](file:///Users/iml1s/Documents/mine/quietinbox/CHANGELOG.md)**：完整列出 Round 2 review 所修復之全部項目，敘述忠實。
+1. **[`docs/adr/0004-identity-and-dedup.md`](../../../docs/adr/0004-identity-and-dedup.md)**：已精準修正，明確指出 "Adds nothing" 涵蓋了無 `New` 與無 `Revision`，包含關閉後的單則模糊重複，並指涉 `ReconcilerAmbiguousKeepTest`。與代碼 100% 吻合。
+2. **[`CHANGELOG.md`](../../../CHANGELOG.md)**：完整列出 Round 2 review 所修復之全部項目，敘述忠實。
 3. **多語系字串 `backup_failed_io`**：
    - 英文：`Could not read or write the file. The backup was not written; an existing target file was left unchanged unless the final copy itself failed.`
    - 繁中：`無法讀取或寫入檔案。備份未寫出；除非最後的複製步驟本身失敗，否則既有的目標檔案不會被更動。`
    兩者與兩階段 SAF 暫存複製之實際錯誤路徑完全一致，不再誤導使用者。
-4. **[`docs/SCOPE.md`](file:///Users/iml1s/Documents/mine/quietinbox/docs/SCOPE.md)**：除第 16 行表格之測試數量未更新外（見 M1），第 52–59 行對於兩階段寫入、POSIX 目錄 fsync 及 Round 2 缺陷修復之宣稱均真實且經檢驗。
+4. **[`docs/SCOPE.md`](../../../docs/SCOPE.md)**：除第 16 行表格之測試數量未更新外（見 M1），第 52–59 行對於兩階段寫入、POSIX 目錄 fsync 及 Round 2 缺陷修復之宣稱均真實且經檢驗。
 
 ---
 

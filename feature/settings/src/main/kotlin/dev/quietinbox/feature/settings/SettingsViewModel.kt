@@ -6,13 +6,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.quietinbox.core.model.BuildInfo
 import dev.quietinbox.platform.backup.BackupResult
 import dev.quietinbox.platform.backup.BackupService
 import dev.quietinbox.platform.crypto.KeyResult
+import dev.quietinbox.platform.storage.repo.DemoDataRepository
 import dev.quietinbox.platform.storage.repo.VaultRepository
 import dev.quietinbox.platform.storage.settings.AppSettings
 import dev.quietinbox.platform.storage.settings.SettingsRepository
 import dev.quietinbox.platform.storage.settings.ThemeMode
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -29,7 +32,17 @@ data class SettingsUiState(
     val recoveryKey: String? = null,
     val busy: Boolean = false,
     val lastBackup: BackupResult? = null,
+    /** Gates the Developer section; false in every release build. */
+    val developerTools: Boolean = false,
+    val lastDemo: DemoResult? = null,
 )
+
+/** Outcome of a developer demo action, mapped to a localised string by the screen. */
+sealed interface DemoResult {
+    data class Seeded(val conversations: Int, val messages: Int) : DemoResult
+    data object Cleared : DemoResult
+    data class Failed(val reason: String) : DemoResult
+}
 
 /** Hooks the app module implements for reminder scheduling (kept out of the feature module). */
 interface ReminderScheduling {
@@ -43,8 +56,10 @@ class SettingsViewModel @Inject constructor(
     private val backup: BackupService,
     private val vault: VaultRepository,
     private val reminders: ReminderScheduling,
+    private val demoData: DemoDataRepository,
+    buildInfo: BuildInfo,
 ) : ViewModel() {
-    private val local = MutableStateFlow(SettingsUiState(versionName = versionName()))
+    private val local = MutableStateFlow(SettingsUiState(versionName = versionName(), developerTools = buildInfo.debug))
 
     val state: StateFlow<SettingsUiState> = combine(settings.settings, local) { s, l -> l.copy(settings = s) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), local.value)
@@ -92,6 +107,37 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun clearBackupResult() = local.update { it.copy(lastBackup = null) }
+
+    /**
+     * Debug-only: fills the vault with invented conversations. The screen only offers this when
+     * [SettingsUiState.developerTools] is true, and the repository writes nothing but demo-tagged
+     * rows, so a mis-tap cannot disturb captured data.
+     */
+    fun seedDemo() = demoAction {
+        val counts = demoData.seed()
+        DemoResult.Seeded(counts.conversations, counts.messages)
+    }
+
+    /** Debug-only: removes every demo-tagged row, leaving captured copies alone. */
+    fun clearDemo() = demoAction { demoData.clear(); DemoResult.Cleared }
+
+    /**
+     * Shared plumbing for the two developer actions. A locked vault is the expected failure and is
+     * reported in the snackbar; cancellation is propagated, never turned into a result.
+     */
+    private fun demoAction(block: suspend () -> DemoResult) = viewModelScope.launch {
+        local.update { it.copy(busy = true, lastDemo = null) }
+        val result = try {
+            block()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            DemoResult.Failed(failure::class.java.simpleName)
+        }
+        local.update { it.copy(busy = false, lastDemo = result) }
+    }
+
+    fun clearDemoResult() = local.update { it.copy(lastDemo = null) }
 
     fun deleteEverything(onDone: () -> Unit) = viewModelScope.launch {
         local.update { it.copy(busy = true) }

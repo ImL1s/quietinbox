@@ -1,0 +1,113 @@
+name: Release
+
+# Tag `vX.Y.Z` → signed release APK + AAB, permission gate, GitHub Release with checksums, and an
+# upload of the AAB to Google Play (internal track by default). Production promotion is a
+# deliberate `workflow_dispatch` with track=production.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      track:
+        description: "Google Play track"
+        type: choice
+        options: [internal, production]
+        default: internal
+      tag:
+        description: "Existing tag to build (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build signed artifacts
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Restore upload keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.QUIETINBOX_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$KEYSTORE_BASE64" || { echo "QUIETINBOX_KEYSTORE_BASE64 secret missing"; exit 1; }
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          echo "QUIETINBOX_KEYSTORE_FILE=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+      - name: Build release APK and AAB
+        env:
+          QUIETINBOX_KEYSTORE_PASSWORD: ${{ secrets.QUIETINBOX_KEYSTORE_PASSWORD }}
+          QUIETINBOX_KEY_ALIAS: ${{ secrets.QUIETINBOX_KEY_ALIAS }}
+          QUIETINBOX_KEY_PASSWORD: ${{ secrets.QUIETINBOX_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon --console=plain test :app:assembleRelease :app:bundleRelease
+      - name: No network permission in release APK
+        run: tools/check-permissions.sh app/build/outputs/apk/release/app-release.apk
+      - name: Name artifacts
+        id: meta
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"; [ -n "${{ inputs.tag }}" ] && VERSION="${{ inputs.tag }}" && VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk "dist/quietinbox-$VERSION.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "dist/quietinbox-$VERSION.aab"
+          (cd dist && sha256sum quietinbox-*.apk quietinbox-*.aab > SHA256SUMS.txt && cat SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.meta.outputs.version }}
+          path: dist/
+
+  github-release:
+    name: GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.tag != ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-${{ needs.build.outputs.version }}
+          path: dist
+      - name: Publish release with the APK and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          NOTES=$(awk -v ver="${TAG#v}" '/^## \[/{p = index($0, "[" ver "]") > 0} p' CHANGELOG.md)
+          [ -n "$NOTES" ] || NOTES="QuietInbox $TAG — see CHANGELOG.md"
+          gh release view "$TAG" >/dev/null 2>&1 && gh release delete-asset "$TAG" "quietinbox-${TAG#v}.apk" --yes || true
+          gh release create "$TAG" dist/quietinbox-*.apk dist/SHA256SUMS.txt --title "QuietInbox $TAG" --notes "$NOTES" 2>/dev/null \
+            || gh release upload "$TAG" dist/quietinbox-*.apk dist/SHA256SUMS.txt --clobber
+
+  google-play:
+    name: Google Play (${{ inputs.track || 'internal' }})
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-${{ needs.build.outputs.version }}
+          path: dist
+      - uses: actions/checkout@v4
+        with:
+          path: src
+      - name: Upload AAB
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: dev.quietinbox.app
+          releaseFiles: dist/quietinbox-${{ needs.build.outputs.version }}.aab
+          track: ${{ inputs.track || 'internal' }}
+          status: completed
+          whatsNewDirectory: src/fastlane/whatsnew

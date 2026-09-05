@@ -58,8 +58,14 @@ class SnapshotFactory(
             }.orEmpty()
 
         val messaging = runCatching { NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(n) }.getOrNull()
-        val messages = messaging?.messages?.let { bound(it, TruncationFlag.MESSAGES, truncated) }.orEmpty()
-        val historic = messaging?.historicMessages?.let { bound(it, TruncationFlag.HISTORIC_MESSAGES, truncated) }.orEmpty()
+
+        // MessagingStyle semantics: a message without a Person, or whose Person is the style's user,
+
+        // was sent by the device owner.
+
+        val selfName = messaging?.user?.name?.toString()
+        val messages = messaging?.messages?.let { bound(it, TruncationFlag.MESSAGES, truncated, selfName) }.orEmpty()
+        val historic = messaging?.historicMessages?.let { bound(it, TruncationFlag.HISTORIC_MESSAGES, truncated, selfName) }.orEmpty()
 
         val actions = n.actions?.toList()?.let { list ->
             if (list.size > Limits.MAX_ACTIONS) truncated += TruncationFlag.ACTIONS
@@ -141,7 +147,7 @@ class SnapshotFactory(
         return CapturedNotification(snapshot, bitmap)
     }
 
-    private fun bound(list: List<NotificationCompat.MessagingStyle.Message>, flag: TruncationFlag, truncated: MutableSet<TruncationFlag>): List<MessagingMessageShape> {
+    private fun bound(list: List<NotificationCompat.MessagingStyle.Message>, flag: TruncationFlag, truncated: MutableSet<TruncationFlag>, selfName: String?): List<MessagingMessageShape> {
         if (list.size > Limits.MAX_MESSAGES) truncated += flag
         return list.takeLast(Limits.MAX_MESSAGES).map { m ->
             val person = m.person
@@ -154,7 +160,7 @@ class SnapshotFactory(
                 senderName = person?.name?.let { BoundedText.of(it, 256) },
                 senderKey = person?.key?.take(Limits.MAX_KEY_CHARS),
                 senderUri = person?.uri?.take(Limits.MAX_URI_CHARS),
-                isSelf = false,
+                isSelf = person == null || (selfName != null && person.name?.toString() == selfName),
                 dataMimeType = m.dataMimeType?.take(64),
                 dataUri = uri,
                 isRemoteInputHistory = false,

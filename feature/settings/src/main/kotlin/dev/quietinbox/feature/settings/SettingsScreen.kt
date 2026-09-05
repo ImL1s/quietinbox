@@ -15,9 +15,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.DeleteForever
+import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material.icons.outlined.WifiOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -94,6 +96,14 @@ fun SettingsScreen(
         if (state.lastBackup != null && resultText != null) {
             snackbar.showSnackbar(resultText)
             viewModel.clearBackupResult()
+        }
+    }
+
+    val demoText = demoResultText(state.lastDemo)
+    LaunchedEffect(state.lastDemo) {
+        if (state.lastDemo != null && demoText != null) {
+            snackbar.showSnackbar(demoText)
+            viewModel.clearDemoResult()
         }
     }
 
@@ -274,6 +284,27 @@ fun SettingsScreen(
                 )
                 Text(stringResource(R.string.about_source), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
             }
+
+            // Debug builds only: the synthetic demo vault used for screenshots and walkthroughs.
+            if (state.developerTools) {
+                item { SectionHeader(stringResource(R.string.section_developer)) }
+                item {
+                    ListItem(
+                        leadingContent = { Icon(Icons.Outlined.Science, null) },
+                        headlineContent = { Text(stringResource(R.string.dev_seed_demo)) },
+                        supportingContent = { Text(stringResource(R.string.dev_seed_demo_desc), style = MaterialTheme.typography.bodySmall) },
+                        trailingContent = { TextButton(onClick = viewModel::seedDemo, enabled = !state.busy) { Text(stringResource(R.string.dev_run)) } },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
+                    ListItem(
+                        leadingContent = { Icon(Icons.Outlined.DeleteSweep, null) },
+                        headlineContent = { Text(stringResource(R.string.dev_clear_demo)) },
+                        supportingContent = { Text(stringResource(R.string.dev_clear_demo_desc), style = MaterialTheme.typography.bodySmall) },
+                        trailingContent = { TextButton(onClick = viewModel::clearDemo, enabled = !state.busy) { Text(stringResource(R.string.dev_run)) } },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
+                }
+            }
         }
     }
 
@@ -372,6 +403,14 @@ private fun backupResultText(result: BackupResult?): String? = when (result) {
         BackupResult.Reason.TOO_LARGE -> stringResource(R.string.backup_failed_too_large)
         BackupResult.Reason.VAULT_UNAVAILABLE -> stringResource(R.string.backup_failed_vault)
     }
+}
+
+@Composable
+private fun demoResultText(result: DemoResult?): String? = when (result) {
+    null -> null
+    is DemoResult.Seeded -> stringResource(R.string.dev_result_seeded, result.conversations, result.messages)
+    DemoResult.Cleared -> stringResource(R.string.dev_result_cleared)
+    is DemoResult.Failed -> stringResource(R.string.dev_result_failed, result.reason)
 }
 
 private fun weekdayRes(day: Int): Int = when (day) {

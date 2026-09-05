@@ -1,3 +1,5 @@
+> 繁體中文：[docs/zh-Hant/reviews/README.md](../zh-Hant/reviews/README.md)
+
 # Independent review records
 
 Each round keeps the sanitized brief, every reviewer's verbatim report, and blocker notes for

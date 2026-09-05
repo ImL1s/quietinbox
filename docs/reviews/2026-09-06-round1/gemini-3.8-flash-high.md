@@ -20,7 +20,7 @@
 ## 嚴重問題（Critical — 必須在 push 前修復）
 
 ### 1. `DatabaseHolder.db()` 在 Vault 處於 Opening 且開啟失敗時永久掛起（Hang）
-- **檔案與行號**：[`DatabaseHolder.kt:L57-L66`](file:///Users/iml1s/Documents/mine/quietinbox/platform/storage/src/main/kotlin/dev/quietinbox/platform/storage/db/DatabaseHolder.kt#L57-L66)
+- **檔案與行號**：[`DatabaseHolder.kt:L57-L66`](../../../platform/storage/src/main/kotlin/dev/quietinbox/platform/storage/db/DatabaseHolder.kt#L57-L66)
 - **問題原因**：
   ```kotlin
   suspend fun db(): QuietInboxDatabase {
@@ -37,7 +37,7 @@
   當呼叫 `db()` 時若 `_state.value` 恰好是 `VaultState.Opening`，方法會進入 `_state.filterIsInstance<VaultState.Ready>().first()`。
   若非同步開啟金鑰／資料庫失敗（例如金鑰損毀、Keystore 未解鎖等），`_state` 會轉換為 `VaultState.Locked(failure)`。
   然而，`filterIsInstance<VaultState.Ready>()` **只會過濾 Ready 狀態**，永遠不會匹配 `Locked`！這導致此協程 **永久掛起（Indefinitely frozen）**，永遠不會拋出 `VaultUnavailableException`！
-  這會進一步導致 [`CaptureCoordinator.kt:L245-L263`](file:///Users/iml1s/Documents/mine/quietinbox/platform/capture/src/main/kotlin/dev/quietinbox/platform/capture/CaptureCoordinator.kt#L245-L263) 中的 `process(item)` 佇列處理協程卡死，以及所有 UI / Flow 載入協程無響應。
+  這會進一步導致 [`CaptureCoordinator.kt:L245-L263`](../../../platform/capture/src/main/kotlin/dev/quietinbox/platform/capture/CaptureCoordinator.kt#L245-L263) 中的 `process(item)` 佇列處理協程卡死，以及所有 UI / Flow 載入協程無響應。
 - **具體修復方案**：
   等待任一終態（非 `Opening`）並分支處理：
   ```kotlin
@@ -54,9 +54,9 @@
 
 ### 2. 還原備份之媒體檔案將在首次 Retention 清理時被全數抹除（Data Loss）
 - **檔案與行號**：
-  - [`BackupService.kt:L258-L284`](file:///Users/iml1s/Documents/mine/quietinbox/platform/backup/src/main/kotlin/dev/quietinbox/platform/backup/BackupService.kt#L258-L284)
-  - [`Daos.kt:L254-L255`](file:///Users/iml1s/Documents/mine/quietinbox/platform/storage/src/main/kotlin/dev/quietinbox/platform/storage/db/Daos.kt#L254-L255)
-  - [`RetentionWorker.kt:L58-L63`](file:///Users/iml1s/Documents/mine/quietinbox/platform/storage/retention/RetentionWorker.kt#L58-L63)
+  - [`BackupService.kt:L258-L284`](../../../platform/backup/src/main/kotlin/dev/quietinbox/platform/backup/BackupService.kt#L258-L284)
+  - [`Daos.kt:L254-L255`](../../../platform/storage/src/main/kotlin/dev/quietinbox/platform/storage/db/Daos.kt#L254-L255)
+  - [`RetentionWorker.kt:L58-L63`](../../../platform/storage/retention/RetentionWorker.kt#L58-L63)
 - **問題原因**：
   在 `BackupService.apply` 還原訊息與媒體時：
   ```kotlin
@@ -65,13 +65,13 @@
   val newId = db.messageDao().insert(MessageEntity(..., mediaBlobId = blobId, ...))
   ```
   `MediaBlobEntity` 先以 `messageId = null` 寫入資料庫，隨後訊息插入取得 `newId`，但代碼中 **完全沒有將 `MediaBlobEntity.messageId` 更新為 `newId`**！
-  而在 [`Daos.kt:L254-L255`](file:///Users/iml1s/Documents/mine/quietinbox/platform/storage/src/main/kotlin/dev/quietinbox/platform/storage/db/Daos.kt#L254-L255) 中：
+  而在 [`Daos.kt:L254-L255`](../../../platform/storage/src/main/kotlin/dev/quietinbox/platform/storage/db/Daos.kt#L254-L255) 中：
   ```kotlin
   @Query("SELECT * FROM media_blob WHERE messageId NOT IN (SELECT id FROM message) OR messageId IS NULL")
   suspend fun orphans(): List<MediaBlobEntity>
   ```
   `orphans()` 明確包含 `OR messageId IS NULL`！
-  當由 WorkManager 每 12 小時觸發的 [`RetentionWorker`](file:///Users/iml1s/Documents/mine/quietinbox/platform/storage/retention/RetentionWorker.kt#L58-L63) 執行時，它會將所有剛從備份還原的 `media_blob`（其 `messageId` 為 null）**視為孤兒檔案直接呼叫 `mediaDir.delete(blob.fileName)` 並刪除資料表記錄**！
+  當由 WorkManager 每 12 小時觸發的 [`RetentionWorker`](../../../platform/storage/retention/RetentionWorker.kt#L58-L63) 執行時，它會將所有剛從備份還原的 `media_blob`（其 `messageId` 為 null）**視為孤兒檔案直接呼叫 `mediaDir.delete(blob.fileName)` 並刪除資料表記錄**！
   使用者辛苦還原的所有媒體檔案在下一次排程清理時將永久消失，訊息內的 `mediaBlobId` 全數變成懸空引用。
 - **具體修復方案**：
   在 `MediaDao` 中新增更新 `messageId` 的方法：
@@ -90,9 +90,9 @@
 
 ### 3. 刪除整個會話時防重播復活失效（違反硬性規範 5）
 - **檔案與行號**：
-  - [`InboxRepository.kt:L82-L89`](file:///Users/iml1s/Documents/mine/quietinbox/platform/storage/src/main/kotlin/dev/quietinbox/platform/storage/repo/InboxRepository.kt#L82-L89)
-  - [`IngestRepository.kt:L153-L174`](file:///Users/iml1s/Documents/mine/quietinbox/platform/storage/repo/IngestRepository.kt#L153-L174)
-  - [`Daos.kt:L269-L270`](file:///Users/iml1s/Documents/mine/quietinbox/platform/storage/db/Daos.kt#L269-L270)
+  - [`InboxRepository.kt:L82-L89`](../../../platform/storage/src/main/kotlin/dev/quietinbox/platform/storage/repo/InboxRepository.kt#L82-L89)
+  - [`IngestRepository.kt:L153-L174`](../../../platform/storage/repo/IngestRepository.kt#L153-L174)
+  - [`Daos.kt:L269-L270`](../../../platform/storage/db/Daos.kt#L269-L270)
 - **問題原因**：
   規範 §7.3 與評審簡報要求：「使用者刪除訊息後，活動通知重播不能把內容復活。」
   在 `InboxRepository.deleteConversation` 中：
@@ -139,7 +139,7 @@
 ## 重要問題（Important — 建議在 push 前修復）
 
 ### 4. `Reconciler` 在同視窗內混合「具備 ID」與「無 ID」訊息時的比對失序與錯位索引
-- **檔案與行號**：[`Reconciler.kt:L123-L164`](file:///Users/iml1s/Documents/mine/quietinbox/core/reconcile/src/main/kotlin/dev/quietinbox/core/reconcile/Reconciler.kt#L123-L164)
+- **檔案與行號**：[`Reconciler.kt:L123-L164`](../../../core/reconcile/src/main/kotlin/dev/quietinbox/core/reconcile/Reconciler.kt#L123-L164)
 - **問題原因**：
   在 `Reconciler.reconcile` 中：
   ```kotlin
@@ -169,9 +169,9 @@
 
 ### 5. 過期重播（Stale Replay）導致檢查點視窗倒退收縮，引發後續訊息重複
 - **檔案與行號**：
-  - [`Reconciler.kt:L133-L140`](file:///Users/iml1s/Documents/mine/quietinbox/core/reconcile/src/main/kotlin/dev/quietinbox/core/reconcile/Reconciler.kt#L133-L140)
-  - [`Reconciler.kt:L178`](file:///Users/iml1s/Documents/mine/quietinbox/core/reconcile/src/main/kotlin/dev/quietinbox/core/reconcile/Reconciler.kt#L178)
-  - [`IngestRepository.kt:L193`](file:///Users/iml1s/Documents/mine/quietinbox/platform/storage/repo/IngestRepository.kt#L193)
+  - [`Reconciler.kt:L133-L140`](../../../core/reconcile/src/main/kotlin/dev/quietinbox/core/reconcile/Reconciler.kt#L133-L140)
+  - [`Reconciler.kt:L178`](../../../core/reconcile/src/main/kotlin/dev/quietinbox/core/reconcile/Reconciler.kt#L178)
+  - [`IngestRepository.kt:L193`](../../../platform/storage/repo/IngestRepository.kt#L193)
 - **問題原因**：
   假設已收到通知 `[A, B, C]`，檢查點為 `[A, B, C]`。
   若隨後收到一則舊通知重播 `[A]`：
@@ -194,8 +194,8 @@
 
 ### 6. `CaptureCoordinator.setPaused(true)` 未輪替 Generation，無法阻擋佇列中的已排隊事件入庫
 - **檔案與行號**：
-  - [`CaptureCoordinator.kt:L181-L200`](file:///Users/iml1s/Documents/mine/quietinbox/platform/capture/src/main/kotlin/dev/quietinbox/platform/capture/CaptureCoordinator.kt#L181-L200)
-  - [`CaptureCoordinator.kt:L247-L251`](file:///Users/iml1s/Documents/mine/quietinbox/platform/capture/src/main/kotlin/dev/quietinbox/platform/capture/CaptureCoordinator.kt#L247-L251)
+  - [`CaptureCoordinator.kt:L181-L200`](../../../platform/capture/src/main/kotlin/dev/quietinbox/platform/capture/CaptureCoordinator.kt#L181-L200)
+  - [`CaptureCoordinator.kt:L247-L251`](../../../platform/capture/src/main/kotlin/dev/quietinbox/platform/capture/CaptureCoordinator.kt#L247-L251)
 - **問題原因**：
   規範 §5 要求：「撤權／暫停／刪除來源時切換 generation、取消媒體工作、關閉接受新事件；已排隊工作提交前再檢查，防止撤權後繼續落盤。」
   代碼註釋亦寫明：`// Commit fence: anything queued before a revoke/pause is discarded, never persisted.`
@@ -216,18 +216,18 @@
 ## 次要問題與改進建議（Minor / Nitpicks）
 
 1. **`BackupService.writeRecords` 缺少唯讀交易包裝**：
-   - 檔案：[`BackupService.kt:L100-L106`](file:///Users/iml1s/Documents/mine/quietinbox/platform/backup/src/main/kotlin/dev/quietinbox/platform/backup/BackupService.kt#L100-L106)
+   - 檔案：[`BackupService.kt:L100-L106`](../../../platform/backup/src/main/kotlin/dev/quietinbox/platform/backup/BackupService.kt#L100-L106)
    - 註釋註明 `// Snapshot inside one read transaction so counts and rows agree.`，但未包裹 `db.withTransaction { ... }`，五個 DAO 查詢分別獨立執行。若匯出時有通知併發入庫，Manifest 計數與實際行數可能不一致。建議補上 `db.withTransaction`。
 2. **`SnapshotFactory.pictureUri` 在 Android 12 (API 31/32) 上的相容性問題**：
-   - 檔案：[`SnapshotFactory.kt:L156-L161`](file:///Users/iml1s/Documents/mine/quietinbox/platform/capture/src/main/kotlin/dev/quietinbox/platform/capture/SnapshotFactory.kt#L156-L161)
+   - 檔案：[`SnapshotFactory.kt:L156-L161`](../../../platform/capture/src/main/kotlin/dev/quietinbox/platform/capture/SnapshotFactory.kt#L156-L161)
    - 代碼：`extras.getParcelable(Notification.EXTRA_PICTURE_ICON, Icon::class.java)`
    - `Bundle.getParcelable(String, Class<T>)` 是 Android 13 (API 33) 新增 API。在 API 31 和 32 上執行時會拋出 `NoSuchMethodError`（被外層 `runCatching` 吞掉），導致在 Android 12 上永遠無法讀取圖示 URI。
    - 建議改用 `androidx.core.os.BundleCompat.getParcelable(extras, Notification.EXTRA_PICTURE_ICON, Icon::class.java)`。
 3. **`MainNavigation.kt` 使用廢棄之 `currentWindowAdaptiveInfo()`**：
-   - 檔案：[`MainNavigation.kt:L76`](file:///Users/iml1s/Documents/mine/quietinbox/app/src/main/kotlin/dev/quietinbox/ui/MainNavigation.kt#L76)
+   - 檔案：[`MainNavigation.kt:L76`](../../../app/src/main/kotlin/dev/quietinbox/ui/MainNavigation.kt#L76)
    - 編譯時期警告：建議改用支援 L 與 XL 寬度斷點的 V2 API。
 4. **`CaptureCoordinator.replayJournal()` 批次上限未設迴圈**：
-   - 檔案：[`CaptureCoordinator.kt:L310-L321`](file:///Users/iml1s/Documents/mine/quietinbox/platform/capture/src/main/kotlin/dev/quietinbox/platform/capture/CaptureCoordinator.kt#L310-L321)
+   - 檔案：[`CaptureCoordinator.kt:L310-L321`](../../../platform/capture/src/main/kotlin/dev/quietinbox/platform/capture/CaptureCoordinator.kt#L310-L321)
    - `ingest.pendingJournal(limit = 200)` 單次最多只讀 200 筆。若在鎖庫期間積壓超過 200 筆事件，只會重播前 200 筆。建議以 `while (true)` 迴圈批次處理至佇列清空。
 
 ---

@@ -3,11 +3,11 @@
 DO NOT activate workflow modes; READ-ONLY review only. Do not edit, create or delete any file in the repository. Do not run git commands that change state. Do not run instrumented tests or install anything on a device.
 
 ## What to review
-Repository: /Users/iml1s/Documents/mine/quietinbox, branch main, HEAD 6a9b0ce.
+Repository: <repo>, branch main, HEAD 6a9b0ce.
 Review `git diff c96fbf0..6a9b0ce` (20 files) in the context of the whole codebase.
 
-Round-2 reports: `.omc/research/dual-review-round2-agy.md` (APPROVE WITH MINOR FIXES, 3 Minor) and
-`.omc/research/dual-review-round2-subagent.md` (REQUEST CHANGES: Important 1–3, Minor 1–9).
+Round-2 reports: `docs/reviews/2026-09-06-round2/gemini-3.8-flash-high-agy.md` (APPROVE WITH MINOR FIXES, 3 Minor) and
+`docs/reviews/2026-09-06-round2/claude-subagent.md` (REQUEST CHANGES: Important 1–3, Minor 1–9).
 This commit claims to fix: subagent Important 1, 2, 3 and Minor 1, 3, 4, 5, 6, 8, 9; agy M1, M2, M3.
 Not fixed on purpose (documented as known issues): subagent Minor 2 (cold-start offer filtering) and Minor 7 (closeWindow outside the pipeline mutex).
 

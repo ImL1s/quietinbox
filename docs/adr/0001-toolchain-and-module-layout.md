@@ -1,3 +1,5 @@
+> 繁體中文：[docs/zh-Hant/adr/0001-toolchain-and-module-layout.md](../zh-Hant/adr/0001-toolchain-and-module-layout.md)
+
 # ADR-0001: Toolchain and module layout
 
 Date: 2026-09-06 · Status: accepted

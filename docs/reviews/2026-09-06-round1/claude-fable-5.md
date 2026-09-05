@@ -1,6 +1,6 @@
 # QuietInbox v0.1 vertical slice — Fable 5 審查報告(pre-push dual-review)
 
-- 審查者:Claude Fable 5(READ-ONLY,依 `.omc/research/dual-review-brief-safe.md`)
+- 審查者:Claude Fable 5(READ-ONLY,依 `docs/reviews/2026-09-06-round1/brief.md`)
 - 審查對象:branch `main`,HEAD = `4e86698`(fix: system bar icon contrast …)
 - 範圍:11,408 行 Kotlin(不含 build)、spec `QuietInbox_開源專案完整計劃.md` §2/§5–§9/§11–§13、docs/SCOPE.md 對照
 - 實際執行:全部 JVM 測試(88 個,全綠;SCOPE 宣稱 74 為保守值)、字串 parity diff、manifest / ProGuard / CI 靜態檢查。未跑 instrumented、未安裝裝置(依 brief)。

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug-only additions. This file is not part of the release source set, so nothing declared
+     here can reach a published build. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <!-- Seeds or clears the synthetic demo vault from adb, so screenshots and manual walkthroughs
+             never need a real notification. Exported on purpose: `am broadcast` runs as the shell
+             user and could not reach the receiver otherwise. Debug builds only. -->
+        <receiver
+            android:name="dev.quietinbox.debug.DemoReceiver"
+            android:enabled="true"
+            android:exported="true"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="dev.quietinbox.debug.DEMO" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

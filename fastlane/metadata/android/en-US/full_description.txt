@@ -1,0 +1,26 @@
+QuietInbox keeps a private, encrypted copy of what your messaging apps post to the notification shade, so you can read it later without opening the chat — and without the other side ever seeing a read receipt.
+
+WHAT IT DOES
+• Saves the text of notifications from the apps you choose (LINE, WhatsApp, Telegram, Instagram, Messenger or any other messaging app) into an encrypted vault on this phone.
+• Groups copies by conversation, with the sender, the source time and the time the copy was made.
+• Full-text search in Chinese and English, activity insights (heat map, rankings, best time, quiet days, emoji and catchphrases), and encrypted backup with a recovery key.
+• Honest labels: when a sender is inferred, a preview was hidden, or a message may be a repeat, the copy says so.
+
+FOUR PROMISES
+1. Nothing leaves this phone. The app has no INTERNET permission at all — you can verify it in any permission viewer. No analytics, no ads, no crash reporting.
+2. Reading a copy never marks the source as read and never replies. QuietInbox never touches the original notification.
+3. Only what a source app puts in a notification can be captured. Gaps are shown, never hidden.
+4. Everything is stored with SQLCipher (AES-256) under a key that exists only on this device and is protected by the Android Keystore.
+
+HOW IT WORKS
+QuietInbox uses Android's standard notification access (Notification Listener). You grant it once in system settings; the app then keeps copies only for the sources you enable, for as long as you choose (7–365 days). You can pause capture, delete a message or a whole conversation, or wipe everything including the keys.
+
+LIMITS, STATED PLAINLY
+• If a source app does not post a notification (muted chat, Do Not Disturb, "hide content" settings), there is nothing to copy.
+• Long conversations are captured as the last few messages shown in the notification; older history is not available.
+• Images are copied only when the source app exposes them in the notification and you turn "Copy images" on.
+
+OPEN SOURCE
+QuietInbox is free software under the GPL-3.0-or-later licence. The source code and a free build are on GitHub (github.com/ImL1s/quietinbox). Buying it on Google Play gives you automatic updates and supports development; the features are identical.
+
+Notification access is used solely to create your own local copies. QuietInbox does not read messages from other apps' storage and has no way to send data anywhere.

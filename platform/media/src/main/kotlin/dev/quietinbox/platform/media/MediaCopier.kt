@@ -16,6 +16,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.ByteArrayOutputStream
@@ -40,17 +43,21 @@ class MediaCopier @Inject constructor(
 
     suspend fun copyPending(messageIds: List<Long>, bitmap: Bitmap?) = withContext(Dispatchers.IO) {
         val db = holder.db()
-        for (id in messageIds) {
-            val row = db.messageDao().get(id) ?: continue
-            if (row.mediaState != MediaState.PENDING.name) continue
-            parallelism.withPermit {
-                val state = when {
-                    row.mediaUri != null -> copyUri(id, Uri.parse(row.mediaUri), row.mediaMimeType)
-                    bitmap != null -> copyBitmap(id, bitmap)
-                    else -> MediaState.FAILED to null
+        coroutineScope {
+            messageIds.map { id ->
+                async {
+                    val row = db.messageDao().get(id) ?: return@async
+                    if (row.mediaState != MediaState.PENDING.name) return@async
+                    parallelism.withPermit {
+                        val state = when {
+                            row.mediaUri != null -> copyUri(id, Uri.parse(row.mediaUri), row.mediaMimeType)
+                            bitmap != null -> copyBitmap(id, bitmap)
+                            else -> MediaState.FAILED to null
+                        }
+                        db.messageDao().setMedia(id, state.first.name, state.second)
+                    }
                 }
-                db.messageDao().setMedia(id, state.first.name, state.second)
-            }
+            }.awaitAll()
         }
     }
 

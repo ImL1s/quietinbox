@@ -246,7 +246,7 @@
     <string name="backup_export">Export encrypted backup</string>
     <string name="backup_export_desc">Streams an encrypted file to a location you choose. If you pick a cloud folder, the ciphertext leaves this device.</string>
     <string name="backup_import">Restore from backup</string>
-    <string name="backup_import_desc">Merges a backup into this vault after verifying every block. This can bring back content you deleted earlier.</string>
+    <string name="backup_import_desc">Merges a backup into this vault after verifying every block. This can bring back content you deleted earlier. Restored sources come back disabled; re-enable them in Capture.</string>
     <string name="backup_import_key_prompt">Enter the recovery key of the device that made the backup</string>
     <string name="backup_result_ok">Done: %1$d conversations, %2$d messages, %3$d media items.</string>
     <string name="backup_failed_no_key">No recovery key available.</string>
@@ -273,6 +273,17 @@
     <string name="about_licenses">Open-source licences</string>
     <string name="about_licenses_body">QuietInbox is licensed under GPL-3.0-or-later. Third-party components: AndroidX (Apache-2.0), Kotlin (Apache-2.0), Dagger/Hilt (Apache-2.0), SQLCipher for Android (BSD), Tink (Apache-2.0), kotlinx libraries (Apache-2.0).</string>
     <string name="about_source">Source code and issues: github.com/quietinbox (placeholder until the repository is published)</string>
+
+    <!-- Developer (debug builds only) -->
+    <string name="section_developer">Developer</string>
+    <string name="dev_seed_demo">Fill with demo data</string>
+    <string name="dev_seed_demo_desc">Replaces any previous demo content with invented conversations, so the app can be shown and screenshotted without a real notification. Debug builds only.</string>
+    <string name="dev_clear_demo">Remove demo data</string>
+    <string name="dev_clear_demo_desc">Deletes every demo row. Captured copies are left untouched.</string>
+    <string name="dev_run">Run</string>
+    <string name="dev_result_seeded">Demo data written: %1$d conversations, %2$d messages.</string>
+    <string name="dev_result_cleared">Demo data removed.</string>
+    <string name="dev_result_failed">Demo action failed (%1$s).</string>
 
     <!-- Onboarding -->
     <string name="ob_step_of">Step %1$d of %2$d</string>

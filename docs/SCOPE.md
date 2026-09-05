@@ -18,7 +18,7 @@ records what the repository **actually delivers today** and what it does **not**
 | Journal-first commit, commit fence on revoke | Done | `IngestRepository.commit`, `CaptureCoordinator.process` generation check |
 | Inbox / conversation UI with quality labels | Done | Device screenshots |
 | Search (CJK bigram + Latin trigram, parameterised, paged) | Done | Instrumented test covers 開會 / hel; UI on device |
-| Activity statistics (observed-only) | Done | 4 JVM tests in `core:analytics`; UI on device |
+| Activity statistics (observed-only) | Done | 32 JVM tests in `core:analytics`; UI on device |
 | Capture health page with gaps and diagnostics | Done | UI on device |
 | Retention TTL worker | Done (not soak-tested) | `RetentionWorker`, 12h periodic |
 | Media copy (content:// + notification bitmap, encrypted) | Implemented, **not device-verified** | `MediaCopier`; no test yet exercises a real content URI |
@@ -42,7 +42,7 @@ records what the repository **actually delivers today** and what it does **not**
 
 ## Review round 1 (2026-09-06): findings fixed before the first push
 
-Four independent reviewers (Gemini 3.8 Flash high via agy, a Claude subagent, Claude Fable 5; Codex and Kimi were blocked by usage limits — see `.omc/research/`) returned REQUEST CHANGES. Every Critical and Important finding was fixed and covered where a unit test could express it:
+Four independent reviewers (Gemini 3.8 Flash high via agy, a Claude subagent, Claude Fable 5; Codex and Kimi were blocked by usage limits — see `docs/reviews/`) returned REQUEST CHANGES. Every Critical and Important finding was fixed and covered where a unit test could express it:
 
 - `DatabaseHolder.db()` no longer hangs when the vault ends up Locked while a caller waits.
 - Deletion suppression is keyed by scope + identity (DB v2, explicit migration), so deleting a whole conversation survives active-notification replay.

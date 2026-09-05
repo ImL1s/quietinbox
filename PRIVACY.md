@@ -1,3 +1,5 @@
+> 繁體中文：[docs/zh-Hant/PRIVACY.md](docs/zh-Hant/PRIVACY.md)
+
 # Privacy
 
 QuietInbox is designed so that your message copies never leave your device unless **you** move them.

@@ -1,3 +1,5 @@
+> 繁體中文：[docs/zh-Hant/ARCHITECTURE.md](zh-Hant/ARCHITECTURE.md)
+
 # Architecture
 
 ## Module graph
@@ -65,4 +67,6 @@ token) = n`, then every candidate is re-verified as a normalised substring in Ko
 Material 3 Expressive (`MaterialExpressiveTheme`, expressive motion scheme, large shapes) with a
 brand palette by default and optional dynamic colour. Navigation 3 back stack; on windows ≥ medium
 width a `NavigationRail` plus `ListDetailSceneStrategy` shows inbox and conversation side by side.
-Every quality state renders text + icon (colour is never the only signal).
+Every quality state renders text + icon (colour is never the only signal). The activity screen is
+five tabs (overview, rankings, best time, chattiness, quiet rate) over one shared period selector,
+each computed by pure functions in `core:analytics` and each labelled as observed messages only.
