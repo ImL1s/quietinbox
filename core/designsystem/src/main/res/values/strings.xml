@@ -48,7 +48,15 @@
     <string name="inbox_title">Inbox</string>
     <string name="inbox_filter_all">All</string>
     <string name="inbox_filter_archived">Archived</string>
-    <string name="inbox_summary">%1$d recognisable messages saved, plus %2$d observations with uncertain identity.</string>
+    <plurals name="inbox_summary_saved">
+        <item quantity="one">%1$d recognisable message saved.</item>
+        <item quantity="other">%1$d recognisable messages saved.</item>
+    </plurals>
+    <plurals name="inbox_summary_uncertain">
+        <item quantity="one">Plus %1$d observation with uncertain identity.</item>
+        <item quantity="other">Plus %1$d observations with uncertain identity.</item>
+    </plurals>
+    <string name="inbox_summary_join">%1$s %2$s</string>
     <string name="inbox_summary_gap">Possible gap %1$s – %2$s; missing count unknown.</string>
     <string name="inbox_summary_gap_unknown">A gap of unknown length may exist; missing count unknown.</string>
     <string name="inbox_empty_title">Nothing captured yet</string>
@@ -153,7 +161,7 @@
     <string name="state_paused">Paused</string>
     <string name="state_reconnecting">Reconnecting</string>
     <string name="state_degraded">Degraded</string>
-    <string name="health_since">since %1$s</string>
+    <string name="health_connected_body_since">Connected since %1$s, but that does not guarantee the source posts a notification for every message.</string>
     <string name="health_connected_body">Connected does not guarantee the source posts a notification for every message.</string>
     <string name="health_not_granted_body">Grant notification access in system settings. QuietInbox reads notification copies only; it never acts on them.</string>
     <string name="health_grant">Grant access</string>

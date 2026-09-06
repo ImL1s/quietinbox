@@ -48,7 +48,13 @@
     <string name="inbox_title">收件箱</string>
     <string name="inbox_filter_all">全部</string>
     <string name="inbox_filter_archived">已归档</string>
-    <string name="inbox_summary">已保存 %1$d 条可识别的消息，另有 %2$d 条身份不明的观测。</string>
+    <plurals name="inbox_summary_saved">
+        <item quantity="other">已保存 %1$d 条可识别的消息。</item>
+    </plurals>
+    <plurals name="inbox_summary_uncertain">
+        <item quantity="other">另有 %1$d 条身份不明的观测。</item>
+    </plurals>
+    <string name="inbox_summary_join">%1$s%2$s</string>
     <string name="inbox_summary_gap">%1$s 至 %2$s 可能有中断；缺失消息数未知。</string>
     <string name="inbox_summary_gap_unknown">可能存在时长不明的中断；缺失消息数未知。</string>
     <string name="inbox_empty_title">还没有任何副本</string>
@@ -153,7 +159,7 @@
     <string name="state_paused">已暂停</string>
     <string name="state_reconnecting">正在重新连接</string>
     <string name="state_degraded">已降级</string>
-    <string name="health_since">自 %1$s 起</string>
+    <string name="health_connected_body_since">自 %1$s 起连接，但已连接不代表来源应用的每条消息都会发出通知。</string>
     <string name="health_connected_body">已连接不代表来源应用的每条消息都会发出通知。</string>
     <string name="health_not_granted_body">请到系统设置中授予通知使用权。QuietInbox 只读取通知副本，绝不代你操作通知。</string>
     <string name="health_grant">前往授权</string>

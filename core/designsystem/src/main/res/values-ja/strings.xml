@@ -48,7 +48,13 @@
     <string name="inbox_title">受信箱</string>
     <string name="inbox_filter_all">すべて</string>
     <string name="inbox_filter_archived">アーカイブ済み</string>
-    <string name="inbox_summary">識別できたメッセージを %1$d 件保存しました。送信者が不確かな観測が %2$d 件あります。</string>
+    <plurals name="inbox_summary_saved">
+        <item quantity="other">識別できたメッセージを %1$d 件保存しました。</item>
+    </plurals>
+    <plurals name="inbox_summary_uncertain">
+        <item quantity="other">送信者が不確かな観測が %1$d 件あります。</item>
+    </plurals>
+    <string name="inbox_summary_join">%1$s%2$s</string>
     <string name="inbox_summary_gap">%1$s – %2$s に欠落の可能性があります。欠落した件数は不明です。</string>
     <string name="inbox_summary_gap_unknown">長さ不明の欠落がある可能性があります。欠落した件数は不明です。</string>
     <string name="inbox_empty_title">まだ何もキャプチャされていません</string>
@@ -153,7 +159,7 @@
     <string name="state_paused">一時停止中</string>
     <string name="state_reconnecting">再接続中</string>
     <string name="state_degraded">一部制限</string>
-    <string name="health_since">%1$s から</string>
+    <string name="health_connected_body_since">%1$s から接続していますが、送信元がすべてのメッセージに通知を出すとは限りません。</string>
     <string name="health_connected_body">接続済みでも、送信元がすべてのメッセージに通知を出すとは限りません。</string>
     <string name="health_not_granted_body">システム設定で通知へのアクセスを許可してください。QuietInbox は通知のコピーを読み取るだけで、通知を操作することはありません。</string>
     <string name="health_grant">アクセスを許可</string>

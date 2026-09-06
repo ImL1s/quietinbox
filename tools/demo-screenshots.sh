@@ -50,6 +50,9 @@ case "$LOCALE" in
   *)     DEMO_PINNED_TITLE="林小美 Mia Lin" ;;
 esac
 WORK_DIR="$(mktemp -d)"
+# Narrow until the device says otherwise (screen_dp_width, in the run section). Declared here because
+# tap_tab reads it and `set -u` would abort on a forward reference if a call ever moved earlier.
+LAYOUT="narrow"
 
 log() { printf '• %s\n' "$*" >&2; }
 warn() { printf '! %s\n' "$*" >&2; }
@@ -126,10 +129,48 @@ def main():
                 box = bounds(node)
                 if not box:
                     continue
-                in_bottom_bar = box[1] >= int(height * 0.85)
-                in_left_rail = layout == "wide" and box[2] <= int(width * 0.15)
+                in_bottom_bar = layout == "narrow" and box[1] >= int(height * 0.85)
+                # Both edges inside the strip, not just the right one: a two-character CJK heading in
+                # the content pane of a 2076px-wide tablet can end at ~300px, and 15% is 311px. The
+                # rail itself is 80dp wide by default — if this ever moves to the Expressive
+                # WideNavigationRail (up to 220dp expanded), widen the strip with it.
+                in_left_rail = layout == "wide" and box[0] <= int(width * 0.15) and box[2] <= int(width * 0.15)
                 if in_bottom_bar or in_left_rail:
                     print("%d %d" % centre(box))
+                    return 0
+        return 1
+
+    if command == "tab-selected":
+        # The navigation item carrying one of these labels is the selected one. Compose puts
+        # selected=true on the item container (Modifier.selectable(role = Role.Tab)), not on the text
+        # node, so the label's centre has to fall inside a node that is marked selected. Without this
+        # a tap that was swallowed — a busy frame, a stale coordinate after a relayout — leaves the
+        # previous page on screen and the capture proceeds against the wrong screen.
+        layout = sys.argv[2]
+        wanted = set(sys.argv[3:])
+        width = height = 0
+        for node in nodes(tree):
+            box = bounds(node)
+            if box:
+                width = max(width, box[2])
+                height = max(height, box[3])
+        selected = [bounds(n) for n in nodes(tree) if n.get("selected") == "true"]
+        selected = [b for b in selected if b]
+        for node in nodes(tree):
+            text = (node.get("text") or "").strip()
+            description = (node.get("content-desc") or "").strip()
+            if text not in wanted and description not in wanted:
+                continue
+            box = bounds(node)
+            if not box:
+                continue
+            in_bottom_bar = layout == "narrow" and box[1] >= int(height * 0.85)
+            in_left_rail = layout == "wide" and box[0] <= int(width * 0.15) and box[2] <= int(width * 0.15)
+            if not (in_bottom_bar or in_left_rail):
+                continue
+            x, y = centre(box)
+            for left, top, right, bottom in selected:
+                if left <= x <= right and top <= y <= bottom:
                     return 0
         return 1
 
@@ -271,10 +312,20 @@ ime_shown() {
 
 
 dump_ui() {
-  # uiautomator writes to the device, so the dump has to be pulled back before parsing.
-  shell uiautomator dump /sdcard/quietinbox-ui.xml >/dev/null 2>&1 || return 1
-  device pull /sdcard/quietinbox-ui.xml "$WORK_DIR/ui.xml" >/dev/null 2>&1 || return 1
-  [ -s "$WORK_DIR/ui.xml" ]
+  # uiautomator writes to the device, so the dump has to be pulled back before parsing. It refuses
+  # while the window is not idle, and every screenshot now depends on a dump, so one retry keeps a
+  # busy frame from failing a run that would have succeeded a second later.
+  local attempt
+  for attempt in 1 2 3; do
+    rm -f "$WORK_DIR/ui.xml"
+    if shell uiautomator dump /sdcard/quietinbox-ui.xml >/dev/null 2>&1 &&
+       device pull /sdcard/quietinbox-ui.xml "$WORK_DIR/ui.xml" >/dev/null 2>&1 &&
+       [ -s "$WORK_DIR/ui.xml" ]; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
 }
 
 # tap_text "Label A" "標籤 B" — taps the first node whose text or description matches exactly.
@@ -290,7 +341,10 @@ tap_text() {
   return 0
 }
 
-# tap_tab "Label" — taps a navigation item (bottom bar or rail) by its label, ignoring look-alikes.
+# tap_tab "Label" — taps a navigation item (bottom bar or rail) by its label, ignoring look-alikes,
+# and confirms afterwards that this item is the selected one. Tapping and hoping is exactly how a
+# whole tablet set of screenshots came to be of the wrong screen: the tap did nothing, nothing said
+# so, and the capture went ahead. A tap that does not take fails the run.
 tap_tab() {
   dump_ui || return 1
   local point
@@ -299,8 +353,13 @@ tap_tab() {
   fi
   # shellcheck disable=SC2086
   shell input tap $point
-  sleep 1
-  return 0
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    sleep 1
+    dump_ui || continue
+    python3 "$HELPER" tab-selected "$LAYOUT" "$@" < "$WORK_DIR/ui.xml" && return 0
+  done
+  return 1
 }
 
 # assert_locale_clock — a CJK locale must not show an English AM/PM time or "Sep 3" date in the app's
@@ -425,6 +484,9 @@ device get-state >/dev/null 2>&1 || die "device $SERIAL is not available (adb de
 # conversation replaces the inbox; at or above it the navigation is a left rail and the conversation
 # opens beside the inbox (`ListDetailSceneStrategy`). Everything that depends on where the navigation
 # sits, or on whether the inbox stays on screen, reads this.
+# Reads the physical display, so it assumes the device is upright and the app has the whole screen:
+# a landscape phone or a split-window run would be judged narrow. A wrong judgement makes the tab
+# taps fail loudly (tap_tab dies) rather than produce a wrong screenshot.
 screen_dp_width() {
   local size density px
   size="$(shell wm size | tr -d '\r' | awk -F': *' '{print $2}' | tail -1)"
@@ -433,7 +495,6 @@ screen_dp_width() {
   [ -n "$px" ] && [ -n "$density" ] && [ "$density" -gt 0 ] 2>/dev/null || return 1
   echo $(( px * 160 / density ))
 }
-LAYOUT="narrow"
 if DP_WIDTH="$(screen_dp_width)"; then
   [ "$DP_WIDTH" -ge 600 ] && LAYOUT="wide"
   log "window width ${DP_WIDTH}dp -> $LAYOUT layout ($([ "$LAYOUT" = wide ] && echo 'navigation rail, list-detail' || echo 'bottom bar'))"
@@ -597,7 +658,7 @@ shot "6_settings"
 
 # 7 — inbox in dark mode
 tap_tab "$NAV_INBOX" || die "could not reach the inbox tab — the navigation container was not found in the dump"
-shell cmd uimode night yes >/dev/null 2>&1 || warn "could not switch the device to night mode"
+shell cmd uimode night yes >/dev/null 2>&1 || die "could not switch the device to night mode — 7_inbox_dark would be the light inbox"
 sleep 3
 shot "7_inbox_dark"
 shell cmd uimode night no >/dev/null 2>&1 || true

@@ -17,7 +17,8 @@
 
 ## 工作流程
 1. Fork 並從 `main` 開分支。
-2. `./gradlew :core:model:test :core:parser:test :core:identity:test :core:reconcile:test :core:analytics:test :parsers:apps:test`
+2. `./gradlew test`——或 CI 實際跑的那一組：
+   `./gradlew :core:model:test :core:parser:test :core:identity:test :core:reconcile:test :core:analytics:test :parsers:apps:test :platform:crypto:testDebugUnitTest :platform:storage:testDebugUnitTest :platform:backup:testDebugUnitTest :platform:capture:testDebugUnitTest :feature:analytics:testDebugUnitTest :feature:search:testDebugUnitTest :feature:conversation:testDebugUnitTest :app:testDebugUnitTest`
 3. `./gradlew :app:assembleDebug && tools/check-permissions.sh app/build/outputs/apk/debug/app-debug.apk`
 4. 儲存、加密或備份相關的變更：在裝置上執行 CI 會跑的那三套
    `./gradlew :platform:storage:connectedDebugAndroidTest :platform:crypto:connectedDebugAndroidTest :platform:backup:connectedDebugAndroidTest`。

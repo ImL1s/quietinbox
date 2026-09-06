@@ -4,7 +4,22 @@ All notable changes to this project are documented here. The format follows Keep
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.3] — 2026-09-06
+
+`versionCode` 7. Two user-visible string defects that the store screenshots had baked in, and the
+screenshot harness that let a whole tablet set of the wrong screens reach Google Play.
+
 ### Fixed
+- The inbox summary counted in the plural regardless of the count: with one uncertain observation the
+  English inbox read "plus **1 observations** with uncertain identity", and one saved message would have
+  read "1 recognisable **messages** saved". It is now two `plurals` resources in all five catalogues, and
+  the sentence about uncertain identity is left out entirely when there is none of it rather than saying
+  "plus 0 observations".
+- The capture-health page glued a sentence to a fragment: "Connected does not guarantee the source posts
+  a notification for every message. **since** 11:18 PM" in English, and the same with a stray space in
+  Chinese. Each language now has one sentence with the timestamp in it.
 - **Ten of the fourteen tablet store screenshots were not QuietInbox.** `docs/screenshots/tablet/` and the
   `tenInchScreenshots` uploaded to Google Play for en-US and zh-TW held the launcher home screen and the
   system Settings app instead of the app: only `1_inbox` and `2_conversation` were genuine, and the zh-TW
@@ -19,6 +34,13 @@ All notable changes to this project are documented here. The format follows Keep
 - **Every screenshot is now gated on QuietInbox being the app on screen** (`app-foreground`: at least one
   node of `dev.quietinbox.app.debug` in the UI dump), and a navigation tap that finds no target fails the
   run instead of warning and carrying on. Those two guards are what the earlier tablet set was missing.
+- Round-26 review fixes (`docs/reviews/2026-09-06-round26/`): a tab tap is confirmed rather than assumed —
+  after tapping, the harness re-reads the screen and requires the tapped item to be the selected one, so a
+  swallowed tap fails the run instead of capturing the previous page; the bottom-bar rule is gated on the
+  narrow layout the way the rail rule is gated on the wide one, and the rail strip now bounds both edges
+  of a candidate (a two-character CJK heading in a tablet content pane ends near the 15% line); a failure
+  to switch the device into night mode fails the run rather than producing a light `7_inbox_dark`; the UI
+  dump retries, since every screenshot now depends on one; and `LAYOUT` is declared with the other globals.
 
 ### Changed
 - Documentation fixes found by a full en/zh-Hant parity audit: `docs/SCOPE.md` (both languages) had four

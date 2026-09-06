@@ -48,7 +48,13 @@
     <string name="inbox_title">받은편지함</string>
     <string name="inbox_filter_all">전체</string>
     <string name="inbox_filter_archived">보관처리됨</string>
-    <string name="inbox_summary">식별 가능한 메시지 %1$d개를 저장했고, 발신자가 불확실한 관측 %2$d건이 있습니다.</string>
+    <plurals name="inbox_summary_saved">
+        <item quantity="other">식별 가능한 메시지 %1$d개를 저장했습니다.</item>
+    </plurals>
+    <plurals name="inbox_summary_uncertain">
+        <item quantity="other">발신자가 불확실한 관측이 %1$d건 있습니다.</item>
+    </plurals>
+    <string name="inbox_summary_join">%1$s %2$s</string>
     <string name="inbox_summary_gap">%1$s – %2$s 사이에 누락이 있을 수 있습니다. 누락된 개수는 알 수 없습니다.</string>
     <string name="inbox_summary_gap_unknown">길이를 알 수 없는 누락이 있을 수 있습니다. 누락된 개수는 알 수 없습니다.</string>
     <string name="inbox_empty_title">아직 캡처된 내용이 없습니다</string>
@@ -153,7 +159,7 @@
     <string name="state_paused">일시중지됨</string>
     <string name="state_reconnecting">다시 연결 중</string>
     <string name="state_degraded">저하됨</string>
-    <string name="health_since">%1$s부터</string>
+    <string name="health_connected_body_since">%1$s부터 연결되어 있지만, 소스 앱이 모든 메시지에 알림을 보낸다는 보장은 없습니다.</string>
     <string name="health_connected_body">연결되었다고 해서 소스 앱이 모든 메시지에 알림을 보낸다는 보장은 없습니다.</string>
     <string name="health_not_granted_body">시스템 설정에서 알림 액세스를 허용하세요. QuietInbox는 알림 사본을 읽기만 하며 알림을 조작하지 않습니다.</string>
     <string name="health_grant">액세스 허용</string>

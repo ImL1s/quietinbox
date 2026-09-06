@@ -129,10 +129,13 @@ notifications into the debug vault. Use an emulator for screenshots. On foldable
 ## Audit trail
 
 The 2026-09-06 audit findings are GitHub issues #1–#17 (labels P0/P1/P2/audit); #17 (real-source
-fixtures) stays open because it needs real devices and accounts. Every fix cites its issue and its
-review round (`docs/reviews/2026-09-06-round{10,…,25}/`; rounds 13–17 re-reviewed each fix commit until
-both reviewers approved with no finding; rounds 18–23 reviewed the localisation until both approved
-with no finding). ADR-0007 records the design.
+fixtures) stays open because it needs real devices and accounts. A second GPT-5.5 Pro re-review on
+2026-09-07 was triaged item by item against the code — most of what it asked for was already there —
+and the confirmed gaps are issues #22–#27 (label `audit-2`, one per area). Every fix cites its issue
+and its review round (`docs/reviews/2026-09-06-round{10,…,27}/`; rounds 13–17 re-reviewed each fix
+commit until both reviewers approved with no finding; rounds 18–23 reviewed the localisation until
+both approved with no finding; rounds 26–27 the tablet screenshot blocker and 0.1.3). ADR-0007
+records the design.
 
 ## Review gate before a push
 

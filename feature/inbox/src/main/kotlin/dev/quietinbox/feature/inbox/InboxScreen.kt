@@ -216,7 +216,20 @@ fun InboxScreen(
 
 @Composable
 private fun summaryLine(state: InboxUiState): String {
-    val base = stringResource(R.string.inbox_summary, state.counts.messages - state.counts.ambiguous, state.counts.ambiguous)
+    // Two plurals, not one string with two counts: English needs "1 message" and "1 observation"
+    // singular, and the sentence about uncertain identity is dropped entirely when there is none of it
+    // rather than read "plus 0 observations".
+    val saved = state.counts.messages - state.counts.ambiguous
+    val savedText = pluralStringResource(R.plurals.inbox_summary_saved, saved, saved)
+    val base = if (state.counts.ambiguous == 0) {
+        savedText
+    } else {
+        stringResource(
+            R.string.inbox_summary_join,
+            savedText,
+            pluralStringResource(R.plurals.inbox_summary_uncertain, state.counts.ambiguous, state.counts.ambiguous),
+        )
+    }
     val gap = state.latestGap ?: return base
     val gapText = if (gap.startEpochMs != null) {
         stringResource(

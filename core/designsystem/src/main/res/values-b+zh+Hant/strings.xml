@@ -48,7 +48,13 @@
     <string name="inbox_title">收件匣</string>
     <string name="inbox_filter_all">全部</string>
     <string name="inbox_filter_archived">已封存</string>
-    <string name="inbox_summary">已保存 %1$d 則可辨識通知訊息，另有 %2$d 筆身分不明觀測。</string>
+    <plurals name="inbox_summary_saved">
+        <item quantity="other">已保存 %1$d 則可辨識通知訊息。</item>
+    </plurals>
+    <plurals name="inbox_summary_uncertain">
+        <item quantity="other">另有 %1$d 筆身分不明觀測。</item>
+    </plurals>
+    <string name="inbox_summary_join">%1$s%2$s</string>
     <string name="inbox_summary_gap">%1$s 至 %2$s 可能中斷；缺失訊息數未知。</string>
     <string name="inbox_summary_gap_unknown">可能存在時間不明的中斷；缺失訊息數未知。</string>
     <string name="inbox_empty_title">還沒有任何副本</string>
@@ -153,7 +159,7 @@
     <string name="state_paused">已暫停</string>
     <string name="state_reconnecting">重新連線中</string>
     <string name="state_degraded">降級中</string>
-    <string name="health_since">自 %1$s 起</string>
+    <string name="health_connected_body_since">自 %1$s 起連線，但已連線不代表來源 App 每則訊息都會發通知。</string>
     <string name="health_connected_body">已連線不代表來源 App 每則訊息都會發通知。</string>
     <string name="health_not_granted_body">請到系統設定授權通知存取。QuietInbox 只讀取通知副本，絕不代你操作通知。</string>
     <string name="health_grant">前往授權</string>

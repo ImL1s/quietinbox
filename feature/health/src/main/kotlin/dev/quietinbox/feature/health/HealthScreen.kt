@@ -327,10 +327,11 @@ private fun HeroCard(state: HealthUiState, onGrant: () -> Unit, onPause: (Boolea
         else -> Icons.Outlined.Sync
     }
     val body = when (ls) {
-        ListenerState.CONNECTED -> buildString {
-            append(stringResource(R.string.health_connected_body))
-            state.capture.connectedSinceEpochMs?.let { append(' ').append(stringResource(R.string.health_since, TimeFormat.time(it, locale = currentLocale()))) }
-        }
+        // One sentence per locale rather than a body plus an appended fragment: the concatenation
+        // produced "…for every message. since 11:18 PM" in English and a stray space in Chinese.
+        ListenerState.CONNECTED -> state.capture.connectedSinceEpochMs?.let {
+            stringResource(R.string.health_connected_body_since, TimeFormat.time(it, locale = currentLocale()))
+        } ?: stringResource(R.string.health_connected_body)
         ListenerState.NOT_GRANTED -> stringResource(R.string.health_not_granted_body)
         ListenerState.DEGRADED -> if (state.vaultFailure != null) stringResource(R.string.health_vault_locked) else stringResource(R.string.gap_reason_overflow)
         else -> state.capture.lastEventAtEpochMs?.let { stringResource(R.string.health_last_event, relativeTime(it)) } ?: ""
