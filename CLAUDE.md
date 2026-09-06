@@ -107,7 +107,8 @@ Use the project's own AVDs (`QuietInbox_Phone`, `Foldable_Test`); never a phone 
 
 `docs/RELEASE.md`: tag `vX.Y.Z` → `release.yml` builds the signed APK/AAB, runs the permission gate,
 publishes the GitHub release; Google Play uploads (internal or production) are a deliberate
-`workflow_dispatch`, never a side effect of a tag. After touching dependencies, regenerate
+`workflow_dispatch` (bundle + what's-new) or one `gplay` edit from the CI artifact (bundle, listings,
+screenshots, release notes; recipe in `docs/RELEASE.md`), never a side effect of a tag. After touching dependencies, regenerate
 `gradle/verification-metadata.xml` from a cold `GRADLE_USER_HOME` (recipe in `docs/RELEASE.md`);
 CI fails on any unlisted artifact. Play edition is paid, GitHub edition free, same binary (ADR-0006). Never add
 Play Billing / Play Services / any SDK that merges `INTERNET`.

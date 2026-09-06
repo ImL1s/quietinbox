@@ -18,7 +18,7 @@ The two installs cannot update over each other because Play re-signs the store c
   `keystore.properties` (gitignored) points the Gradle `release` signing config at it.
 - GitHub Actions secrets: `QUIETINBOX_KEYSTORE_BASE64`, `QUIETINBOX_KEYSTORE_PASSWORD`,
   `QUIETINBOX_KEY_ALIAS`, `QUIETINBOX_KEY_PASSWORD`, `PLAY_SERVICE_ACCOUNT_JSON`.
-- Play Console app created (paid), listing texts and graphics live in `fastlane/metadata/android/` (en-US, zh-TW, zh-CN, ja-JP, ko-KR). The release workflow uploads only the what's-new texts; a new listing language is added once in the Play Console (Store presence → Main store listing → Manage translations) from those files.
+- Play Console app created (paid), listing texts and graphics live in `fastlane/metadata/android/` (en-US, zh-TW, zh-CN, ja-JP, ko-KR). The release workflow uploads only the what's-new texts; listing texts and images are synced from those files with `gplay` (step 5), which also creates a new listing language.
 - Privacy policy: <https://iml1s.github.io/quietinbox-privacy.html>.
 
 ## Cutting a release
@@ -32,10 +32,14 @@ The two installs cannot update over each other because Play re-signs the store c
 4. `git tag vX.Y.Z && git push --tags`. The workflow builds, gates and publishes the GitHub release
    with `SHA256SUMS.txt`. It does not touch Google Play.
 5. Google Play (deliberate): *Actions → Release → Run workflow* with the tag and `track=internal`
-   or `track=production`; or locally `gplay release --package dev.quietinbox.app --track internal --bundle app/build/outputs/bundle/release/app-release.aab --release-notes @fastlane/release-notes.json`
-   followed by `gplay promote --package dev.quietinbox.app --from internal --to production`.
-   The Play copy and the GitHub copy are built from the same tag with the same key; the bytes can
-   differ between the CI runner and a maintainer machine (no reproducible-build comparison yet).
+   or `track=production` (bundle + what's-new only); or, as done for 0.1.2, one `gplay` edit from a
+   maintainer machine with the CI-built AAB (`gh run download <release run> -n release-<version>`):
+   `edits create` → `bundles upload --file dist/quietinbox-<version>.aab` → `sync import-listings --dir fastlane/metadata/android`
+   → `images plan --dir fastlane/metadata/android` (and `images delete-all --type phoneScreenshots --confirm` for a locale whose
+   screenshots are being replaced: Play keeps at most 8) → `images sync --dir fastlane/metadata/android` →
+   `tracks update --track production --releases @releases.json` (`status: completed`, `versionCodes`, `releaseNotes` = `fastlane/release-notes.json`)
+   → `edits validate` → `edits commit`. Uploading the CI artifact keeps the Play copy and the GitHub copy byte-identical;
+   a locally built AAB is signed with the same key but may differ in bytes (no reproducible-build comparison yet).
 
 ## Screenshots
 

@@ -18,7 +18,7 @@ Play 會重新簽章商店版本，所以兩種安裝無法互相更新；使用
   `keystore.properties`（已 gitignore）讓 Gradle 的 `release` signing config 指向它。
 - GitHub Actions secrets：`QUIETINBOX_KEYSTORE_BASE64`、`QUIETINBOX_KEYSTORE_PASSWORD`、
   `QUIETINBOX_KEY_ALIAS`、`QUIETINBOX_KEY_PASSWORD`、`PLAY_SERVICE_ACCOUNT_JSON`。
-- Play Console 已建立付費 App；商店文案與圖片放在 `fastlane/metadata/android/`。
+- Play Console 已建立付費 App；商店文案與圖片放在 `fastlane/metadata/android/`（en-US、zh-TW、zh-CN、ja-JP、ko-KR）。release workflow 只上傳 what's-new；商店文案與圖片用 `gplay` 從這些檔案同步（步驟 5），新的商店語言也是這樣建立。
 - 隱私權政策：<https://iml1s.github.io/quietinbox-privacy.html>。
 
 ## 發布一個版本
@@ -30,10 +30,11 @@ Play 會重新簽章商店版本，所以兩種安裝無法互相更新；使用
 3. 獨立審查（名單見 `docs/reviews/README.md`）；修正；再審。
 4. `git tag vX.Y.Z && git push --tags`。workflow 會建置、跑權限閘門、發布附 `SHA256SUMS.txt` 的 GitHub release；
    它不會碰 Google Play。
-5. Google Play（刻意觸發）：*Actions → Release → Run workflow* 指定 tag 與 `track=internal` 或 `track=production`；或在本機
-   `gplay release --package dev.quietinbox.app --track internal --bundle app/build/outputs/bundle/release/app-release.aab --release-notes @fastlane/release-notes.json`
-   再 `gplay promote --package dev.quietinbox.app --from internal --to production`。
-   Play 與 GitHub 的版本來自同一個 tag、同一把金鑰；CI 與維護者機器建出的位元組可能不同（尚無可重現建置比對）。
+5. Google Play（刻意觸發）：*Actions → Release → Run workflow* 指定 tag 與 `track=internal` 或 `track=production`（只上傳 bundle 與 what's-new）；或像 0.1.2 那樣，在維護者機器用 CI 建好的 AAB（`gh run download <release run> -n release-<version>`）走一個 `gplay` edit：
+   `edits create` → `bundles upload --file dist/quietinbox-<version>.aab` → `sync import-listings --dir fastlane/metadata/android`
+   → `images plan --dir fastlane/metadata/android`（要換掉某語系的截圖時先 `images delete-all --type phoneScreenshots --confirm`：Play 最多留 8 張）→ `images sync --dir fastlane/metadata/android`
+   → `tracks update --track production --releases @releases.json`（`status: completed`、`versionCodes`、`releaseNotes` = `fastlane/release-notes.json`）→ `edits validate` → `edits commit`。
+   上傳 CI 產物可讓 Play 與 GitHub 的副本位元組相同；本機建的 AAB 用同一把金鑰簽章，但位元組可能不同（尚無可重現建置比對）。
 
 ## 截圖
 
