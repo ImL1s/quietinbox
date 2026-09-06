@@ -24,7 +24,7 @@
 
 | 管道 | 價格 | 說明 |
 | --- | --- | --- |
-| [Google Play](https://play.google.com/store/apps/details?id=dev.quietinbox.app)（審核中） | 付費（一次性） | 自動更新、支持開發；功能與開源版完全相同。0.1.2 已於 2026-09-06 送 Google 審查，通過前商店頁面會顯示找不到，請先用 GitHub 版 |
+| [Google Play](https://play.google.com/store/apps/details?id=dev.quietinbox.app) | 付費（一次性） | 自動更新、支持開發；功能與開源版完全相同。目前上架的是 0.1.0；0.1.2（審計修正、簡中／日／韓）已於 2026-09-06 送 Google 審查，通過後自動更新。要立刻拿到 0.1.2 請用 GitHub 版 |
 | [GitHub Releases](https://github.com/ImL1s/quietinbox/releases) | 免費（GPL-3.0-or-later） | 直接安裝 APK，附 SHA-256 |
 
 兩邊套件名相同但簽章不同（Play 由 Google Play App Signing 重新簽章），因此無法互相覆蓋安裝，請擇一使用。沒有訂閱、沒有內購、沒有廣告、沒有功能鎖，理由見 [ADR-0006](docs/adr/0006-distribution-and-monetisation.md)。
@@ -117,7 +117,7 @@ adb shell cmd notification post -S messaging -t "Alice" tag "hello from shell"
 
 | Channel | Price | Notes |
 | --- | --- | --- |
-| [Google Play](https://play.google.com/store/apps/details?id=dev.quietinbox.app) (under review) | paid, one-time | auto-updates and supports development; identical features. 0.1.2 was submitted to Google review on 2026-09-06; until it is approved the store page shows nothing, use the GitHub release meanwhile |
+| [Google Play](https://play.google.com/store/apps/details?id=dev.quietinbox.app) | paid, one-time | auto-updates and supports development; identical features. The store currently serves 0.1.0; 0.1.2 (audit fixes, Simplified Chinese / Japanese / Korean) was submitted to Google review on 2026-09-06 and rolls out once approved. For 0.1.2 today, use the GitHub release |
 | [GitHub Releases](https://github.com/ImL1s/quietinbox/releases) | free (GPL-3.0-or-later) | install the APK directly; SHA-256 checksums attached |
 
 Both use the same package name but different signatures (Play re-signs with Google Play App Signing), so one cannot update over the other: pick one. No subscription, no in-app purchases, no ads, no locked features; the reasoning is in [ADR-0006](docs/adr/0006-distribution-and-monetisation.md).
