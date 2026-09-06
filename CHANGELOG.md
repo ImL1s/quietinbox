@@ -8,7 +8,7 @@ Nothing yet.
 
 ## [0.1.2] — 2026-09-06
 
-`versionCode` 6. Three more UI languages and the review rounds 13–23 fixes on top of 0.1.1. Play users update from 0.1.0 straight to 0.1.2 (0.1.1 was released on GitHub only), so the store notes for `versionCode` 6 also carry the 0.1.1 audit fixes.
+`versionCode` 6. Three more UI languages and the review rounds 13–23 fixes on top of 0.1.1. 0.1.1 was a GitHub-only release, so the store notes for `versionCode` 6 also carry the 0.1.1 audit fixes in one clause.
 
 ### Added
 - Simplified Chinese (zh-Hans), Japanese (ja) and Korean (ko) localisations of every UI string and the listener label, an Android 13+ per-app language list (`locales_config.xml`), and Google Play listings, release notes and what's-new texts for zh-CN, ja-JP and ko-KR. `tools/check-strings.py` (run in CI) fails the build when any catalogue is missing a name, a placeholder or a plurals `other` item. The demo vault speaks the app's language too (`DemoLocalisation`: names, group titles and bodies in zh-Hans / ja / ko), so the store screenshots for the new languages read naturally. `localeFilters` also keeps the AndroidX `zh-rCN` / `zh-rTW` / `zh-rHK` resources, so the material3 date and time pickers and content descriptions are Chinese for Chinese users (they were English in 0.1.0 and 0.1.1).

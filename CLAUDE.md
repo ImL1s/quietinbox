@@ -45,7 +45,7 @@ when the guard is removed.
 - `core/model` contracts and limits · `core/parser` StandardParser + registry · `parsers/apps` five
   app adapters (all `SYNTHETIC_ONLY`, no real-app fixtures) · `core/identity` · `core/reconcile`
   window alignment / dedup (plan §7.2; the six examples are literal tests) · `core/analytics` ·
-  `core/designsystem` theme, components, all strings (en + zh-Hant, parity checked) · `core/testing`.
+  `core/designsystem` theme, components, all strings (en, zh-Hant, zh-Hans, ja, ko; parity checked in CI) · `core/testing`.
 - `platform/capture` NotificationListenerService + `CaptureCoordinator` (bounded queue, generation
   commit fence, journal-first, replay) · `platform/storage` Room + SQLCipher, repositories, retention
   worker, settings · `platform/crypto` Keystore-wrapped key files (`Os.fsync`), recovery key codec ·
