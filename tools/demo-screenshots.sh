@@ -43,7 +43,7 @@ case "$LOCALE" in
   *)     DEMO_PINNED_TITLE="林小美 Mia Lin" ;;
 esac
 WORK_DIR="$(mktemp -d)"
-trap 'rm -rf "$WORK_DIR"' EXIT
+trap 'imes_on; rm -rf "$WORK_DIR"' EXIT
 
 log() { printf '• %s\n' "$*" >&2; }
 warn() { printf '! %s\n' "$*" >&2; }
@@ -160,6 +160,30 @@ def main():
 
 sys.exit(main())
 PYTHON
+
+# On Android 13+ the keyboard follows the app language, and a kana, hangul or pinyin layout composes
+# the injected key events instead of passing the Latin letters through (round-19 finding). The
+# default input method is disabled *before the app is launched* — once it has attached to a field,
+# neither disabling nor switching it stops the composition — and restored at the end, also on exit.
+# Android keeps at least one input method enabled, so this needs a second one (the AVD's voice
+# input is enough); with a single one the query may still be composed and the search shot is refused.
+IME_DEFAULT=""
+IME_DISABLED=0
+imes_off() {
+  IME_DEFAULT="$(shell settings get secure default_input_method | tr -d '\r')"
+  if [ -z "$IME_DEFAULT" ] || [ "$IME_DEFAULT" = "null" ]; then return 0; fi
+  if [ "$(shell ime list -s | tr -d '\r' | grep -c .)" -lt 2 ]; then
+    warn "only one input method is enabled; the search query may be composed by its layout"
+  fi
+  shell ime disable "$IME_DEFAULT" >/dev/null 2>&1 && IME_DISABLED=1 || warn "could not disable $IME_DEFAULT"
+}
+imes_on() {
+  if [ "${IME_DISABLED:-0}" = 1 ]; then
+    shell ime enable "$IME_DEFAULT" >/dev/null 2>&1 || true
+    shell ime set "$IME_DEFAULT" >/dev/null 2>&1 || true
+    IME_DISABLED=0
+  fi
+}
 
 dump_ui() {
   # uiautomator writes to the device, so the dump has to be pulled back before parsing.
@@ -306,6 +330,7 @@ shell cmd locale set-app-locales "$APP_ID" --user 0 --locales "$LOCALE" >/dev/nu
   warn "per-app locales need API 33+; the device language decides instead"
 
 shell cmd uimode night no >/dev/null 2>&1 || true
+imes_off
 log "launching $MAIN_ACTIVITY"
 shell am start -W -n "$MAIN_ACTIVITY" >/dev/null
 sleep 3
@@ -342,7 +367,13 @@ tap_tab "$NAV_SEARCH" || warn "could not reach the search tab"
 sleep 1
 tap_text "$SEARCH_HINT" || warn "could not focus the search field"
 shell input text "$SEARCH_QUERY"
-sleep 3
+sleep 2
+# Hide whatever input method is showing (with the keyboard off it is the voice panel) so the results
+# fill the frame; the query stays in the field.
+shell input keyevent KEYCODE_BACK
+sleep 2
+# The shot must show the query and its results, not what a keyboard layout made of the keystrokes.
+has_text "$SEARCH_QUERY" || die "the search field does not show \"$SEARCH_QUERY\" — an input method composed the keystrokes"
 shot "3_search"
 shell input keyevent KEYCODE_BACK
 sleep 1

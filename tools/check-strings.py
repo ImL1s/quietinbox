@@ -15,9 +15,9 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PLACEHOLDER = re.compile(r"%(\d+\$)?[sdf]|%%")
+PLACEHOLDER = re.compile(r"%(\d+\$)?[-#+ 0,(]*\d*(\.\d+)?[sdf]|%%")
 # values-ja, values-ko, values-zh-rTW, values-b+zh+Hant …; never values-night / values-v31 / values-sw600dp.
-LOCALE_DIR = re.compile(r"values-(b\+[A-Za-z0-9+]+|[a-z]{2,3}(-r[A-Z]{2})?)")
+LOCALE_DIR = re.compile(r"values-(?!(?:tv|car|desk|watch|vrheadset|night|land|port)$)(b\+[A-Za-z0-9+]+|[a-z]{2,3}(-r[A-Z]{2})?)")
 SHARED_OK = {"app_name", "backup_file_name", "analytics_share", "analytics_range_line", "analytics_emoji_title"}
 
 

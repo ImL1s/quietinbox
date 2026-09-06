@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   확장된 ‘활동’ 화면의 문구(탭, 기간, 히트맵, 시간대, 수다스러움, 조용한 날 비율, 자주 쓰는 말).
-  모든 라벨은 ‘관측된 메시지’만 설명합니다: 원본 앱이 알림에 담고 QuietInbox가 복사한 내용입니다.
+  모든 라벨은 ‘관측된 메시지’만 설명합니다: 소스 앱이 알림에 담고 QuietInbox가 복사한 내용입니다.
   답장, 읽음, 실제 메시지 총량을 주장해서는 안 됩니다. 키는 values/strings_analytics.xml과 일치해야 합니다.
 -->
 <resources>
@@ -64,7 +64,7 @@
     <string name="analytics_quiet_value">조용한 날 %1$d%%</string>
     <string name="analytics_quiet_days">%2$d일 중 %1$d일</string>
     <string name="analytics_quiet_streak">가장 긴 조용한 기간: %1$d일</string>
-    <string name="analytics_quiet_formula">선택한 기간 중 관측된 메시지가 없는 날수를 기간의 전체 날수(대화가 처음 나타나기 전의 날 포함)로 나눈 값입니다. 조용한 날은 원본 앱이 그날 알림을 게시하지 않았을 뿐일 수도 있습니다.</string>
+    <string name="analytics_quiet_formula">선택한 기간 중 관측된 메시지가 없는 날수를 기간의 전체 날수(대화가 처음 나타나기 전의 날 포함)로 나눈 값입니다. 조용한 날은 소스 앱이 그날 알림을 게시하지 않았을 뿐일 수도 있습니다.</string>
 
     <string name="analytics_catchphrase_title">자주 쓰는 말</string>
     <string name="analytics_catchphrase_note">관측된 메시지에서 발신자가 두 번 이상 반복한 문자열과 단어입니다. 내가 보낸 메시지는 검사하지 않습니다.</string>

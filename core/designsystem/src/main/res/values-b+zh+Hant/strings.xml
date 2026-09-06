@@ -75,7 +75,7 @@
     <string name="conv_empty">這個對話還沒有訊息。</string>
     <string name="conv_open_source">在來源 App 開啟</string>
     <string name="conv_open_source_title">要開啟來源 App 嗎？</string>
-    <string name="conv_open_source_body">QuietInbox 會啟動 %1$s。在那邊打開聊天室可能讓對方看到已讀；在這裡看副本則永遠不會。</string>
+    <string name="conv_open_source_body">QuietInbox 會啟動 %1$s。在那邊打開聊天室可能會在來源 App 中把訊息標為已讀；在這裡看副本則永遠不會。</string>
     <string name="conv_open_source_fallback">原始通知已不存在，會改為開啟該 App 首頁。</string>
     <string name="conv_open_source_unavailable">來源 App 未安裝。</string>
     <string name="conv_time_source">來源時間</string>
@@ -178,7 +178,7 @@
     <string name="health_adapter">adapter：%1$s</string>
     <string name="health_adapter_standard">通用解析器</string>
     <string name="health_gaps_title">可能中斷</string>
-    <string name="health_no_gaps">本次連線沒有記錄到中斷。</string>
+    <string name="health_no_gaps">本次執行期間沒有記錄到中斷。</string>
     <string name="health_gap_unknown_time">時間不明</string>
     <string name="health_gap_open">持續中</string>
     <string name="gap_reason_disconnected">監聽器斷線</string>
@@ -233,7 +233,7 @@
     <string name="media_copy_desc">只處理可讀的 content URI 與通知本身附帶的圖片，不會下載任何東西。</string>
     <string name="media_disclosure_title">關於媒體副本</string>
     <string name="media_disclosure_body">QuietInbox 沒有網路權限，但來源 App 的 content provider 在被讀取時可能自行抓取資料。副本會加密並限制大小。</string>
-    <string name="section_reminders">自己的提醒</string>
+    <string name="section_reminders">QuietInbox 的提醒</string>
     <string name="reminders_enable">每日提醒</string>
     <string name="reminders_desc">預設關閉。這只是提醒你回來看收件匣，絕不影響擷取，並尊重勿擾模式。</string>
     <string name="reminder_time">時間</string>
