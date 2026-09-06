@@ -65,10 +65,11 @@ jobs:
           # The R8 mapping goes with the binaries: without it Play Vitals and any stack trace a user
           # sends are obfuscated, and the mapping for a build cannot be reconstructed afterwards. The
           # plain file (~60 MB) stays in the workflow artifact for `gplay deobfuscation upload`; the
-          # release gets the gzip, which is a tenth of the size and expands to the same bytes.
+          # release gets the gzip, about a fourteenth of the size, which expands to the same bytes.
           cp app/build/outputs/mapping/release/mapping.txt "dist/quietinbox-$VERSION-mapping.txt"
           gzip -9 -k "dist/quietinbox-$VERSION-mapping.txt"
-          (cd dist && sha256sum quietinbox-*.apk quietinbox-*.aab quietinbox-*-mapping.txt quietinbox-*-mapping.txt.gz > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          (cd dist && { echo "# the .aab and the plain mapping.txt are in the workflow artifact, not the release"; \
+             sha256sum quietinbox-*.apk quietinbox-*.aab quietinbox-*-mapping.txt quietinbox-*-mapping.txt.gz; } > SHA256SUMS.txt && cat SHA256SUMS.txt)
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-${{ steps.meta.outputs.version }}

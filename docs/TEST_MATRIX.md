@@ -78,8 +78,8 @@ exists, and no source notification is ever read.
   the selected one (a node of the app, marked `selected`, inside the navigation strip and covering the
   label) — proving the app is on screen does not prove the right page is. **A dark shot must be dark**:
   failing to switch the device into night mode fails the run. The UI dump itself retries, since every
-  capture now depends on one. Without them the first tablet set captured the
-  launcher and the system settings, and the size floor passed them (a wallpaper compresses to 3.3 MB).
+  capture now depends on one. The first two are what the tablet set was missing. Without those two the first tablet set captured
+  the launcher and the system settings, and the size floor passed them (a wallpaper compresses to 3.3 MB).
   **Both layouts are supported**: the harness reads the window width in dp and taps the navigation rail
   at ≥ 600dp, the bottom bar below it; on a wide window the conversation counts as ready when the pinned
   title is on screen twice (the list row and the detail header, since the inbox stays beside it) and no

@@ -33,12 +33,13 @@ Play 會重新簽章商店版本，所以兩種安裝無法互相更新；使用
 5. Google Play（刻意觸發）：*Actions → Release → Run workflow* 指定 tag 與 `track=internal` 或 `track=production`（只上傳 bundle 與 what's-new）；或像 0.1.2 那樣，在維護者機器用 CI 建好的 AAB（`gh run download <release run> -n release-<version>`）走一個 `gplay` edit：
    `edits create` → `bundles upload --file dist/quietinbox-<version>.aab` → `sync import-listings --dir fastlane/metadata/android`
    → `images plan --dir fastlane/metadata/android`（要換掉某語系的截圖時先 `images delete-all --type phoneScreenshots --confirm`：Play 最多留 8 張）→ `images sync --dir fastlane/metadata/android`
-   → `tracks update --track production --releases @releases.json`（`status: completed`、`versionCodes`、`releaseNotes` = `fastlane/release-notes.json`）→ `edits validate` → `edits commit`。
+   → `tracks update --track production --releases @releases.json`（`status: completed`、`versionCodes`、`releaseNotes` = `fastlane/release-notes.json`）
+   → `deobfuscation upload --apk-version <versionCode> --file dist/quietinbox-<version>-mapping.txt`
+   （旗標是 `--apk-version`，不是 `--version-code`；少了這一步，Play Vitals 的堆疊就會像 0.1.2 一樣是混淆的，
+   而且事後無法重建 mapping——要用 CI 產物裡的那一份，本機重建的對不上已上傳的 bundle）
+   → `edits validate` → `edits commit`。平板截圖有換時，`--type tenInchScreenshots` 也要一起刪。
    上傳 CI 產物可讓 Play 與 GitHub 的副本位元組相同；本機建的 AAB 用同一把金鑰簽章，但位元組可能不同（尚無可重現建置比對）。
-   平板截圖有換時，`--type tenInchScreenshots` 也要一起刪。
-6. 上傳 R8 mapping，讓 Play Vitals 的堆疊看得懂：在同一個 edit 裡、`edits commit` 之前執行
-   `gplay deobfuscation upload --package dev.quietinbox.app --edit <edit> --version-code <n> --file dist/quietinbox-<version>-mapping.txt`。
-   一定要用 CI 產物裡的 mapping——本機重建的那份對不上已上傳的 bundle。release 另外附一份 `…-mapping.txt.gz`。
+   GitHub release 會附 `…-mapping.txt.gz`；未壓縮的 mapping 與 `.aab` 只留在 workflow 產物裡。
 
 ## 截圖
 

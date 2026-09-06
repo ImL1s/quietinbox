@@ -38,13 +38,14 @@ The two installs cannot update over each other because Play re-signs the store c
    → `images plan --dir fastlane/metadata/android` (and `images delete-all --type phoneScreenshots --confirm` for a locale whose
    screenshots are being replaced: Play keeps at most 8) → `images sync --dir fastlane/metadata/android` →
    `tracks update --track production --releases @releases.json` (`status: completed`, `versionCodes`, `releaseNotes` = `fastlane/release-notes.json`)
-   → `edits validate` → `edits commit`. Uploading the CI artifact keeps the Play copy and the GitHub copy byte-identical;
-   a locally built AAB is signed with the same key but may differ in bytes (no reproducible-build comparison yet).
+   → `deobfuscation upload --apk-version <versionCode> --file dist/quietinbox-<version>-mapping.txt`
+   (the flag is `--apk-version`, not `--version-code`; without this step Play Vitals stacks stay obfuscated,
+   as 0.1.2's are, and the mapping for a build cannot be reconstructed later — use the CI artifact's copy,
+   a locally rebuilt one does not match the uploaded bundle) → `edits validate` → `edits commit`.
    Delete `--type tenInchScreenshots` as well when the tablet set changed.
-6. Upload the R8 mapping so Play Vitals stacks are readable:
-   `gplay deobfuscation upload --package dev.quietinbox.app --edit <edit> --version-code <n> --file dist/quietinbox-<version>-mapping.txt`
-   inside the same edit, before `edits commit`. Use the mapping from the CI artifact — a locally
-   rebuilt one does not match the uploaded bundle. The release also carries `…-mapping.txt.gz`.
+   Uploading the CI artifact keeps the Play copy and the GitHub copy byte-identical; a locally built AAB is
+   signed with the same key but may differ in bytes (no reproducible-build comparison yet). The GitHub
+   release carries `…-mapping.txt.gz`; the plain mapping and the `.aab` stay in the workflow artifact.
 
 ## Screenshots
 

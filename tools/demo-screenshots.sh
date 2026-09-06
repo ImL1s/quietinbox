@@ -106,7 +106,7 @@ def in_navigation_strip(box, layout, width, height):
     return box[2] <= int(width * 0.15)
 
 
-def navigation_item(tree, layout, wanted, width, height):
+def navigation_item(tree, package, layout, wanted, width, height):
     # Every node carrying one of the labels and sitting in the navigation strip is a candidate; the
     # one that is furthest into the strip wins — lowest on a bottom bar, leftmost on a rail. Taking
     # the first match in document order instead would depend on where Compose happens to emit the
@@ -116,6 +116,8 @@ def navigation_item(tree, layout, wanted, width, height):
     # expanded, widen the strip with it.)
     best = None
     for node in nodes(tree):
+        if (node.get("package") or "") != package:
+            continue
         text = (node.get("text") or "").strip()
         description = (node.get("content-desc") or "").strip()
         if text not in wanted and description not in wanted:
@@ -155,10 +157,10 @@ def main():
         # test. Accepting the rail at all is what makes the tablet run navigate: the bottom-bar-only
         # rule matched nothing there, every tab tap silently did nothing, and the shots were of
         # whatever was behind the app.
-        layout = sys.argv[2]
-        wanted = set(sys.argv[3:])
+        package, layout = sys.argv[2], sys.argv[3]
+        wanted = set(sys.argv[4:])
         width, height = screen(tree)
-        box = navigation_item(tree, layout, wanted, width, height)
+        box = navigation_item(tree, package, layout, wanted, width, height)
         if not box:
             return 1
         print("%d %d" % centre(box))
@@ -176,7 +178,7 @@ def main():
         package, layout = sys.argv[2], sys.argv[3]
         wanted = set(sys.argv[4:])
         width, height = screen(tree)
-        box = navigation_item(tree, layout, wanted, width, height)
+        box = navigation_item(tree, package, layout, wanted, width, height)
         if not box:
             return 1
         x, y = centre(box)
@@ -364,11 +366,11 @@ tap_text() {
 tap_tab() {
   dump_ui || { warn "tap_tab $1: could not read the screen"; return 1; }
   local point
-  if ! point="$(python3 "$HELPER" tap-tab "$LAYOUT" "$@" < "$WORK_DIR/ui.xml")"; then
+  if ! point="$(python3 "$HELPER" tap-tab "$APP_ID" "$LAYOUT" "$@" < "$WORK_DIR/ui.xml")"; then
     warn "tap_tab $1: no navigation item with that label in the $LAYOUT navigation strip"
     return 1
   fi
-  local attempt
+  local attempt checked=0
   for attempt in 1 2 3 4 5; do
     # The tap is repeated, not just re-checked: a swallowed tap is the whole reason this guard
     # exists, and re-sending it costs a second where failing costs the locale's entire run.
@@ -376,9 +378,14 @@ tap_tab() {
     shell input tap $point
     sleep 1
     dump_ui || continue
+    checked=$((checked + 1))
     python3 "$HELPER" tab-selected "$APP_ID" "$LAYOUT" "$@" < "$WORK_DIR/ui.xml" && return 0
   done
-  warn "tap_tab $1: tapped $attempt times but the item never became the selected one"
+  if [ "$checked" -eq 0 ]; then
+    warn "tap_tab $1: tapped $attempt times but the screen could not be read once"
+  else
+    warn "tap_tab $1: tapped $attempt times, checked $checked, but the item never became the selected one"
+  fi
   return 1
 }
 

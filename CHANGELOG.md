@@ -8,7 +8,7 @@ Nothing yet.
 
 ## [0.1.3] — 2026-09-07
 
-`versionCode` 7. Two user-visible string defects that the store screenshots had baked in, and the
+`versionCode` 7. Three user-visible string defects that the store screenshots had baked in, and the
 screenshot harness that let a whole tablet set of the wrong screens reach Google Play.
 
 ### Fixed
@@ -34,21 +34,21 @@ screenshot harness that let a whole tablet set of the wrong screens reach Google
 - **Every screenshot is now gated on QuietInbox being the app on screen** (`app-foreground`: at least one
   node of `dev.quietinbox.app.debug` in the UI dump), and a navigation tap that finds no target fails the
   run instead of warning and carrying on. Those two guards are what the earlier tablet set was missing.
+- Round-27 review fixes (`docs/reviews/2026-09-06-round27/`): the round-26 "bound both edges of the rail
+  candidate" fix was a tautology — `box[2] <= K` already implies `box[0] <= K` — so where several nodes
+  carry a tab's label the one furthest into the navigation strip now wins, lowest on a bottom bar and
+  leftmost on a rail, instead of whichever Compose emitted first; the selected-item check only counts
+  nodes belonging to the app and inside the strip, so a pulled-down notification shade or a selected
+  filter chip cannot answer for a navigation item; the tap is re-sent on each confirmation attempt
+  rather than sent once and merely re-checked; each of `tap_tab`'s failure paths says which one it was;
+  and the inbox summary glued its gap clause on with an ASCII space in every language, which the
+  Chinese and Japanese screenshots showed — it goes through the same locale-aware joiner now.
 - Round-26 review fixes (`docs/reviews/2026-09-06-round26/`): a tab tap is confirmed rather than assumed —
   after tapping, the harness re-reads the screen and requires the tapped item to be the selected one, so a
   swallowed tap fails the run instead of capturing the previous page; the bottom-bar rule is gated on the
-  narrow layout the way the rail rule is gated on the wide one, and where several nodes carry a tab's
-  label the one furthest into the navigation strip wins — lowest on a bottom bar, leftmost on a rail —
-  instead of whichever Compose emitted first (on a 2076px tablet the strip is 311px and a two-character
-  CJK heading in the content pane ends at about 300px, so it is a candidate too, just a worse one); the
-  selected-item check only counts nodes belonging to the app and inside the strip, so a pulled-down
-  notification shade or a selected filter chip cannot answer for a navigation item; a failure
+  narrow layout the way the rail rule is gated on the wide one; a failure
   to switch the device into night mode fails the run rather than producing a light `7_inbox_dark`; the UI
-  dump retries, since every screenshot now depends on one; the tap is re-sent on each confirmation
-  attempt rather than sent once and merely re-checked; each of `tap_tab`'s three failure paths says which
-  one it was; and `LAYOUT` is declared with the other globals. Round 27 also caught the inbox summary
-  gluing its gap clause on with an ASCII space in every language, which the Chinese and Japanese
-  screenshots showed — it goes through the same locale-aware joiner as the rest of the sentence now.
+  dump retries, since every screenshot now depends on one; and `LAYOUT` is declared with the other globals.
 
 ### Changed
 - The release workflow now carries the R8 mapping: `dist/` gets `quietinbox-<version>-mapping.txt` for
