@@ -18,3 +18,7 @@ keystore.properties
 # OMC / agent runtime state
 .omc/
 .octo-continue.md
+
+# Python (tools/)
+__pycache__/
+*.py[cod]

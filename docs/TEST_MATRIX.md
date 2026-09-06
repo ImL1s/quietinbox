@@ -67,11 +67,11 @@ exists, and no source notification is ever read.
 - `seed()` is idempotent (it clears first) and `clear()` deletes strictly by the demo tags — the
   `demo.quietinbox.` package prefix and the `demo-` capture generation — so captured copies are
   never touched. No schema change: the seeder adds queries, not tables or columns.
-- Screenshot harness: `tools/demo-screenshots.sh <adb-serial> <en-US|zh-TW|zh-CN|ja-JP|ko-KR> <out-dir>` installs the On Android 13+ the keyboard follows the app language, so the tool switches every input method off while it types the search query, restores them afterwards, and refuses to shoot the search screen unless the field shows the query.
+- Screenshot harness: `tools/demo-screenshots.sh <adb-serial> <en-US|zh-TW|zh-CN|ja-JP|ko-KR> <out-dir>` installs the
   debug APK, wipes app data, grants the listener and `POST_NOTIFICATIONS`, walks onboarding by
   matching button text in both languages, seeds the demo vault and captures
   `1_inbox.png … 7_inbox_dark.png`. Use an emulator: on a real phone the listener would copy the
-  owner's own notifications into the debug vault.
+  owner's own notifications into the debug vault. On Android 13+ the keyboard follows the app language, so the tool disables the default input method before it launches the app, restores it afterwards, types the query one key at a time once the input method has settled, dismisses it with the field's search action (ENTER), and refuses to shoot the search screen unless the field shows the query; every shot must also be at least 80 KB, the conversation shot waits for the pinned conversation's title, the app is launched only once the per-app locale request has stuck, and the seed broadcast names the demo's language (`--es lang`).
 - Coverage: `DemoDataTest` (instrumented, `platform:storage`) seeds, asserts the row counts and the
   conversation projection every screen reads, checks that seeding twice does not duplicate, then
   clears and asserts nothing demo-tagged remains. It runs on a device

@@ -60,9 +60,9 @@
   為 true 時才會繪製，因此在 release 版本中並不存在。
 - `seed()` 具有冪等性（會先清除），`clear()` 只依示範標記刪除 —— `demo.quietinbox.` 套件前綴與 `demo-`
   擷取世代 —— 已擷取的副本不受影響。沒有 schema 變更：只新增查詢，不新增資料表或欄位。
-- 截圖工具：`tools/demo-screenshots.sh <adb-serial> <en-US|zh-TW|zh-CN|ja-JP|ko-KR> <out-dir>` 會安裝 debug APK、清除 app Android 13 以上鍵盤會跟著 App 語言走，所以工具在輸入搜尋字串期間關閉所有輸入法、之後還原，並在搜尋欄沒有顯示該字串時拒絕拍搜尋頁。
+- 截圖工具：`tools/demo-screenshots.sh <adb-serial> <en-US|zh-TW|zh-CN|ja-JP|ko-KR> <out-dir>` 會安裝 debug APK、清除 app
   資料、授予監聽器與 `POST_NOTIFICATIONS`、以雙語按鈕文字走完引導流程、寫入示範資料並拍攝
-  `1_inbox.png … 7_inbox_dark.png`。請使用模擬器：在真機上監聽器會把使用者自己的通知複製進 debug 資料庫。
+  `1_inbox.png … 7_inbox_dark.png`。請使用模擬器：在真機上監聽器會把使用者自己的通知複製進 debug 資料庫。 Android 13 以上鍵盤會跟著 App 語言走，所以工具在啟動 App 前先停用預設輸入法、之後還原，等輸入法穩定後一次一個字鍵入查詢、以搜尋欄的 ENTER 動作收起輸入法，並在搜尋欄沒有顯示該字串時拒絕拍搜尋頁；每張截圖至少 80 KB，對話頁截圖會等到釘選對話的標題出現，App 只在 per-app 語言請求確實生效後才啟動，而寫入示範資料的廣播會明確指定語言（`--es lang`）。
 - 覆蓋範圍：`DemoDataTest`（真機測試，`platform:storage`）寫入示範資料、驗證各畫面讀取的筆數與對話投影、
   確認重複寫入不會產生重複資料，接著清除並驗證不留下任何示範資料列。因為 SQLCipher 的原生函式庫無法在
   JVM 載入，此測試需在裝置上執行（`./gradlew :platform:storage:connectedDebugAndroidTest`）。

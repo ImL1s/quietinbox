@@ -9,14 +9,15 @@ data class DemoCounts(val conversations: Int, val messages: Int)
  * so no demo text, seeder or trigger exists in a published binary.
  */
 interface DemoData {
-    suspend fun seed(now: Long = System.currentTimeMillis()): DemoCounts
+    /** [locale] picks the demo's language; null means the app's current configuration. */
+    suspend fun seed(now: Long = System.currentTimeMillis(), locale: java.util.Locale? = null): DemoCounts
 
     suspend fun clear()
 }
 
 /** Release binding: nothing to seed, nothing to clear. */
 object NoDemoData : DemoData {
-    override suspend fun seed(now: Long): DemoCounts = DemoCounts(0, 0)
+    override suspend fun seed(now: Long, locale: java.util.Locale?): DemoCounts = DemoCounts(0, 0)
 
     override suspend fun clear() = Unit
 }

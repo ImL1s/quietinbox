@@ -35,6 +35,9 @@ DEMO_ACTION="dev.quietinbox.debug.DEMO"
 # Matches DemoDataRepository.SEARCH_SAMPLE — several seeded bodies contain it, and it is ASCII, so
 # `adb shell input text` can type it (the input command cannot send CJK).
 SEARCH_QUERY="meeting"
+# Every screen in the set compresses to well over this once its content is on screen (the smallest
+# real shot so far is ~140 KB); a loading placeholder is ~30 KB.
+MIN_SHOT_BYTES=80000
 # The one conversation DemoDataRepository pins, so the inbox always opens it first; DemoLocalisation
 # renames it per app language.
 case "$LOCALE" in
@@ -43,7 +46,6 @@ case "$LOCALE" in
   *)     DEMO_PINNED_TITLE="林小美 Mia Lin" ;;
 esac
 WORK_DIR="$(mktemp -d)"
-trap 'imes_on; rm -rf "$WORK_DIR"' EXIT
 
 log() { printf '• %s\n' "$*" >&2; }
 warn() { printf '! %s\n' "$*" >&2; }
@@ -119,7 +121,7 @@ def main():
     if command == "has-text":
         wanted = set(sys.argv[2:])
         for node in nodes(tree):
-            if (node.get("text") or "").strip() in wanted:
+            if (node.get("text") or "").strip() in wanted or (node.get("content-desc") or "").strip() in wanted:
                 return 0
         return 1
 
@@ -171,7 +173,10 @@ IME_DEFAULT=""
 IME_DISABLED=0
 imes_off() {
   IME_DEFAULT="$(shell settings get secure default_input_method | tr -d '\r')"
-  if [ -z "$IME_DEFAULT" ] || [ "$IME_DEFAULT" = "null" ]; then return 0; fi
+  if [ -z "$IME_DEFAULT" ] || [ "$IME_DEFAULT" = "null" ]; then
+    warn "no default input method is set; the search query may be composed by whatever handles the keys"
+    return 0
+  fi
   if [ "$(shell ime list -s | tr -d '\r' | grep -c .)" -lt 2 ]; then
     warn "only one input method is enabled; the search query may be composed by its layout"
   fi
@@ -183,6 +188,31 @@ imes_on() {
     shell ime set "$IME_DEFAULT" >/dev/null 2>&1 || true
     IME_DISABLED=0
   fi
+}
+# Registered after the helpers it calls: under `set -e` a trap whose first command is missing would
+# skip the rest of the cleanup as well.
+trap 'imes_on; rm -rf "$WORK_DIR"' EXIT
+
+# ime_shown — true while an input method window is on screen (field names differ across API levels).
+ime_shown() {
+  # API 36 prints `mInputShown=true` / `mImeWindowVis=3` (decimal); older builds print hex or
+  # `isInputShown`. The dump is captured first: under `pipefail` a `grep -q` that exits early would
+  # hand adb a SIGPIPE and turn a match into a failed pipeline.
+  local dump
+  dump="$(shell dumpsys input_method 2>/dev/null | tr -d '\r')"
+  # `mIsInputViewShown` is the service's own flag and stays true after the window is gone.
+  grep -qE '(mInputShown|isInputShown)=true|mImeWindowVis=(0x)?[1-9a-f]' <<< "$dump"
+}
+
+# wait_text "Label" [seconds] — polls until a node with exactly that text or description is on screen.
+wait_text() {
+  local wanted="$1" tries="${2:-10}"
+  while [ "$tries" -gt 0 ]; do
+    if has_text "$wanted"; then return 0; fi
+    sleep 1
+    tries=$((tries - 1))
+  done
+  return 1
 }
 
 dump_ui() {
@@ -276,7 +306,13 @@ shot() {
   sleep 1
   device exec-out screencap -p > "$path"
   strip_png_prefix "$path"
-  log "captured $name.png"
+  # A loading placeholder or a blank page compresses to a few tens of KB; a filled screen is far larger.
+  local bytes
+  bytes="$(wc -c < "$path" | tr -d ' ')"
+  if [ "$bytes" -lt "$MIN_SHOT_BYTES" ]; then
+    die "$name.png is only $bytes bytes — the screen was not ready (loading placeholder or empty page)"
+  fi
+  log "captured $name.png ($bytes bytes)"
 }
 
 # ------------------------------------------------------------------ labels
@@ -328,6 +364,15 @@ shell pm grant "$APP_ID" android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 |
 log "requesting app locale $LOCALE"
 shell cmd locale set-app-locales "$APP_ID" --user 0 --locales "$LOCALE" >/dev/null 2>&1 ||
   warn "per-app locales need API 33+; the device language decides instead"
+# `pm clear` above also resets the app's locale asynchronously; make sure the request stuck before
+# the app starts, otherwise the process would come up in the device language.
+for _ in 1 2 3 4 5; do
+  if shell cmd locale get-app-locales "$APP_ID" --user 0 2>/dev/null | tr -d '\r' | grep -q "$LOCALE"; then break; fi
+  sleep 1
+  shell cmd locale set-app-locales "$APP_ID" --user 0 --locales "$LOCALE" >/dev/null 2>&1 || true
+done
+shell cmd locale get-app-locales "$APP_ID" --user 0 2>/dev/null | tr -d '\r' | grep -q "$LOCALE" ||
+  warn "the app locale is not $LOCALE; screens will be in the device language"
 
 shell cmd uimode night no >/dev/null 2>&1 || true
 imes_off
@@ -348,7 +393,8 @@ done
 sleep 2
 
 log "seeding demo data"
-shell am broadcast -a "$DEMO_ACTION" --es op seed -n "$DEMO_RECEIVER" >/dev/null
+# The demo names its language explicitly so the seed cannot lag behind the locale request.
+shell am broadcast -a "$DEMO_ACTION" --es op seed --es lang "$LOCALE" -n "$DEMO_RECEIVER" >/dev/null
 # The seed writes ~130 rows into an encrypted database; give it room before the first shot.
 sleep 6
 
@@ -358,6 +404,10 @@ shot "1_inbox"
 
 # 2 — a conversation (first row of the inbox)
 tap_first_list_item
+# The conversation loads asynchronously: wait for the pinned conversation's title in the app bar (and
+# a moment more for the list to settle at its newest message) instead of trusting a fixed delay.
+wait_text "$DEMO_PINNED_TITLE" 10 || warn "the conversation title did not appear within 10 s"
+sleep 2
 shot "2_conversation"
 shell input keyevent KEYCODE_BACK
 sleep 2
@@ -366,14 +416,23 @@ sleep 2
 tap_tab "$NAV_SEARCH" || warn "could not reach the search tab"
 sleep 1
 tap_text "$SEARCH_HINT" || warn "could not focus the search field"
-shell input text "$SEARCH_QUERY"
+# Let the input method window settle before the first key: keys injected while it is still coming
+# up were seen to arrive out of order ("metinge"). One character per call keeps the order strict.
 sleep 2
-# Hide whatever input method is showing (with the keyboard off it is the voice panel) so the results
-# fill the frame; the query stays in the field.
-shell input keyevent KEYCODE_BACK
+for ((i = 0; i < ${#SEARCH_QUERY}; i++)); do
+  shell input text "${SEARCH_QUERY:$i:1}"
+  sleep 0.3
+done
+sleep 1
+# ENTER is the field's search action: it dismisses the input method (with the keyboard disabled that
+# is the voice panel) and keeps the page and the query, so the results fill the frame.
+shell input keyevent KEYCODE_ENTER
 sleep 2
+if ime_shown; then sleep 2; ime_shown && warn "an input method is still showing; the search shot will include it"; fi
 # The shot must show the query and its results, not what a keyboard layout made of the keystrokes.
-has_text "$SEARCH_QUERY" || die "the search field does not show \"$SEARCH_QUERY\" — an input method composed the keystrokes"
+dump_ui || die "uiautomator could not dump the search screen"
+python3 "$HELPER" has-text "$SEARCH_QUERY" < "$WORK_DIR/ui.xml" ||
+  die "the search field does not show \"$SEARCH_QUERY\" (an input method composed the keystrokes, or the page was left)"
 shot "3_search"
 shell input keyevent KEYCODE_BACK
 sleep 1

@@ -52,7 +52,11 @@ class DemoReceiver : BroadcastReceiver() {
                     .fromApplication(application, DemoEntryPoint::class.java)
                     .demoDataRepository()
                 when (op) {
-                    OP_SEED -> Log.i(TAG, "demo seed done: ${repository.seed()}")
+                    OP_SEED -> {
+                        // `--es lang ja-JP` names the demo's language; without it the app's own configuration decides.
+                        val locale = intent.getStringExtra(EXTRA_LANG)?.takeIf { it.isNotBlank() }?.let { java.util.Locale.forLanguageTag(it) }
+                        Log.i(TAG, "demo seed done: ${repository.seed(locale = locale)}")
+                    }
                     OP_CLEAR -> {
                         repository.clear()
                         Log.i(TAG, "demo clear done")
@@ -71,6 +75,7 @@ class DemoReceiver : BroadcastReceiver() {
         const val TAG = "QuietInboxDemo"
         const val EXTRA_OP = "op"
         const val OP_SEED = "seed"
+        const val EXTRA_LANG = "lang"
         const val OP_CLEAR = "clear"
     }
 }

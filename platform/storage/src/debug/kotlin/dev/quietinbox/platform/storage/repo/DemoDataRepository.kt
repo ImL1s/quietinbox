@@ -60,11 +60,13 @@ class DemoDataRepository @Inject constructor(
      * it twice leaves the same rows rather than duplicates. [now] is the "present" the data is laid
      * out behind; it is a parameter so tests get a deterministic window.
      */
-    override suspend fun seed(now: Long): DemoCounts {
+    override suspend fun seed(now: Long, locale: java.util.Locale?): DemoCounts {
         val db = holder.db()
         // The demo speaks the app's language: names, titles and bodies are swapped for their
         // zh-Hans / ja / ko equivalents (DemoLocalisation); any other language keeps the authored text.
-        val words = DemoLocalisation.forLocale(context.resources.configuration.locales[0])
+        // A caller may name the language (the screenshot tool does) instead of trusting the
+        // configuration, which can lag behind a per-app locale request on a freshly cleared app.
+        val words = DemoLocalisation.forLocale(locale ?: context.resources.configuration.locales[0])
         return db.withTransaction {
             clearRows(db)
             val zone = ZoneId.systemDefault()
