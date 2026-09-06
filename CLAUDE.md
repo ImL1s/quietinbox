@@ -94,8 +94,9 @@ when the guard is removed.
 
 Debug builds only: Settings → Developer → "Load demo data", or
 `adb shell am broadcast -a dev.quietinbox.debug.DEMO --es op seed -n dev.quietinbox.app.debug/dev.quietinbox.debug.DemoReceiver`
-(`--es op clear` removes it). Everything seeded is fictional (`demo.quietinbox.*` sources).
-`tools/demo-screenshots.sh <serial> <en-US|zh-TW> <out-dir>` installs, seeds and captures every screen;
+(`--es op clear` removes it). Everything seeded is fictional (`demo.quietinbox.*` sources); `DemoLocalisation` swaps the Chinese names,
+titles and bodies for zh-Hans / ja / ko equivalents when the app runs in one of those languages.
+`tools/demo-screenshots.sh <serial> <en-US|zh-TW|zh-CN|ja-JP|ko-KR> <out-dir>` installs, seeds and captures every screen;
 store copies live in `fastlane/metadata/android/<locale>/images/`, reference copies in `docs/screenshots/`.
 Use the project's own AVDs (`QuietInbox_Phone`, `Foldable_Test`); never a phone with real notifications.
 
@@ -125,8 +126,8 @@ notifications into the debug vault. Use an emulator for screenshots. On foldable
 
 The 2026-09-06 audit findings are GitHub issues #1–#17 (labels P0/P1/P2/audit); #17 (real-source
 fixtures) stays open because it needs real devices and accounts. Every fix cites its issue and its
-review round (`docs/reviews/2026-09-06-round{10,…,17}/`; rounds 13–17 re-reviewed each fix commit until
-both reviewers approved with no finding). ADR-0007 records the design.
+review round (`docs/reviews/2026-09-06-round{10,…,18}/`; rounds 13–17 re-reviewed each fix commit until
+both reviewers approved with no finding; round 18 reviewed the localisation). ADR-0007 records the design.
 
 ## Review gate before a push
 

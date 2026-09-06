@@ -14,7 +14,7 @@
 | L4 故障與效能 | 終止 process、Doze、首次解鎖、撤銷、磁碟上限 | **未執行**（程式中已有 commit 圍籬（generation）；尚無注入故障的測試） | — |
 | L5 發行產物 | 合併後的 manifest、權限傾印、可重現建置 | `tools/check-permissions.sh`（CI）；尚無 SBOM／重建比對 | CI |
 | 字串目錄 | 每個語系都必須帶有預設目錄的所有名稱、佔位符與複數形 | `tools/check-strings.py`（`core:designsystem` 與 `platform:capture` 的 en、zh-Hant、zh-Hans、ja、ko）；Android lint 的 `MissingTranslation` 也是錯誤 | `python3 tools/check-strings.py`（CI：Assemble + permission gate） |
-| 真機測試（instrumented）儲存 | 真實的 SQLCipher + Room 遷移 | `VaultRoundTripTest`（日誌 → commit → 搜尋 → 抑制 → 以持久化的金鑰重新開啟；刪除的會話在重播後不會復活）、`MigrationTest`（對照匯出的 schema 執行 1→2 與 2→3）、`DemoDataTest`（示範資料寫入 → 筆數與投影 → 重複寫入不重複 → 清除後不留痕跡）、`DeletionGraphTest`（5 個：journal 離開 PENDING 即清空 payload；刪除最新訊息後重算投影；到期副本在 retention 跑之前就隱藏、跑之後投影重算；移除來源並刪資料後不留任何東西；刪除全部經驗證且沒有快取的 cipher 沿用舊金鑰）、`SearchPagingTest`（2 個：250 筆假陽性候選既藏不住真命中也不會讓頁面不足額，游標續頁不重疊；刪除 token 會抑制同一 post 的重播、但不抑制之後同文字的新 post）、`MediaExportBoundTest`（1 個：空表的 `maxId` 為 0，帶上限的匯出分頁排除快照之後才寫入的 blob）——共 16 個 | `./gradlew :platform:storage:connectedDebugAndroidTest` |
+| 真機測試（instrumented）儲存 | 真實的 SQLCipher + Room 遷移 | `VaultRoundTripTest`（日誌 → commit → 搜尋 → 抑制 → 以持久化的金鑰重新開啟；刪除的會話在重播後不會復活）、`MigrationTest`（對照匯出的 schema 執行 1→2 與 2→3）、`DemoDataTest`（示範資料寫入 → 筆數與投影 → 重複寫入不重複 → 清除後不留痕跡；App 語言為 zh-Hans／ja／ko 時，寫入內容經 `DemoLocalisation` 在地化）、`DeletionGraphTest`（5 個：journal 離開 PENDING 即清空 payload；刪除最新訊息後重算投影；到期副本在 retention 跑之前就隱藏、跑之後投影重算；移除來源並刪資料後不留任何東西；刪除全部經驗證且沒有快取的 cipher 沿用舊金鑰）、`SearchPagingTest`（2 個：250 筆假陽性候選既藏不住真命中也不會讓頁面不足額，游標續頁不重疊；刪除 token 會抑制同一 post 的重播、但不抑制之後同文字的新 post）、`MediaExportBoundTest`（1 個：空表的 `maxId` 為 0，帶上限的匯出分頁排除快照之後才寫入的 blob）——共 16 個 | `./gradlew :platform:storage:connectedDebugAndroidTest` |
 | 真機測試（instrumented）備份 | 真實金庫上的匯出 → 清空 → 匯入；維護閘門 | `BackupRoundTripTest`（2 個：備份只含看得見的副本、回報讀不到的媒體、還原後投影重算且媒體檔以目前金鑰可解密；exclusive 進行中的匯出會被拒絕） | `./gradlew :platform:backup:connectedDebugAndroidTest` |
 | 真機測試（instrumented）加密 | 在真實檔案系統上的持久化金鑰寫入；KEK 建立競態 | `WrappedSecretFileTest`（資料 fsync → 更名 → 對目錄執行 `Os.fsync`；只建立一次、讀回、巢狀目錄）、`KeystoreWrapperTest`（全新 alias 下三把 secret 並行建立、五輪：只有一把 KEK，新的 wrapper 都能讀回） | `./gradlew :platform:crypto:connectedDebugAndroidTest` |
 | 加密 | RFC 5869 測試向量、codec 來回轉換 | `HkdfTest`、`RecoveryKeyCodecTest` | JVM |
@@ -59,7 +59,7 @@
   為 true 時才會繪製，因此在 release 版本中並不存在。
 - `seed()` 具有冪等性（會先清除），`clear()` 只依示範標記刪除 —— `demo.quietinbox.` 套件前綴與 `demo-`
   擷取世代 —— 已擷取的副本不受影響。沒有 schema 變更：只新增查詢，不新增資料表或欄位。
-- 截圖工具：`tools/demo-screenshots.sh <adb-serial> <en-US|zh-TW> <out-dir>` 會安裝 debug APK、清除 app
+- 截圖工具：`tools/demo-screenshots.sh <adb-serial> <en-US|zh-TW|zh-CN|ja-JP|ko-KR> <out-dir>` 會安裝 debug APK、清除 app
   資料、授予監聽器與 `POST_NOTIFICATIONS`、以雙語按鈕文字走完引導流程、寫入示範資料並拍攝
   `1_inbox.png … 7_inbox_dark.png`。請使用模擬器：在真機上監聽器會把使用者自己的通知複製進 debug 資料庫。
 - 覆蓋範圍：`DemoDataTest`（真機測試，`platform:storage`）寫入示範資料、驗證各畫面讀取的筆數與對話投影、

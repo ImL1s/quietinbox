@@ -3,7 +3,7 @@
   Strings for the extended Activity views (tabs, periods, heat map, bands, chattiness, quiet rate,
   catchphrases). Every label describes *observed* messages: what a source app put in a notification
   and QuietInbox copied. Nothing here may claim a reply, a read receipt or a true message total.
-  Keys must stay in sync with values-b+zh+Hant/strings_analytics.xml.
+  Keys must stay in sync with every values-*/strings_analytics.xml (tools/check-strings.py).
 -->
 <resources>
     <string name="analytics_tab_overview">Overview</string>

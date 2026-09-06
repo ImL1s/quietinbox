@@ -44,7 +44,7 @@ class DemoDataTest {
     fun setUp() {
         wipe()
         holder = DatabaseHolder(context, KeyMaterial(context))
-        demo = DemoDataRepository(holder)
+        demo = DemoDataRepository(holder, context)
         inbox = InboxRepository(holder, MediaDirectory(context))
         search = SearchRepository(holder)
     }

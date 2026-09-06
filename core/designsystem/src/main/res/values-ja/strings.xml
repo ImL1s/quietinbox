@@ -20,7 +20,7 @@
     <string name="action_continue">続行</string>
     <string name="action_open">開く</string>
     <string name="action_add">追加</string>
-    <string name="action_remove">取り除く</string>
+    <string name="action_remove">削除</string>
     <string name="action_show">表示</string>
     <string name="action_hide">非表示</string>
 
@@ -70,12 +70,12 @@
     <string name="detail_placeholder_body">幅の広い画面では、コピーは受信箱の横に並んでここに表示されます。</string>
 
     <!-- Conversation -->
-    <string name="conv_source">ソース: %1$s</string>
+    <string name="conv_source">送信元: %1$s</string>
     <string name="conv_saved_count">%1$d 件保存</string>
     <string name="conv_empty">この会話にはまだメッセージがありません。</string>
     <string name="conv_open_source">送信元アプリで開く</string>
     <string name="conv_open_source_title">送信元アプリを開きますか？</string>
-    <string name="conv_open_source_body">QuietInbox は %1$s を起動します。そちらでチャットを開くと、相手側に既読が付く場合があります。ここでコピーを見るだけなら既読は付きません。</string>
+    <string name="conv_open_source_body">QuietInbox は %1$s を起動します。そちらでチャットを開くと、送信元アプリでメッセージが既読になる場合があります。ここでコピーを見るだけなら既読にはなりません。</string>
     <string name="conv_open_source_fallback">元の通知はすでに存在しないため、代わりにアプリのホーム画面を開きます。</string>
     <string name="conv_open_source_unavailable">送信元アプリがインストールされていません。</string>
     <string name="conv_time_source">送信元の時刻</string>
@@ -107,7 +107,7 @@
 
     <!-- Search -->
     <string name="search_hint">保存したコピーを検索</string>
-    <string name="search_empty_hint">検索は大文字・小文字と全角・半角を区別しません。中国語のテキストは部分一致、ラテン文字の単語は単語全体または 3 文字以上の断片で一致します。</string>
+    <string name="search_empty_hint">検索は大文字・小文字と全角・半角を区別しません。日本語・中国語・韓国語のテキストは部分一致、ラテン文字の単語は単語全体または 3 文字以上の断片で一致します。</string>
     <string name="search_no_results">「%1$s」に一致するものはありません。</string>
     <string name="search_range_all">期間指定なし</string>
     <string name="search_range_today">今日</string>
@@ -117,7 +117,7 @@
     <string name="search_all_sources">すべてのソース</string>
 
     <!-- Analytics -->
-    <string name="analytics_title">アクティビティ</string>
+    <string name="analytics_title">活動</string>
     <string name="analytics_range_7d">7 日間</string>
     <string name="analytics_range_30d">30 日間</string>
     <string name="analytics_range_90d">90 日間</string>
@@ -126,7 +126,7 @@
     <string name="analytics_range_line">%1$s – %2$s · %3$s</string>
     <string name="analytics_empty_title">観測データが不足しています</string>
     <string name="analytics_empty_body">統計は QuietInbox が観測した内容だけを表します。実際のメッセージ総数を推定するものではありません。</string>
-    <string name="analytics_tile_captured">キャプチャ</string>
+    <string name="analytics_tile_captured">キャプチャ済み</string>
     <string name="analytics_tile_conversations">会話</string>
     <string name="analytics_tile_sources">ソース</string>
     <string name="analytics_tile_median">間隔の中央値</string>
@@ -152,7 +152,7 @@
     <string name="state_connected">接続済み</string>
     <string name="state_paused">一時停止中</string>
     <string name="state_reconnecting">再接続中</string>
-    <string name="state_degraded">低下</string>
+    <string name="state_degraded">一部制限</string>
     <string name="health_since">%1$s から</string>
     <string name="health_connected_body">接続済みでも、送信元がすべてのメッセージに通知を出すとは限りません。</string>
     <string name="health_not_granted_body">システム設定で通知へのアクセスを許可してください。QuietInbox は通知のコピーを読み取るだけで、通知を操作することはありません。</string>
@@ -160,7 +160,7 @@
     <string name="health_pause">キャプチャを一時停止</string>
     <string name="health_resume">キャプチャを再開</string>
     <string name="health_pipeline_title">パイプライン</string>
-    <string name="health_queue">キュー</string>
+    <string name="health_queue">待機中</string>
     <string name="health_accepted">受理</string>
     <string name="health_overflow">オーバーフロー</string>
     <string name="health_dropped">権限取り消し後に破棄</string>
@@ -170,8 +170,8 @@
     <string name="health_add_source">ソースを追加</string>
     <string name="health_source_enabled">有効</string>
     <string name="health_source_paused">一時停止中</string>
-    <string name="health_remove_source">ソースを取り除く</string>
-    <string name="health_remove_title">%1$s を取り除きますか？</string>
+    <string name="health_remove_source">ソースを削除</string>
+    <string name="health_remove_title">%1$s を削除しますか？</string>
     <string name="health_remove_body">キャプチャの停止と保存済みコピーの削除は別々の選択です。</string>
     <string name="health_remove_keep_data">停止してコピーは残す</string>
     <string name="health_remove_delete_data">停止してコピーも削除</string>
@@ -184,7 +184,7 @@
     <string name="gap_reason_disconnected">リスナーが切断</string>
     <string name="gap_reason_restart">プロセスの再起動</string>
     <string name="gap_reason_not_granted">アクセス未許可</string>
-    <string name="gap_reason_paused">ユーザーが一時停止</string>
+    <string name="gap_reason_paused">自分で一時停止</string>
     <string name="gap_reason_overflow">キューのオーバーフロー</string>
     <string name="gap_reason_first_unlock">初回ロック解除前</string>
     <string name="gap_reason_maintenance">リセットまたは復元の実行中</string>
@@ -200,7 +200,7 @@
     <string name="health_restricted_hint">Android 13 以降では、サイドロードしたアプリに「制限付き設定」と表示されることがあります。「アプリ情報」を開き、メニューから「制限付き設定を許可」を選んでからここに戻ってください。</string>
     <string name="health_app_info">アプリ情報</string>
     <string name="inbox_work_profile">仕事用プロファイル</string>
-    <string name="listener_settings_manual">この端末には、QuietInbox が開ける通知アクセスの設定画面がありません。システムの「設定」→「通知」→「通知へのアクセス」（端末によっては「アプリ」→「特別なアプリアクセス」→「デバイスとアプリの通知」）を開き、QuietInbox を有効にしてください。</string>
+    <string name="listener_settings_manual">この端末には、QuietInbox が開ける通知へのアクセスの設定画面がありません。システムの「設定」→「通知」→「通知へのアクセス」（端末によっては「アプリ」→「特別なアプリアクセス」→「デバイスとアプリの通知」）を開き、QuietInbox を有効にしてください。</string>
     <string name="health_add_source_title">アプリを選択</string>
     <string name="health_add_source_search">インストール済みアプリを検索</string>
     <string name="health_add_by_package">パッケージ名を直接指定して追加（汎用パーサー）</string>
@@ -212,7 +212,7 @@
     <string name="settings_title">設定</string>
     <string name="section_appearance">外観</string>
     <string name="theme_mode">テーマ</string>
-    <string name="theme_system">システムに従う</string>
+    <string name="theme_system">システム</string>
     <string name="theme_light">ライト</string>
     <string name="theme_dark">ダーク</string>
     <string name="dynamic_color">ダイナミックカラー</string>
@@ -221,7 +221,7 @@
     <string name="reduce_motion_desc">控えめな画面遷移を使います。</string>
     <string name="section_privacy">プライバシーとセキュリティ</string>
     <string name="ui_lock">アプリをロック</string>
-    <string name="ui_lock_desc">QuietInbox を開くときに画面ロックまたは生体認証を要求します。キャプチャはバックグラウンドで続行します。これは UI 上の関門であり、二重の暗号化ではありません。</string>
+    <string name="ui_lock_desc">QuietInbox を開くときに画面ロックまたは生体認証を要求します。キャプチャはバックグラウンドで続行します。これは UI 上のロックであり、二重の暗号化ではありません。</string>
     <string name="screenshot_protection">スクリーンショットをブロック</string>
     <string name="screenshot_protection_desc">最近使ったアプリで内容を隠し、ほとんどの端末でスクリーンショットを防ぎます。</string>
     <string name="section_retention">保持期間</string>
@@ -235,7 +235,7 @@
     <string name="media_disclosure_body">QuietInbox にインターネット権限はありませんが、URI を読み取る際に送信元アプリのコンテンツプロバイダーが自らデータを取得する場合があります。コピーは暗号化され、サイズが制限されます。</string>
     <string name="section_reminders">自分用のリマインダー</string>
     <string name="reminders_enable">毎日のリマインダー</string>
-    <string name="reminders_desc">既定ではオフです。受信箱を確認するためのローカルなリマインダーで、キャプチャには影響せず、サイレントモードを尊重します。</string>
+    <string name="reminders_desc">既定ではオフです。受信箱を確認するためのローカルなリマインダーで、キャプチャには影響せず、サイレント モードを尊重します。</string>
     <string name="reminder_time">時刻</string>
     <string name="reminder_days">曜日</string>
     <string name="reminder_channel">リマインダー</string>
@@ -279,7 +279,7 @@
     <string name="delete_everything_step_reopen">新しい保管庫の作成</string>
     <string name="delete_everything_step_unexpected">予期しないエラー</string>
     <string name="delete_everything_failed">すべてを削除できませんでした（ステップ: %1$s）。完了と報告されたものはありません。もう一度試すか、システム設定からこのアプリのストレージを消去してください。</string>
-    <string name="section_about">情報</string>
+    <string name="section_about">このアプリについて</string>
     <string name="about_version">バージョン %1$s</string>
     <string name="about_offline">インターネット権限なし · 分析なし · クラッシュレポートなし</string>
     <string name="about_limitations">既知の制限</string>

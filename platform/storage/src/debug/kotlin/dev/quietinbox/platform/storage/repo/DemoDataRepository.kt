@@ -1,5 +1,6 @@
 package dev.quietinbox.platform.storage.repo
 
+import android.content.Context
 import androidx.room.withTransaction
 import dev.quietinbox.core.model.CaptureOrigin
 import dev.quietinbox.core.model.ContentStatus
@@ -28,6 +29,7 @@ import dev.quietinbox.platform.storage.db.QuietInboxDatabase
 import dev.quietinbox.platform.storage.db.SearchTokenEntity
 import dev.quietinbox.platform.storage.db.SourceConfigurationEntity
 import dev.quietinbox.platform.storage.db.SummaryObservationEntity
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.Instant
 import java.time.ZoneId
 import javax.inject.Inject
@@ -50,6 +52,7 @@ import kotlin.random.Random
 @Singleton
 class DemoDataRepository @Inject constructor(
     private val holder: DatabaseHolder,
+    @ApplicationContext private val context: Context,
 ) : DemoData {
 
     /**
@@ -59,6 +62,9 @@ class DemoDataRepository @Inject constructor(
      */
     override suspend fun seed(now: Long): DemoCounts {
         val db = holder.db()
+        // The demo speaks the app's language: names, titles and bodies are swapped for their
+        // zh-Hans / ja / ko equivalents (DemoLocalisation); any other language keeps the authored text.
+        val words = DemoLocalisation.forLocale(context.resources.configuration.locales[0])
         return db.withTransaction {
             clearRows(db)
             val zone = ZoneId.systemDefault()
@@ -80,7 +86,7 @@ class DemoDataRepository @Inject constructor(
             }
 
             var messages = 0
-            for (spec in CONVERSATIONS) messages += seedConversation(db, spec, now, zone, random)
+            for (spec in CONVERSATIONS) messages += seedConversation(db, spec, now, zone, random, words)
             seedCaptureHealth(db, now)
 
             DemoCounts(CONVERSATIONS.size, messages)
@@ -119,11 +125,14 @@ class DemoDataRepository @Inject constructor(
         now: Long,
         zone: ZoneId,
         random: Random,
+        words: Map<String, String>,
     ): Int {
         val rows = ArrayList<PendingMessage>(spec.messageCount + 4)
         repeat(spec.messageCount) { index -> rows += bulkMessage(spec, index, now, zone, random) }
         rows += spec.extras(spec, rows.size, now)
         rows.sortBy { it.sortKey }
+        for (i in rows.indices) rows[i] = rows[i].localised(words)
+        val title = words[spec.title] ?: spec.title
 
         val conversationId = db.conversationDao().insert(
             ConversationEntity(
@@ -132,7 +141,7 @@ class DemoDataRepository @Inject constructor(
                 accountKey = null,
                 identityKey = spec.identityKey,
                 identityConfidence = spec.confidence.name,
-                title = spec.title,
+                title = title,
                 isGroup = spec.isGroup,
                 pinned = spec.pinned,
                 archived = spec.archived,
@@ -734,6 +743,17 @@ class DemoDataRepository @Inject constructor(
             ),
         )
     }
+}
+
+/** The same row with every human-readable text swapped through [words] (exact matches only). */
+private fun PendingMessage.localised(words: Map<String, String>): PendingMessage {
+    if (words.isEmpty()) return this
+    fun String.l() = words[this] ?: this
+    val sender = candidate.sender?.let { it.copy(displayName = it.displayName?.l()) }
+    return PendingMessage(
+        candidate.copy(body = candidate.body.l(), sender = sender),
+        observedAt, postedAt, origin, dedupState, eventId, sortKey, previousBody?.l(), ambiguousLinkToEventId,
+    )
 }
 
 /** One row on its way into the vault, before conversation ids exist. */

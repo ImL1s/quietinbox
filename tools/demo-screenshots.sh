@@ -35,8 +35,13 @@ DEMO_ACTION="dev.quietinbox.debug.DEMO"
 # Matches DemoDataRepository.SEARCH_SAMPLE — several seeded bodies contain it, and it is ASCII, so
 # `adb shell input text` can type it (the input command cannot send CJK).
 SEARCH_QUERY="meeting"
-# The one conversation DemoDataRepository pins, so the inbox always opens it first.
-DEMO_PINNED_TITLE="林小美 Mia Lin"
+# The one conversation DemoDataRepository pins, so the inbox always opens it first; DemoLocalisation
+# renames it per app language.
+case "$LOCALE" in
+  ja-JP) DEMO_PINNED_TITLE="林 美咲 Misaki Hayashi" ;;
+  ko-KR) DEMO_PINNED_TITLE="김미아 Mia Kim" ;;
+  *)     DEMO_PINNED_TITLE="林小美 Mia Lin" ;;
+esac
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -88,6 +93,25 @@ def main():
             if text in wanted or description in wanted:
                 box = bounds(node)
                 if box:
+                    print("%d %d" % centre(box))
+                    return 0
+        return 1
+
+    if command == "tap-tab":
+        # Like tap-text, but only nodes in the bottom navigation bar (lowest 15% of the screen):
+        # a tile or heading that happens to carry the same word must not be mistaken for the tab.
+        wanted = set(sys.argv[2:])
+        height = 0
+        for node in nodes(tree):
+            box = bounds(node)
+            if box:
+                height = max(height, box[3])
+        for node in nodes(tree):
+            text = (node.get("text") or "").strip()
+            description = (node.get("content-desc") or "").strip()
+            if text in wanted or description in wanted:
+                box = bounds(node)
+                if box and box[1] >= int(height * 0.85):
                     print("%d %d" % centre(box))
                     return 0
         return 1
@@ -149,6 +173,19 @@ tap_text() {
   dump_ui || return 1
   local point
   if ! point="$(python3 "$HELPER" tap-text "$@" < "$WORK_DIR/ui.xml")"; then
+    return 1
+  fi
+  # shellcheck disable=SC2086
+  shell input tap $point
+  sleep 1
+  return 0
+}
+
+# tap_tab "Label" — taps a bottom-navigation item by its label, ignoring look-alikes elsewhere.
+tap_tab() {
+  dump_ui || return 1
+  local point
+  if ! point="$(python3 "$HELPER" tap-tab "$@" < "$WORK_DIR/ui.xml")"; then
     return 1
   fi
   # shellcheck disable=SC2086
@@ -291,7 +328,7 @@ shell am broadcast -a "$DEMO_ACTION" --es op seed -n "$DEMO_RECEIVER" >/dev/null
 sleep 6
 
 # 1 — inbox
-tap_text "$NAV_INBOX" || warn "could not reach the inbox tab"
+tap_tab "$NAV_INBOX" || warn "could not reach the inbox tab"
 shot "1_inbox"
 
 # 2 — a conversation (first row of the inbox)
@@ -301,7 +338,7 @@ shell input keyevent KEYCODE_BACK
 sleep 2
 
 # 3 — search with a query typed
-tap_text "$NAV_SEARCH" || warn "could not reach the search tab"
+tap_tab "$NAV_SEARCH" || warn "could not reach the search tab"
 sleep 1
 tap_text "$SEARCH_HINT" || warn "could not focus the search field"
 shell input text "$SEARCH_QUERY"
@@ -311,22 +348,22 @@ shell input keyevent KEYCODE_BACK
 sleep 1
 
 # 4 — activity statistics
-tap_text "$NAV_ACTIVITY" || warn "could not reach the activity tab"
+tap_tab "$NAV_ACTIVITY" || warn "could not reach the activity tab"
 sleep 3
 shot "4_activity"
 
 # 5 — capture health
-tap_text "$NAV_CAPTURE" || warn "could not reach the capture tab"
+tap_tab "$NAV_CAPTURE" || warn "could not reach the capture tab"
 sleep 2
 shot "5_capture"
 
 # 6 — settings
-tap_text "$NAV_SETTINGS" || warn "could not reach the settings tab"
+tap_tab "$NAV_SETTINGS" || warn "could not reach the settings tab"
 sleep 2
 shot "6_settings"
 
 # 7 — inbox in dark mode
-tap_text "$NAV_INBOX" || warn "could not reach the inbox tab"
+tap_tab "$NAV_INBOX" || warn "could not reach the inbox tab"
 shell cmd uimode night yes >/dev/null 2>&1 || warn "could not switch the device to night mode"
 sleep 3
 shot "7_inbox_dark"

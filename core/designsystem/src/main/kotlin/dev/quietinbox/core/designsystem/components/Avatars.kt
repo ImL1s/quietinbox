@@ -59,12 +59,15 @@ fun MonogramAvatar(
     }
 }
 
+private val SINGLE_GLYPH_SCRIPTS = setOf(Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA, Character.UnicodeScript.HANGUL)
+
 fun monogram(label: String?): String {
     val t = label?.trim().orEmpty()
     if (t.isEmpty()) return "?"
     val first = t.codePointAt(0)
     val firstStr = String(Character.toChars(first))
-    if (Character.isIdeographic(first)) return firstStr
+    // One glyph for CJK scripts (a kana or hangul name reads like a Han one), two Latin letters otherwise.
+    if (Character.isIdeographic(first) || Character.UnicodeScript.of(first) in SINGLE_GLYPH_SCRIPTS) return firstStr
     val parts = t.split(' ', '　').filter { it.isNotBlank() }
     return if (parts.size >= 2) {
         (parts[0].take(1) + parts[1].take(1)).uppercase()

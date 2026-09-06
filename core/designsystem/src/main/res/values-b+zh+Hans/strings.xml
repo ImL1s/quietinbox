@@ -59,7 +59,7 @@
     <string name="inbox_banner_not_granted">尚未授予通知使用权，目前没有任何捕获。</string>
     <string name="inbox_banner_disconnected">已授权但监听器尚未连接，正在重新连接…</string>
     <string name="inbox_banner_paused">捕获已暂停，新的通知不会被保存。</string>
-    <string name="inbox_banner_locked">无法打开加密数据库，请到“捕获”页查看恢复选项。</string>
+    <string name="inbox_banner_locked">无法打开加密保险库，请到“捕获”页查看恢复选项。</string>
     <string name="inbox_pinned">已置顶</string>
     <string name="inbox_unviewed">未查看</string>
     <string name="inbox_delete_title">删除这个对话？</string>
@@ -75,7 +75,7 @@
     <string name="conv_empty">这个对话还没有消息。</string>
     <string name="conv_open_source">在来源应用中打开</string>
     <string name="conv_open_source_title">要打开来源应用吗？</string>
-    <string name="conv_open_source_body">QuietInbox 将启动 %1$s。在那边打开聊天可能让对方看到已读；在这里查看副本则永远不会。</string>
+    <string name="conv_open_source_body">QuietInbox 将启动 %1$s。在那边打开聊天可能会在来源应用中把消息标为已读；在这里查看副本则永远不会。</string>
     <string name="conv_open_source_fallback">原始通知已不存在，将改为打开该应用的首页。</string>
     <string name="conv_open_source_unavailable">来源应用未安装。</string>
     <string name="conv_time_source">来源时间</string>
@@ -93,7 +93,7 @@
     <string name="conv_media_too_large">媒体超过大小上限</string>
     <string name="conv_media_disabled">已停用媒体复制</string>
     <string name="conv_media_failed">媒体复制失败</string>
-    <string name="conv_origin_resync">重连后对账</string>
+    <string name="conv_origin_resync">重连后核对</string>
     <string name="conv_origin_synthetic">合成测试</string>
     <string name="conv_origin_replay">由日志重放</string>
     <string name="conv_select">选择</string>
@@ -107,7 +107,7 @@
 
     <!-- Search -->
     <string name="search_hint">搜索已保存的副本</string>
-    <string name="search_empty_hint">搜索不区分大小写与全半角。中文按子串匹配；英文按整个单词或 3 个字母以上的片段匹配。</string>
+    <string name="search_empty_hint">搜索不区分大小写与全半角。中日韩文字按子串匹配；英文按整个单词或 3 个字母以上的片段匹配。</string>
     <string name="search_no_results">找不到“%1$s”。</string>
     <string name="search_range_all">不限时间</string>
     <string name="search_range_today">今天</string>
@@ -127,12 +127,12 @@
     <string name="analytics_empty_title">已观测的数据不足</string>
     <string name="analytics_empty_body">统计只描述 QuietInbox 实际观测到的副本，不推算真实的消息总量。</string>
     <string name="analytics_tile_captured">已捕获</string>
-    <string name="analytics_tile_conversations">会话</string>
+    <string name="analytics_tile_conversations">对话</string>
     <string name="analytics_tile_sources">来源</string>
     <string name="analytics_tile_median">中位间隔</string>
     <string name="analytics_hourly_title">按时段</string>
     <string name="analytics_daily_title">按日期</string>
-    <string name="analytics_top_conversations">最活跃的会话</string>
+    <string name="analytics_top_conversations">最活跃的对话</string>
     <string name="analytics_top_senders">最活跃的发送者</string>
     <string name="analytics_emoji_title">Emoji</string>
     <string name="analytics_gaps_note">区间内有 %1$d 段可能中断（%2$d 段时间未知）。</string>
@@ -158,14 +158,14 @@
     <string name="health_not_granted_body">请到系统设置中授予通知使用权。QuietInbox 只读取通知副本，绝不代你操作通知。</string>
     <string name="health_grant">前往授权</string>
     <string name="health_pause">暂停捕获</string>
-    <string name="health_resume">恢复捕获</string>
+    <string name="health_resume">继续捕获</string>
     <string name="health_pipeline_title">流水线状态</string>
     <string name="health_queue">队列中</string>
     <string name="health_accepted">已接受</string>
     <string name="health_overflow">溢出</string>
     <string name="health_dropped">撤权后丢弃</string>
     <string name="health_pending_journal">待处理日志</string>
-    <string name="health_vault_locked">加密数据库已锁定：密钥无法使用，目前没有任何新内容被保存。</string>
+    <string name="health_vault_locked">加密保险库已锁定：密钥无法使用，目前没有任何新内容被保存。</string>
     <string name="health_sources_title">来源</string>
     <string name="health_add_source">添加来源</string>
     <string name="health_source_enabled">已启用</string>
@@ -178,7 +178,7 @@
     <string name="health_adapter">适配器：%1$s</string>
     <string name="health_adapter_standard">通用解析器</string>
     <string name="health_gaps_title">可能的中断</string>
-    <string name="health_no_gaps">本次连接没有记录到中断。</string>
+    <string name="health_no_gaps">本次运行期间没有记录到中断。</string>
     <string name="health_gap_unknown_time">时间不明</string>
     <string name="health_gap_open">持续中</string>
     <string name="gap_reason_disconnected">监听器断开</string>
@@ -200,7 +200,7 @@
     <string name="health_restricted_hint">Android 13 及以上，侧载的应用可能显示“受限制的设置”。请打开“应用信息”，点右上角菜单选择“允许受限制的设置”，然后回到这里。</string>
     <string name="health_app_info">应用信息</string>
     <string name="inbox_work_profile">工作资料</string>
-    <string name="listener_settings_manual">此设备没有静读能打开的通知使用权设置页面。请自行打开系统“设置”→“通知”→“通知使用权”（部分设备为“应用”→“特殊应用权限”→“设备和应用通知”），并启用静读。</string>
+    <string name="listener_settings_manual">此设备没有 QuietInbox 能打开的通知使用权设置页面。请自行打开系统“设置”→“通知”→“通知使用权”（部分设备为“应用”→“特殊应用权限”→“设备和应用通知”），并启用 QuietInbox。</string>
     <string name="health_add_source_title">选择应用</string>
     <string name="health_add_source_search">搜索已安装的应用</string>
     <string name="health_add_by_package">按包名直接添加（通用解析器）</string>
@@ -233,7 +233,7 @@
     <string name="media_copy_desc">只处理可读的 content URI 与通知本身附带的图片，不会下载任何内容。</string>
     <string name="media_disclosure_title">关于媒体副本</string>
     <string name="media_disclosure_body">QuietInbox 没有网络权限，但来源应用的 content provider 在被读取时可能自行抓取数据。副本会加密并限制大小。</string>
-    <string name="section_reminders">你自己的提醒</string>
+    <string name="section_reminders">QuietInbox 的提醒</string>
     <string name="reminders_enable">每日提醒</string>
     <string name="reminders_desc">默认关闭。这只是提醒你回来看看收件箱，绝不影响捕获，并遵守勿扰模式。</string>
     <string name="reminder_time">时间</string>
@@ -241,7 +241,7 @@
     <string name="reminder_channel">提醒</string>
     <string name="reminder_title">QuietInbox 提醒</string>
     <plurals name="reminder_body_count">
-        <item quantity="other">有 %1$d 个会话有新的副本等你查看。</item>
+        <item quantity="other">有 %1$d 个对话有新的副本等你查看。</item>
     </plurals>
     <string name="section_backup">备份与恢复</string>
     <string name="backup_recovery_key">恢复密钥</string>
@@ -252,7 +252,7 @@
     <string name="backup_export">导出加密备份</string>
     <string name="backup_export_desc">以流式方式把加密文件写到你选择的位置。若选择云端文件夹，密文会离开这台设备。</string>
     <string name="backup_import">从备份恢复</string>
-    <string name="backup_import_desc">验证每个数据块后合并到这个数据库。这可能把你先前删除的内容带回来。恢复的来源会保持停用，请到“捕获”页重新启用。</string>
+    <string name="backup_import_desc">验证每个数据块后合并到这个保险库。这可能把你先前删除的内容带回来。恢复的来源会保持停用，请到“捕获”页重新启用。</string>
     <string name="backup_import_key_prompt">输入创建这份备份的设备的恢复密钥</string>
     <string name="backup_result_ok">完成：%1$d 个对话、%2$d 条消息、%3$d 个媒体。</string>
     <string name="backup_result_partial_media">有 %1$d 个媒体无法读取，未包含在此备份中。</string>
@@ -263,14 +263,14 @@
     <string name="backup_failed_version">不支持的备份版本。</string>
     <string name="backup_failed_counts">记录数量与清单不符。</string>
     <string name="backup_failed_too_large">备份超过大小限制。</string>
-    <string name="backup_failed_vault">数据库已锁定。</string>
+    <string name="backup_failed_vault">保险库已锁定。</string>
     <string name="backup_failed_maintenance">正在重置或恢复；请等它完成后再试一次。</string>
     <string name="hours_short">%1$d 小时</string>
     <string name="backup_failed_corrupt">备份文件已损坏（有一条记录无法读取）。</string>
     <string name="backup_file_name">quietinbox-backup-%1$s.qibk</string>
     <string name="section_data">数据</string>
     <string name="delete_everything">删除所有数据</string>
-    <string name="delete_everything_desc">移除数据库、媒体、密钥与设置。你已导出的备份不受影响。</string>
+    <string name="delete_everything_desc">移除保险库、媒体、密钥与设置。你已导出的备份不受影响。</string>
     <string name="delete_everything_confirm_title">删除全部？</string>
     <string name="delete_everything_confirm_body">此操作无法撤销。请输入 DELETE 确认。</string>
     <string name="delete_everything_step_database">删除保险库数据库</string>
@@ -306,7 +306,7 @@
     <string name="ob_scope_point_1">数据不会离开手机：没有网络权限、没有分析。</string>
     <string name="ob_scope_point_2">查看副本不会让来源显示已读，也不会代你回复。</string>
     <string name="ob_scope_point_3">只能捕获来源应用放进通知的内容；有中断会如实显示，不会隐藏。</string>
-    <string name="ob_scope_point_4">所有内容都存在加密数据库中，密钥为本次安装独有。</string>
+    <string name="ob_scope_point_4">所有内容都存在加密保险库中，密钥为本次安装独有。</string>
     <string name="ob_sources_title">选择来源</string>
     <string name="ob_sources_body">挑选你想保存通知的应用。之后可以随时在“捕获”页调整。</string>
     <string name="ob_sources_not_installed">未安装</string>
@@ -328,12 +328,12 @@
     <string name="ob_notification_permission">请允许 QuietInbox 发送通知，才能发出测试。</string>
 
     <!-- Vault / lock -->
-    <string name="vault_locked_title">数据库已锁定</string>
+    <string name="vault_locked_title">保险库已锁定</string>
     <string name="vault_locked_body">保护副本的密钥无法使用（%1$s）。没有任何数据被删除。你可以重试、之后从备份恢复，或重新开始。</string>
     <string name="vault_locked_retry">重试</string>
-    <string name="vault_locked_reset">重新开始（删除数据库）</string>
-    <string name="vault_reset_confirm_title">删除数据库？</string>
-    <string name="vault_reset_confirm_body">现有数据库无法打开，将被删除。如果你有备份，之后可以恢复。</string>
+    <string name="vault_locked_reset">重新开始（删除保险库）</string>
+    <string name="vault_reset_confirm_title">删除保险库？</string>
+    <string name="vault_reset_confirm_body">现有保险库无法打开，将被删除。如果你有备份，之后可以恢复。</string>
     <string name="vault_failure_invalidated">密钥已失效</string>
     <string name="vault_failure_tampered">密钥文件无法读取</string>
     <string name="vault_failure_unavailable">密钥库无法使用：%1$s</string>

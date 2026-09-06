@@ -71,7 +71,9 @@ android {
     }
 
     androidResources {
-        localeFilters += listOf("en", "b+zh+Hant", "b+zh+Hans", "ja", "ko")
+        // The BCP-47 qualifiers select the app's own catalogues; the region qualifiers keep the AndroidX
+        // (material3 pickers, content descriptions) Chinese resources, which ship as zh-rCN / zh-rTW / zh-rHK.
+        localeFilters += listOf("en", "b+zh+Hant", "b+zh+Hans", "zh-rTW", "zh-rCN", "zh-rHK", "ja", "ko")
     }
 
     compileOptions {

@@ -3,7 +3,7 @@ QuietInbox keeps a private, encrypted copy of what your messaging apps post to t
 WHAT IT DOES
 • Saves the text of notifications from the apps you choose (LINE, WhatsApp, Telegram, Instagram, Messenger or any other messaging app) into an encrypted vault on this phone.
 • Groups copies by conversation, with the sender, the source time and the time the copy was made.
-• Full-text search in Chinese and English, activity insights (heat map, rankings, best time, quiet days, emoji and catchphrases), and encrypted backup with a recovery key.
+• Full-text search in Chinese, Japanese, Korean and English, activity insights (heat map, rankings, best time, quiet days, emoji and catchphrases), and encrypted backup with a recovery key.
 • Honest labels: when a sender is inferred, a preview was hidden, or a message may be a repeat, the copy says so.
 
 FOUR PROMISES

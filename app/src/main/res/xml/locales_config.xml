@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Languages the app ships; Android 13+ lists them under Settings → Apps → QuietInbox → Language. Keep in step with localeFilters in app/build.gradle.kts and tools/check-strings.py. -->
+<!-- Languages the app ships; Android 13+ lists them under Settings → Apps → QuietInbox → Language. Keep in step with localeFilters in app/build.gradle.kts (tools/check-strings.py discovers the catalogues itself). -->
 <locale-config xmlns:android="http://schemas.android.com/apk/res/android">
     <locale android:name="en" />
     <locale android:name="zh-Hant" />

@@ -64,7 +64,7 @@
     <string name="analytics_quiet_value">沉默 %1$d%%</string>
     <string name="analytics_quiet_days">%2$d 天中有 %1$d 天</string>
     <string name="analytics_quiet_streak">最长连续 %1$d 天</string>
-    <string name="analytics_quiet_formula">所选期间内没有观测到消息的天数，除以该期间的所有天数（含对话第一次出现之前的日子）。没有消息也可能只是来源应用当天没有推送通知。</string>
+    <string name="analytics_quiet_formula">所选期间内没有观测到消息的天数，除以该期间的所有天数（含对话第一次出现之前的日子）。没有消息也可能只是来源应用当天没有发出通知。</string>
 
     <string name="analytics_catchphrase_title">口头禅</string>
     <string name="analytics_catchphrase_note">发送者在观测消息中重复至少两次的字符串与词语。你自己发出的消息不会被扫描。</string>

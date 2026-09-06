@@ -107,7 +107,7 @@
 
     <!-- Search -->
     <string name="search_hint">Search saved copies</string>
-    <string name="search_empty_hint">Searches are case- and width-insensitive. Chinese text matches as a substring; Latin words match whole words or 3+ letter fragments.</string>
+    <string name="search_empty_hint">Searches are case- and width-insensitive. Chinese, Japanese and Korean text matches as a substring; Latin words match whole words or 3+ letter fragments.</string>
     <string name="search_no_results">No matches for “%1$s”.</string>
     <string name="search_range_all">Any time</string>
     <string name="search_range_today">Today</string>

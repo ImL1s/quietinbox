@@ -31,7 +31,7 @@
 | UI 鎖（BiometricPrompt）、截圖保護 | 已實作，**部分驗證** | 在加入 debug 專用豁免前，已驗證 FLAG_SECURE 會擋掉 `screencap`；生物辨識流程未演練 |
 | 示範模式（僅 debug 版） | 完成 | `DemoDataRepository` 位於 `platform:storage` 的 `debug` source set，藏在 `DemoData` 介面後；release 綁定 no-op，其 dex 不含任何示範類別或文字（以 `strings` 檢查 `classes.dex`）；真機 `DemoDataTest` |
 | 沒有 INTERNET 權限 | 完成 | debug APK 的 `aapt2 dump permissions`；CI 的 `tools/check-permissions.sh` |
-| 在地化：en、zh-Hant、zh-Hans、ja、ko（UI 字串、App 內語言清單、商店文案） | 完成 | `core/designsystem/res/values*`、`app/res/xml/locales_config.xml`、`fastlane/metadata/android/{en-US,zh-TW,zh-CN,ja-JP,ko-KR}`；CI 的 `tools/check-strings.py` 保證每份目錄完整（名稱、佔位符、複數形）；三種新語言由專案內部翻譯並在 API 36 AVD 上檢查，尚未經母語審閱 |
+| 在地化：en、zh-Hant、zh-Hans、ja、ko（UI 字串、App 內語言清單、商店文案） | 完成 | `core/designsystem/res/values*`、`app/res/xml/locales_config.xml`、`fastlane/metadata/android/{en-US,zh-TW,zh-CN,ja-JP,ko-KR}`；CI 的 `tools/check-strings.py` 保證每份目錄完整（名稱、佔位符、複數形）；示範金庫也在地化（`DemoLocalisation`，debug source set）；三種新語言由專案內部翻譯、在第 18 輪審查並在 API 36 AVD 上檢查，尚未經母語審閱 |
 | 發行：付費 Google Play + 免費 GitHub Releases，同一個二進位（ADR-0006） | 完成（Play：0.1.0 審查中；GitHub：0.1.1） | `versionCode` 5 / 0.1.1（審計修正，issue #1–#16）是 GitHub release `v0.1.1`（tag 在 `c6b6645`，簽章 APK + `SHA256SUMS.txt`）；0.1.0 審查通過後以 `workflow_dispatch` 送 Play。`versionCode` 4 / 0.1.0 於 2026-09-06 送 Play production（付費、172 個國家、無 INTERNET 權限、無 Play Billing）；tag `v0.1.0` → `release.yml` 建置簽章 APK + `SHA256SUMS.txt` 並跑權限閘門；商店文案（zh-TW + en-US）與圖片來自 `fastlane/metadata/android/`；截圖參考版在 `docs/screenshots/` |
 | 自適應版面（寬視窗的 rail + list-detail） | 完成（模擬器） | Foldable_Test AVD（API 36，2076×2152）：`NavigationRail` + `ListDetailSceneStrategy` 讓收件匣與對話並排；手機顯示底部列 |
 
