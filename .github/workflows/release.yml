@@ -68,8 +68,9 @@ jobs:
           # release gets the gzip, about a fourteenth of the size, which expands to the same bytes.
           cp app/build/outputs/mapping/release/mapping.txt "dist/quietinbox-$VERSION-mapping.txt"
           gzip -9 -k "dist/quietinbox-$VERSION-mapping.txt"
-          (cd dist && { echo "# the .aab and the plain mapping.txt are in the workflow artifact, not the release"; \
-             sha256sum quietinbox-*.apk quietinbox-*.aab quietinbox-*-mapping.txt quietinbox-*-mapping.txt.gz; } > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          # No comment line in the file: `sha256sum -c` prints "improperly formatted" for one. Which of
+          # these four the release actually carries is said in the release notes instead.
+          (cd dist && sha256sum quietinbox-*.apk quietinbox-*.aab quietinbox-*-mapping.txt quietinbox-*-mapping.txt.gz > SHA256SUMS.txt && cat SHA256SUMS.txt)
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-${{ steps.meta.outputs.version }}
@@ -95,6 +96,7 @@ jobs:
         run: |
           NOTES=$(awk -v ver="${TAG#v}" '/^## \[/{p = index($0, "[" ver "]") > 0} p' CHANGELOG.md)
           [ -n "$NOTES" ] || NOTES="QuietInbox $TAG — see CHANGELOG.md"
+          NOTES="$NOTES"$'\n\n'"\`SHA256SUMS.txt\` covers four files: the APK and the gzipped R8 mapping attached here, and the AAB and the plain mapping, which stay in the workflow artifact. Verify with \`sha256sum --ignore-missing -c SHA256SUMS.txt\`."
           gh release view "$TAG" >/dev/null 2>&1 && gh release delete-asset "$TAG" "quietinbox-${TAG#v}.apk" --yes || true
           gh release create "$TAG" dist/quietinbox-*.apk dist/quietinbox-*-mapping.txt.gz dist/SHA256SUMS.txt --title "QuietInbox $TAG" --notes "$NOTES" 2>/dev/null \
             || gh release upload "$TAG" dist/quietinbox-*.apk dist/quietinbox-*-mapping.txt.gz dist/SHA256SUMS.txt --clobber

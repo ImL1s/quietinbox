@@ -4,7 +4,10 @@ All notable changes to this project are documented here. The format follows Keep
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+- `SHA256SUMS.txt` no longer opens with a comment line: `sha256sum -c` reports one as "improperly
+  formatted". Which of its four files the release actually carries is said in the release notes now,
+  with the `--ignore-missing` invocation that verifies them. `v0.1.3`'s copy still has the comment.
 
 ## [0.1.3] — 2026-09-07
 
