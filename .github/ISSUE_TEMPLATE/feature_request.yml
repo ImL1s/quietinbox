@@ -1,0 +1,25 @@
+name: Feature request / 功能建議
+description: Something QuietInbox should do. 靜讀應該做的事。
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Hard product rules that will not change: no INTERNET permission, never acting on the source notification, only what the source puts in a notification is captured, honest data-quality labels. See docs/SCOPE.md for what is planned and what is out of scope.
+        不會改變的硬規則：不申請 INTERNET、絕不對來源通知動作、只擷取來源放進通知的內容、誠實的資料品質標籤。已規劃與不做的項目見 docs/SCOPE.md。
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / 問題
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal / 建議做法
+    validations:
+      required: true
+  - type: textarea
+    id: honesty
+    attributes:
+      label: Which observed data would it use, and what must it NOT claim? / 用到哪些觀測資料、不得宣稱什麼？

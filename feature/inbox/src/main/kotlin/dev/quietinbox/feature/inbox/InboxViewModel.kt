@@ -110,6 +110,9 @@ class InboxViewModel @Inject constructor(
 
     fun listenerSettingsIntent() = listenerAccess.settingsIntent()
 
+    /** False when no settings screen exists on this device; the screen then shows the manual path. */
+    fun openListenerSettings(from: android.content.Context): Boolean = listenerAccess.openSettings(from)
+
     companion object {
         const val SUPPRESSION_TTL_MS: Long = 30L * 24 * 60 * 60 * 1000
     }

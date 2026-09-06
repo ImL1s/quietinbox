@@ -45,14 +45,20 @@ class VaultRepository @Inject constructor(
      * failure names the step instead of pretending the reset completed.
      */
     suspend fun deleteEverything(): ResetResult = maintenance.exclusive {
-        if (!holder.closeAndDeleteFiles()) return@exclusive ResetResult.Failed("database")
-        if (!mediaDir.deleteAll()) return@exclusive ResetResult.Failed("media")
-        // Bumps the key epoch: every cached cipher primitive (media blobs) is rebuilt from the new key.
-        keyMaterial.destroyAll()
-        if (keyMaterial.anySecretExists() || keyMaterial.keystoreKeyExists()) return@exclusive ResetResult.Failed("keys")
-        settings.clearAll()
-        holder.retry()
-        if (holder.state.value is VaultState.Ready) ResetResult.Done else ResetResult.Failed("reopen")
+        try {
+            if (!holder.closeAndDeleteFiles()) return@exclusive ResetResult.Failed("database")
+            if (!mediaDir.deleteAll()) return@exclusive ResetResult.Failed("media")
+            // Bumps the key epoch: every cached cipher primitive (media blobs) is rebuilt from the new key.
+            keyMaterial.destroyAll()
+            if (keyMaterial.anySecretExists() || keyMaterial.keystoreKeyExists()) return@exclusive ResetResult.Failed("keys")
+            settings.clearAll()
+            holder.retry()
+            if (holder.state.value is VaultState.Ready) ResetResult.Done else ResetResult.Failed("reopen")
+        } finally {
+            // Whatever step failed, the vault must not stay "Opening" forever: every repository
+            // call would hang and the app would be dead behind one snackbar (round-10 finding).
+            if (holder.state.value !is VaultState.Ready) holder.retry()
+        }
     }
 
     /** Recreates the vault when the key is unusable and the user explicitly chose to start over. */

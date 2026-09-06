@@ -20,6 +20,9 @@ enum class GapReason {
 
     /** A reset or restore held the vault; events during that window were not captured (QI-SEC-003). */
     MAINTENANCE,
+
+    /** Notifications arrived before the source list was known and the vault did not open in time; nothing was read from them (QI-CAPTURE-013). */
+    COLD_START,
     UNKNOWN,
 }
 

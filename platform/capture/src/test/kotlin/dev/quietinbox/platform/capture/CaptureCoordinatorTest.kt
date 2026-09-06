@@ -2,6 +2,7 @@ package dev.quietinbox.platform.capture
 
 import android.content.Context
 import android.service.notification.NotificationListenerService
+import android.service.notification.StatusBarNotification
 import dev.quietinbox.core.model.CaptureOrigin
 import dev.quietinbox.core.model.GapPrecision
 import dev.quietinbox.core.model.GapReason
@@ -12,6 +13,9 @@ import dev.quietinbox.core.testing.Fixtures
 import dev.quietinbox.platform.media.MediaCopier
 import dev.quietinbox.platform.storage.db.VaultMaintenance
 import dev.quietinbox.platform.storage.db.VaultState
+import dev.quietinbox.platform.storage.db.VaultUnavailableException
+import dev.quietinbox.platform.crypto.KeyFailure
+import dev.quietinbox.platform.storage.repo.CommitOutcome
 import dev.quietinbox.platform.storage.repo.HealthRepository
 import dev.quietinbox.platform.storage.repo.IngestRepository
 import dev.quietinbox.platform.storage.repo.SourceRepository
@@ -28,6 +32,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -379,9 +384,10 @@ class CaptureCoordinatorTest : FunSpec({
         // evt-b passed the pre-lock fence: the source is still enabled at this point.
         coordinator.offerCaptured(captured("evt-b"))
         // The policy change queues on the pipeline lock behind evt-a and ahead of evt-b (the
-        // mutex is fair), so evt-b's in-lock fence sees the source switched off.
-        val change = launch { coordinator.setSourceEnabled(ENABLED_PKG, enabled = false) }
-        delay(200)
+        // mutex is fair). UNDISPATCHED runs it synchronously up to its first suspension — the
+        // lock wait — so it is enqueued before the gate is released, with no timing assumption.
+        val change = launch(start = CoroutineStart.UNDISPATCHED) { coordinator.setSourceEnabled(ENABLED_PKG, enabled = false) }
+        coVerify(exactly = 0) { h.sources.setEnabled(any(), any()) }
         releaseJournal.complete(Unit)
         change.join()
 
@@ -420,17 +426,17 @@ class CaptureCoordinatorTest : FunSpec({
 
     test("replay is held while paused and runs on resume") {
         val h = Harness()
-        coEvery { h.ingest.pendingJournal(any()) } returns emptyList()
+        coEvery { h.ingest.pendingJournal(any(), any()) } returns emptyList()
         val coordinator = h.coordinator()
         coordinator.onConnected(h.service)
         h.awaitConnected()
         coordinator.setPaused(true)
 
         h.vaultState.value = VaultState.Ready(mockk(relaxed = true))
-        stillHolds { coVerify(exactly = 0) { h.ingest.pendingJournal(any()) } }
+        stillHolds { coVerify(exactly = 0) { h.ingest.pendingJournal(any(), any()) } }
 
         coordinator.setPaused(false)
-        coVerify(timeout = 5_000, atLeast = 1) { h.ingest.pendingJournal(any()) }
+        coVerify(timeout = 5_000, atLeast = 1) { h.ingest.pendingJournal(any(), any()) }
     }
 
     test("replay discards a pending row whose source was disabled since and commits the others") {
@@ -438,7 +444,7 @@ class CaptureCoordinatorTest : FunSpec({
         val disabled = Fixtures.snapshot(Fixtures.base(title = null, text = null), packageName = UNLISTED_PKG, eventId = "evt-disabled")
         val enabled = Fixtures.snapshot(Fixtures.base(title = null, text = null), packageName = ENABLED_PKG, eventId = "evt-enabled")
         var served = false
-        coEvery { h.ingest.pendingJournal(any()) } coAnswers {
+        coEvery { h.ingest.pendingJournal(any(), any()) } coAnswers {
             if (served) emptyList() else { served = true; listOf("gen-old" to disabled, "gen-old" to enabled) }
         }
         coEvery { h.ingest.isJournalPending(any()) } returns true
@@ -494,5 +500,96 @@ class CaptureCoordinatorTest : FunSpec({
         // Capture works again under the new generation.
         coordinator.offerCaptured(captured("evt-after"))
         awaitUntil { h.journaled shouldBe listOf("evt-a", "evt-after") }
+    }
+
+    test("every maintenance run records its own gap, even two in a row and an instant one") {
+        val h = Harness()
+        val coordinator = h.coordinator()
+        coordinator.onConnected(h.service)
+        h.awaitConnected()
+
+        h.maintenance.exclusive { }
+        h.maintenance.exclusive { }
+
+        coVerify(timeout = 5_000, exactly = 2) { h.health.recordGap(any(), any(), GapReason.MAINTENANCE, GapPrecision.EXACT, any()) }
+        awaitUntil { coordinator.status.value.activeGeneration.shouldNotBeNull() }
+        coordinator.offerCaptured(captured("evt-after-two"))
+        awaitUntil { h.journaled shouldBe listOf("evt-after-two") }
+    }
+
+    // ---- QI-CAPTURE-013: nothing is read from a notification before the policy is known ---------
+
+    /** A framework notification object: only `packageName` is ever touched before the policy is known. */
+    fun sbnOf(pkg: String): StatusBarNotification = mockk(relaxed = true) { every { packageName } returns pkg }
+
+    test("before the source list is known a notification is held unread; once known, only sources are snapshotted") {
+        val h = Harness()
+        val factory: SnapshotFactory = mockk()
+        val created = Collections.synchronizedList(ArrayList<String>())
+        every { factory.create(any(), any(), any(), any()) } answers {
+            val pkg = firstArg<StatusBarNotification>().packageName
+            created += pkg
+            captured("evt-$pkg", pkg = pkg)
+        }
+        // The vault takes a moment: sources.sources() suspends until the test releases it.
+        val vaultOpen = CompletableDeferred<Unit>()
+        coEvery { h.sources.sources() } coAnswers { vaultOpen.await(); listOf(sourceConfig(ENABLED_PKG)) }
+        val coordinator = h.coordinator().also { it.snapshotFactory = factory }
+        coordinator.onConnected(h.service)
+
+        coordinator.onPosted(sbnOf(UNLISTED_PKG))
+        coordinator.onPosted(sbnOf(ENABLED_PKG))
+        // Held, not materialised: the factory has not seen either of them.
+        stillHolds { created shouldBe emptyList() }
+        coordinator.status.value.queueDepth shouldBe 0
+
+        vaultOpen.complete(Unit)
+        awaitUntil { h.journaled shouldBe listOf("evt-$ENABLED_PKG") }
+        // The unlisted one was dropped without ever being read.
+        stillHolds { created shouldBe listOf(ENABLED_PKG) }
+    }
+
+    test("when the vault does not open, held notifications are dropped unread and a bounded gap is recorded") {
+        val h = Harness()
+        val factory: SnapshotFactory = mockk()
+        coEvery { h.sources.sources() } throws VaultUnavailableException(KeyFailure.Unavailable("test"))
+        val coordinator = h.coordinator().also { it.snapshotFactory = factory }
+        coordinator.onConnected(h.service)
+
+        coordinator.onPosted(sbnOf(ENABLED_PKG))
+
+        coVerify(timeout = 5_000) { h.health.recordGap(any(), any(), GapReason.COLD_START, GapPrecision.BOUNDED, any()) }
+        stillHolds { h.journaled shouldBe emptyList() }
+        coVerify(exactly = 0) { factory.create(any(), any(), any(), any()) }
+    }
+
+    // ---- QI-MEDIA-006: a bitmap stays counted until the copier is done with it -------------------
+
+    test("bitmaps in flight at the copier still count against the queue bound") {
+        val h = Harness()
+        val bitmap: android.graphics.Bitmap = mockk(relaxed = true)
+        coEvery { h.ingest.commit(any(), any(), any(), any(), any(), any(), any()) } returns CommitOutcome(1L, listOf(1L), emptyList(), listOf(1L), 0, false)
+        val copying = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val bitmaps = Collections.synchronizedList(ArrayList<android.graphics.Bitmap?>())
+        coEvery { h.mediaCopier.copyPending(any(), any()) } coAnswers {
+            bitmaps += secondArg<android.graphics.Bitmap?>()
+            if (bitmaps.size == 1) { copying.complete(Unit); release.await() }
+        }
+        fun withBitmap(id: String) = CapturedNotification(Fixtures.snapshot(Fixtures.base(title = "A", text = "picture"), packageName = ENABLED_PKG, eventId = id), bitmap)
+        val coordinator = h.coordinator()
+        coordinator.onConnected(h.service)
+
+        coordinator.offerCaptured(withBitmap("evt-0"))
+        withTimeout(5_000) { copying.await() }
+        // The first copy is still running: its bitmap is still counted. Seven more fill the bound...
+        for (i in 1..7) coordinator.offerCaptured(withBitmap("evt-$i"))
+        // ...so the ninth bitmap is dropped at the door (a placeholder is kept), not queued.
+        coordinator.offerCaptured(withBitmap("evt-8"))
+        release.complete(Unit)
+
+        awaitUntil { bitmaps.size shouldBe 9 }
+        bitmaps.take(8).all { it != null } shouldBe true
+        bitmaps[8] shouldBe null
     }
 })

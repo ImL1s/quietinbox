@@ -54,6 +54,10 @@ class InboxRepository @Inject constructor(
     }
 
     suspend fun markViewed(conversationId: Long, now: Long) = holder.db().conversationDao().markViewed(conversationId, now)
+
+    /** How many conversations (of [packages], or all when empty) have copies the user has not looked at yet (QI-REMIND-015). */
+    suspend fun unviewedConversationCount(packages: Set<String> = emptySet()): Int =
+        holder.db().conversationDao().unviewedCount(packages.isEmpty(), packages.toList())
     suspend fun setPinned(conversationId: Long, pinned: Boolean) = holder.db().conversationDao().setPinned(conversationId, pinned)
     suspend fun setArchived(conversationId: Long, archived: Boolean) = holder.db().conversationDao().setArchived(conversationId, archived)
 

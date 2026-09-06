@@ -24,6 +24,14 @@ class ReminderSchedulerTest {
     }
 
     @Test
+    fun remindsOnlyWhenEnabledAllowedAndSomethingIsUnviewed() {
+        assertEquals(true, ReminderPolicy.shouldRemind(remindersEnabled = true, notificationsAllowed = true, unviewedConversations = 1))
+        assertEquals(false, ReminderPolicy.shouldRemind(remindersEnabled = true, notificationsAllowed = true, unviewedConversations = 0))
+        assertEquals(false, ReminderPolicy.shouldRemind(remindersEnabled = false, notificationsAllowed = true, unviewedConversations = 5))
+        assertEquals(false, ReminderPolicy.shouldRemind(remindersEnabled = true, notificationsAllowed = false, unviewedConversations = 5))
+    }
+
+    @Test
     fun weekendRollsToMonday() {
         val now = ZonedDateTime.of(2026, 9, 5, 8, 0, 0, 0, taipei) // Saturday
         assertEquals(Duration.ofDays(2).plusHours(12).plusMinutes(30), ReminderScheduler.delayUntilNext(settings, now))

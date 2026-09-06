@@ -1,0 +1,9 @@
+version: 2
+updates:
+  # Actions only: every Gradle dependency change needs the verification metadata regenerated from
+  # a cold cache (docs/RELEASE.md), which a bot PR cannot do, so Gradle updates stay manual.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels: [ci]

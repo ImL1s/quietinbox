@@ -20,7 +20,15 @@ data class ObservedMessage(
     val body: String,
     val senderName: String?,
     val isSelf: Boolean,
-)
+    /** Stable key the source gave the sender (MessagingStyle Person key), when any. */
+    val senderKey: String? = null,
+) {
+    /**
+     * Identity used for ranking: the same display name in two apps or two chats is two people,
+     * so the key is source + conversation + (stable key, else display name) (QI-SEARCH-011).
+     */
+    val senderIdentity: String? get() = senderName?.takeIf(String::isNotBlank)?.let { "$packageName|$conversationId|${senderKey ?: it}" }
+}
 
 data class AnalyticsInput(
     val messages: List<ObservedMessage>,
@@ -33,7 +41,8 @@ data class AnalyticsInput(
 
 data class DayCount(val date: LocalDate, val count: Int)
 data class ConversationRank(val conversationId: Long, val count: Int, val share: Double)
-data class SenderRank(val name: String, val count: Int)
+/** [name] is what the notification showed; [packageName] and [conversationId] tell two same-named people apart. */
+data class SenderRank(val name: String, val count: Int, val packageName: String = "", val conversationId: Long = 0L)
 data class EmojiCount(val emoji: String, val count: Int)
 data class SourceCount(val packageName: String, val count: Int)
 
@@ -60,6 +69,8 @@ data class ActivityReport(
     val gapCount: Int,
     val unknownGapCount: Int,
     val medianIntervalMs: Long?,
+    /** How many within-conversation intervals the median was taken over (0 ⇒ no median). */
+    val intervalSampleSize: Int = 0,
     val conversationCount: Int,
 ) {
     val isEmpty: Boolean get() = sampleSize == 0
@@ -89,12 +100,13 @@ object ActivityAnalytics {
             .map { ConversationRank(it.key, it.value, it.value / total) }
 
         val topSenders = counted.asSequence()
-            .filter { !it.isSelf }
-            .mapNotNull { it.senderName?.takeIf(String::isNotBlank) }
-            .groupingBy { it }.eachCount().entries
-            .sortedByDescending { it.value }
+            .filter { !it.isSelf && it.senderIdentity != null }
+            .groupBy { it.senderIdentity!! }
+            .values
+            .map { rows -> rows.first() to rows.size }
+            .sortedWith(compareByDescending<Pair<ObservedMessage, Int>> { it.second }.thenBy { it.first.senderName }.thenBy { it.first.conversationId })
             .take(TOP_N)
-            .map { SenderRank(it.key, it.value) }
+            .map { (m, n) -> SenderRank(m.senderName!!, n, m.packageName, m.conversationId) }
 
         val emoji = HashMap<String, Int>()
         for (m in counted) for (e in EmojiScanner.scan(m.body)) emoji[e] = (emoji[e] ?: 0) + 1
@@ -104,7 +116,12 @@ object ActivityAnalytics {
             .sortedByDescending { it.value }
             .map { SourceCount(it.key, it.value) }
 
-        val intervals = counted.map { it.timestampEpochMs }.sorted().zipWithNext { a, b -> b - a }.filter { it >= 0 }
+        // Rhythm is a property of one conversation: two unrelated chats posting a minute apart say
+        // nothing about either, so intervals are taken between consecutive messages of the same
+        // conversation only (QI-SEARCH-011).
+        val intervals = counted.groupBy { it.conversationId }.values
+            .flatMap { rows -> rows.map { it.timestampEpochMs }.sorted().zipWithNext { a, b -> b - a } }
+            .filter { it >= 0 }
         val median = if (intervals.isEmpty()) null else intervals.sorted()[intervals.size / 2]
 
         return ActivityReport(
@@ -125,6 +142,7 @@ object ActivityAnalytics {
             gapCount = input.gaps.size,
             unknownGapCount = input.gaps.count { it.startEpochMs == null || it.endEpochMs == null },
             medianIntervalMs = median,
+            intervalSampleSize = intervals.size,
             conversationCount = perConversation.size,
         )
     }
@@ -299,10 +317,11 @@ object ActivityAnalytics {
         val bySender = LinkedHashMap<String, MutableList<ObservedMessage>>()
         for (m in counted(messages)) {
             if (m.isSelf) continue
-            val name = m.senderName?.takeIf(String::isNotBlank) ?: continue
-            bySender.getOrPut(name) { ArrayList() } += m
+            val identity = m.senderIdentity ?: continue
+            bySender.getOrPut(identity) { ArrayList() } += m
         }
-        return bySender.entries.map { (sender, rows) ->
+        return bySender.values.map { rows ->
+            val sender = rows.first().senderName!!
             val tally = HashMap<String, Int>()
             for (m in rows) for (p in PhraseScanner.phrases(m.body, minLen)) tally[p] = (tally[p] ?: 0) + 1
             val phrases = tally.entries.asSequence()
@@ -311,9 +330,9 @@ object ActivityAnalytics {
                 .take(top)
                 .map { PhraseCount(it.key, it.value) }
                 .toList()
-            SenderPhrases(sender, rows.size, phrases)
+            SenderPhrases(sender, rows.size, phrases, rows.first().packageName, rows.first().conversationId)
         }.filter { it.phrases.isNotEmpty() }
-            .sortedWith(compareByDescending<SenderPhrases> { it.messageCount }.thenBy { it.sender })
+            .sortedWith(compareByDescending<SenderPhrases> { it.messageCount }.thenBy { it.sender }.thenBy { it.conversationId })
     }
 
     /** Emoji ranking over an arbitrary slice, so a period selector can re-rank without [compute]. */

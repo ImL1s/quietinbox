@@ -1,0 +1,40 @@
+name: Bug report / 錯誤回報
+description: Something in QuietInbox does not behave as documented. 靜讀的行為與文件不符。
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Never paste a real notification, a screenshot of a real chat, or a backup file. Use the synthetic test notification (Capture → Send test notification) or the debug demo data to reproduce.
+        請勿貼上真實通知、真實聊天截圖或備份檔。請用合成測試通知（擷取 → 送出測試通知）或 debug 版示範資料重現。
+  - type: input
+    id: version
+    attributes:
+      label: QuietInbox version / 版本
+      placeholder: 0.1.1 (Play) or commit SHA
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device, Android version, OEM skin / 裝置、Android 版本、OEM
+      placeholder: Pixel 8, Android 16 / Samsung SM-S9280, One UI 8
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / 重現步驟
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs. actual / 預期與實際
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Body-free diagnostic summary (Capture → Copy summary) / 不含正文的診斷摘要
+      render: text

@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Forum
+import androidx.compose.material.icons.outlined.SyncProblem
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Science
@@ -158,6 +159,16 @@ fun ConversationScreen(
             )
         },
     ) { padding ->
+        if (state.vaultLocked) {
+            EmptyState(
+                title = stringResource(R.string.vault_locked_title),
+                body = stringResource(R.string.health_vault_locked),
+                icon = Icons.Outlined.SyncProblem,
+                modifier = Modifier.padding(padding),
+                actions = { TextButton(onClick = viewModel::retryVault) { Text(stringResource(R.string.action_retry)) } },
+            )
+            return@Scaffold
+        }
         if (state.loading) {
             LoadingScreen(Modifier.padding(padding))
             return@Scaffold

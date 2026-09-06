@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Clear
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SyncProblem
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -30,6 +31,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -115,12 +117,18 @@ fun SearchScreen(
                 }
             }
             when {
+                state.vaultLocked -> EmptyState(
+                    title = stringResource(R.string.vault_locked_title),
+                    body = stringResource(R.string.health_vault_locked),
+                    icon = Icons.Outlined.SyncProblem,
+                    actions = { TextButton(onClick = viewModel::retryVault) { Text(stringResource(R.string.action_retry)) } },
+                )
                 state.query.isBlank() -> EmptyState(
                     title = stringResource(R.string.nav_search),
                     body = stringResource(R.string.search_empty_hint),
                     icon = Icons.Outlined.Search,
                 )
-                state.searching && !state.searched -> Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) { LoadingIndicator() }
+                state.vaultOpening || (state.searching && !state.searched) -> Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) { LoadingIndicator() }
                 state.results.isEmpty() -> EmptyState(
                     title = stringResource(R.string.search_no_results, state.query),
                     body = stringResource(R.string.search_empty_hint),

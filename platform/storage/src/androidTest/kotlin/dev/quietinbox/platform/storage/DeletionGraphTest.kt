@@ -200,7 +200,6 @@ class DeletionGraphTest {
         val blobId = db.mediaDao().insert(MediaBlobEntity(messageId = messageId, fileName = "blob-r1", thumbFileName = null, mimeType = "image/png", byteCount = 16, width = 1, height = 1, state = MediaState.LOCAL_COPY.name, failureReason = null, createdAtEpochMs = 1L))
         db.messageDao().setMedia(messageId, MediaState.LOCAL_COPY.name, blobId)
         // A deletion token, a summary, a diagnostic and a pending journal row, all owned by the source.
-        inbox.deleteMessages(emptyList(), 0L, 0L)
         val scoped = db.conversationDao().get(out.conversationId!!)!!
         db.suppressionDao().upsert(dev.quietinbox.platform.storage.db.DeletionSuppressionEntity("${scoped.packageName}|${scoped.profileKey}#${scoped.identityKey}", "fp", Long.MAX_VALUE))
         db.healthDao().insertSummary(dev.quietinbox.platform.storage.db.SummaryObservationEntity(packageName = pkg, observedAtEpochMs = 1L, messageCount = 3, conversationCount = 1, eventId = "s1"))

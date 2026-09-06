@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.Work
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.NotificationsOff
@@ -96,6 +97,7 @@ fun InboxScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var settingsMissing by remember { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     LifecycleResumeEffect(Unit) {
@@ -162,7 +164,10 @@ fun InboxScreen(
                         actions = {
                             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 if (!state.listenerGranted) {
-                                    Button(onClick = { context.startActivity(viewModel.listenerSettingsIntent()) }) {
+                                    if (settingsMissing) {
+                                        Text(stringResource(R.string.listener_settings_manual), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                                    }
+                                    Button(onClick = { settingsMissing = !viewModel.openListenerSettings(context) }) {
                                         Icon(Icons.Outlined.LockOpen, contentDescription = null)
                                         Spacer(Modifier.width(8.dp))
                                         Text(stringResource(R.string.inbox_grant_access))
@@ -336,6 +341,9 @@ private fun ConversationRow(
                     if (conversation.isGroup == true) {
                         Icon(Icons.Outlined.Group, contentDescription = stringResource(R.string.inbox_group), modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    if (conversation.scope.profileKey != PRIMARY_PROFILE) {
+                        Icon(Icons.Outlined.Work, contentDescription = stringResource(R.string.inbox_work_profile), modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     Text(
                         title,
                         style = MaterialTheme.typography.titleMedium,
@@ -410,3 +418,6 @@ private fun ConversationRow(
     }
     Spacer(Modifier.height(0.dp))
 }
+
+/** `UserHandle.hashCode()` of the device owner; anything else is a work (or secondary) profile. */
+private const val PRIMARY_PROFILE = "user:0"

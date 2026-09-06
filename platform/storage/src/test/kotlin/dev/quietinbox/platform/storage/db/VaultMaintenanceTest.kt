@@ -65,6 +65,17 @@ class VaultMaintenanceTest : FunSpec({
         failure.shouldBeInstanceOf<MaintenanceCancellation>()
     }
 
+    test("a listener sees start and end exactly once even for an instant exclusive run") {
+        val gate = VaultMaintenance()
+        val events = ArrayList<String>()
+        gate.addListener(object : MaintenanceListener {
+            override suspend fun onMaintenanceStarted() { events += "start:" + gate.isActive }
+            override suspend fun onMaintenanceEnded() { events += "end:" + gate.isActive }
+        })
+        repeat(3) { gate.exclusive { } }
+        events shouldBe listOf("start:true", "end:false", "start:true", "end:false", "start:true", "end:false")
+    }
+
     test("exclusive runs are serialised and the pipeline lock is held for the whole run") {
         val gate = VaultMaintenance()
         val order = ArrayList<String>()

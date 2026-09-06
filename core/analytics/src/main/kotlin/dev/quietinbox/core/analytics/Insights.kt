@@ -176,7 +176,7 @@ data class QuietRank(
 data class PhraseCount(val phrase: String, val count: Int)
 
 /** The phrases one sender repeated most often, with how many of their messages were scanned. */
-data class SenderPhrases(val sender: String, val messageCount: Int, val phrases: List<PhraseCount>)
+data class SenderPhrases(val sender: String, val messageCount: Int, val phrases: List<PhraseCount>, val packageName: String = "", val conversationId: Long = 0L)
 
 /**
  * Repeated-phrase extraction over observed message bodies. CJK runs yield character n-grams,

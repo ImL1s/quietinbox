@@ -107,7 +107,16 @@ fun SettingsScreen(
         }
     }
 
-    val resetFailedText = state.resetFailedStep?.let { stringResource(R.string.delete_everything_failed, it) }
+    val resetFailedText = state.resetFailedStep?.let { step ->
+        val stepName = when (step) {
+            "database" -> stringResource(R.string.delete_everything_step_database)
+            "media" -> stringResource(R.string.delete_everything_step_media)
+            "keys" -> stringResource(R.string.delete_everything_step_keys)
+            "reopen" -> stringResource(R.string.delete_everything_step_reopen)
+            else -> step
+        }
+        stringResource(R.string.delete_everything_failed, stepName)
+    }
     LaunchedEffect(state.resetFailedStep) {
         if (resetFailedText != null) {
             snackbar.showSnackbar(resetFailedText)
@@ -399,7 +408,8 @@ private fun ToggleRow(title: String, description: String, checked: Boolean, onCh
 @Composable
 private fun backupResultText(result: BackupResult?): String? = when (result) {
     null -> null
-    is BackupResult.Ok -> stringResource(R.string.backup_result_ok, result.counts.conversations, result.counts.messages, result.counts.media)
+    is BackupResult.Ok -> stringResource(R.string.backup_result_ok, result.counts.conversations, result.counts.messages, result.counts.media) +
+        if (result.skippedMedia > 0) " " + stringResource(R.string.backup_result_partial_media, result.skippedMedia) else ""
     is BackupResult.Failed -> when (result.reason) {
         BackupResult.Reason.NO_RECOVERY_KEY, BackupResult.Reason.KEY_UNAVAILABLE -> stringResource(R.string.backup_failed_no_key)
         BackupResult.Reason.WRONG_KEY_OR_TAMPERED -> stringResource(R.string.backup_failed_key)

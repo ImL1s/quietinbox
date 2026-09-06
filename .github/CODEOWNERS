@@ -1,0 +1,8 @@
+# Every change needs the maintainer's review; capture, storage, crypto and release paths doubly so.
+*                       @ImL1s
+/platform/capture/      @ImL1s
+/platform/storage/      @ImL1s
+/platform/crypto/       @ImL1s
+/platform/backup/       @ImL1s
+/.github/               @ImL1s
+/gradle/                @ImL1s

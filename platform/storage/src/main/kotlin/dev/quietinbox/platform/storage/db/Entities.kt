@@ -251,6 +251,7 @@ data class MessageStatRow(
     val contentStatus: String,
     val body: String,
     val senderName: String?,
+    val senderKey: String?,
     val isSelf: Boolean,
     @ColumnInfo(name = "packageName") val packageName: String,
 )

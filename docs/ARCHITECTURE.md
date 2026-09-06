@@ -78,7 +78,14 @@ deletion, expiry sweep and restore. Reads (conversation, search, statistics, cou
 
 Search: `search_token(token, messageId)` holds CJK bigrams, Latin words and 3-grams produced by
 `SearchNormalizer.tokens`; a query is the same tokens joined by `GROUP BY … HAVING COUNT(DISTINCT
-token) = n`, then every candidate is re-verified as a normalised substring in Kotlin.
+token) = n`, then every candidate is re-verified as a normalised substring in Kotlin. Candidates
+are read in keyset pages `(sortKey, id)` and the loop continues until the page of verified hits
+is full or the index is exhausted, so false positives never hide a later hit; `searchPage`
+returns the cursor (QI-SEARCH-011).
+
+Backup (QI-BACKUP-016): export is cancellable vault work, import an exclusive maintenance run;
+export streams each table in keyset pages inside one read transaction and never includes an
+expired copy; media it cannot read is counted as skipped and reported.
 
 ## Keys (plan §9)
 

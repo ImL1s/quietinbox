@@ -28,6 +28,7 @@ class AnalyticsRepository @Inject constructor(
                 body = it.body,
                 senderName = it.senderName,
                 isSelf = it.isSelf,
+                senderKey = it.senderKey,
             )
         }
 

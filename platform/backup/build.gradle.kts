@@ -18,6 +18,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.kotest.runner.junit5)
+    androidTestImplementation(project(":core:testing"))
 }
 
 // Kotest specs run on the JUnit Platform; every test in this module is a Kotest spec, so no

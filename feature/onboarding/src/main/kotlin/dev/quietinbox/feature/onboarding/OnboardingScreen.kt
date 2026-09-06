@@ -50,6 +50,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -73,6 +76,7 @@ fun OnboardingScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var settingsMissing by remember { mutableStateOf(false) }
 
     LifecycleResumeEffect(Unit) {
         viewModel.refreshPermission()
@@ -114,7 +118,7 @@ fun OnboardingScreen(
                     when (step) {
                         0 -> ScopeStep()
                         1 -> SourcesStep(state, viewModel::toggle)
-                        2 -> AccessStep(state, onOpen = { context.startActivity(viewModel.settingsIntent()) })
+                        2 -> AccessStep(state, settingsMissing = settingsMissing, onOpen = { settingsMissing = !viewModel.openListenerSettings(context) })
                         3 -> TestStep(state, sendTest)
                         else -> PreviewStep()
                     }
@@ -196,13 +200,16 @@ private fun SourcesStep(state: OnboardingUiState, onToggle: (String) -> Unit) {
 }
 
 @Composable
-private fun AccessStep(state: OnboardingUiState, onOpen: () -> Unit) {
+private fun AccessStep(state: OnboardingUiState, settingsMissing: Boolean, onOpen: () -> Unit) {
     Illustration(Icons.Outlined.Lock, MaterialShapes.Sunny.toShape())
     StepTitle(stringResource(R.string.ob_access_title), stringResource(R.string.ob_access_body))
     if (state.granted) {
         QualityTag(stringResource(R.string.ob_access_granted), Icons.Outlined.CheckCircle, QualityColors.verified)
     } else {
         FilledTonalButton(onClick = onOpen) { Text(stringResource(R.string.ob_access_button)) }
+        if (settingsMissing) {
+            Text(stringResource(R.string.listener_settings_manual), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        }
         if (Build.VERSION.SDK_INT >= 33) {
             Text(stringResource(R.string.health_restricted_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

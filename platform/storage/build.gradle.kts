@@ -40,6 +40,7 @@ dependencies {
 
     testImplementation(libs.kotest.runner.junit5)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockk)
 }
 
 // JVM specs (the maintenance gate) run on the JUnit Platform; SQLCipher itself is device-only.

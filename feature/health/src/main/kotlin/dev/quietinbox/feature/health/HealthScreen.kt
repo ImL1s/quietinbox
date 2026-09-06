@@ -93,6 +93,7 @@ fun HealthScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var settingsMissing by remember { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -138,7 +139,15 @@ fun HealthScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item(key = "hero") {
-                HeroCard(state, onGrant = { context.startActivity(viewModel.settingsIntent()) }, onPause = viewModel::setPaused)
+                HeroCard(state, onGrant = { settingsMissing = !viewModel.openListenerSettings(context) }, onPause = viewModel::setPaused)
+                if (settingsMissing) {
+                    Text(
+                        stringResource(R.string.listener_settings_manual),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                }
             }
             if (state.vaultFailure != null) {
                 item(key = "vault") {

@@ -72,5 +72,6 @@ fun gapReasonLabel(reason: GapReason): String = when (reason) {
     GapReason.QUEUE_OVERFLOW -> stringResource(R.string.gap_reason_overflow)
     GapReason.BEFORE_FIRST_UNLOCK -> stringResource(R.string.gap_reason_first_unlock)
     GapReason.MAINTENANCE -> stringResource(R.string.gap_reason_maintenance)
+    GapReason.COLD_START -> stringResource(R.string.gap_reason_cold_start)
     GapReason.UNKNOWN -> stringResource(R.string.gap_reason_unknown)
 }

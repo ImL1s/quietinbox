@@ -176,8 +176,10 @@ class MediaCopier @Inject constructor(
                     ),
                 )
                 db.messageDao().setMedia(messageId, MediaState.LOCAL_COPY.name, id)
+                // Cleared inside the transaction: a cancellation landing between commit and return
+                // must not delete files the committed rows now point at (round-10 finding).
+                written.clear()
             }
-            written.clear()
             return MediaState.LOCAL_COPY
         } finally {
             for (f in written) dir.delete(f)

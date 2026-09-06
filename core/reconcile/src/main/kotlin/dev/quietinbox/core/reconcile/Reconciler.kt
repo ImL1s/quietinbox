@@ -88,7 +88,10 @@ data class ReconcileResult(
  * Rules (see plan section 7.2):
  * - the whole new window is aligned against the previous one by the largest suffix/prefix
  *   overlap (all items, with or without ids, so positions never drift); items after the overlap
- *   are new; a window fully contained in the previous one is a stale replay;
+ *   are new; a window fully contained in the previous one is a stale replay. Two items align by
+ *   their source ids when both carry one and by fingerprint otherwise, so a never-seen id at an
+ *   overlapping position is a new message, while content stored before a parser learned ids
+ *   still aligns with its id-bearing repost (QI-DEDUP-009);
  * - a fixture-proven `sourceMessageId` then overrides the positional decision for that item:
  *   same id + same body = known, same id + new body = revision;
  * - a single, id-less, timestamp-less item identical to the last known item of a *closed or
@@ -122,14 +125,14 @@ class Reconciler(
         }
         val fps = working.map { Fingerprint.of(it) }
         val prevItems = previous?.items.orEmpty()
-        val prevFps = prevItems.map { it.fingerprint }
+        val match = { i: Int, j: Int -> aligns(prevItems[i], fps[j], working[j].sourceMessageId) }
 
         // 1. Positional alignment over the complete window.
-        var overlap = suffixPrefixOverlap(prevFps, fps)
+        var overlap = suffixPrefixOverlap(prevItems.size, fps.size, match)
         var stale = false
         var staleAt = -1
-        if (overlap == 0 && fps.isNotEmpty() && prevFps.isNotEmpty()) {
-            staleAt = containedAt(prevFps, fps)
+        if (overlap == 0 && fps.isNotEmpty() && prevItems.isNotEmpty()) {
+            staleAt = containedAt(prevItems.size, fps.size, match)
             if (staleAt >= 0) {
                 stale = true
                 overlap = fps.size
@@ -197,14 +200,18 @@ class Reconciler(
         return ReconcileResult(decisions, window, notes)
     }
 
-    /** Largest k such that prev.takeLast(k) == next.take(k). */
-    internal fun suffixPrefixOverlap(prev: List<String>, next: List<String>): Int {
-        val max = minOf(prev.size, next.size)
+    /** Two positions are the same message when both sides have a proven id and the ids agree, else when the fingerprints agree. */
+    private fun aligns(prev: WindowItem, nextFingerprint: String, nextSourceId: String?): Boolean =
+        if (prev.sourceMessageId != null && nextSourceId != null) prev.sourceMessageId == nextSourceId else prev.fingerprint == nextFingerprint
+
+    /** Largest k such that the last k of prev match the first k of next under [match]. */
+    internal fun suffixPrefixOverlap(prevSize: Int, nextSize: Int, match: (prevIndex: Int, nextIndex: Int) -> Boolean): Int {
+        val max = minOf(prevSize, nextSize)
         for (k in max downTo 1) {
             var ok = true
-            val off = prev.size - k
+            val off = prevSize - k
             for (i in 0 until k) {
-                if (prev[off + i] != next[i]) {
+                if (!match(off + i, i)) {
                     ok = false
                     break
                 }
@@ -214,19 +221,27 @@ class Reconciler(
         return 0
     }
 
-    /** Index at which [next] appears contiguously inside [prev], or -1. */
-    internal fun containedAt(prev: List<String>, next: List<String>): Int {
-        if (next.isEmpty() || next.size > prev.size) return -1
-        for (start in 0..prev.size - next.size) {
-            var match = true
-            for (i in next.indices) {
-                if (prev[start + i] != next[i]) {
-                    match = false
+    /** Index at which next appears contiguously inside prev under [match], or -1. */
+    internal fun containedAt(prevSize: Int, nextSize: Int, match: (prevIndex: Int, nextIndex: Int) -> Boolean): Int {
+        if (nextSize == 0 || nextSize > prevSize) return -1
+        for (start in 0..prevSize - nextSize) {
+            var ok = true
+            for (i in 0 until nextSize) {
+                if (!match(start + i, i)) {
+                    ok = false
                     break
                 }
             }
-            if (match) return start
+            if (ok) return start
         }
         return -1
     }
+
+    /** Largest k such that prev.takeLast(k) == next.take(k). */
+    internal fun suffixPrefixOverlap(prev: List<String>, next: List<String>): Int =
+        suffixPrefixOverlap(prev.size, next.size) { i, j -> prev[i] == next[j] }
+
+    /** Index at which [next] appears contiguously inside [prev], or -1. */
+    internal fun containedAt(prev: List<String>, next: List<String>): Int =
+        containedAt(prev.size, next.size) { i, j -> prev[i] == next[j] }
 }

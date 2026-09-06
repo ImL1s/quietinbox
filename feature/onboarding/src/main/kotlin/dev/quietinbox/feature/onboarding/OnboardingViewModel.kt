@@ -88,6 +88,9 @@ class OnboardingViewModel @Inject constructor(
 
     fun settingsIntent(): Intent = listenerAccess.settingsIntent()
 
+    /** False when no settings screen exists on this device; the screen then shows the manual path. */
+    fun openListenerSettings(from: Context): Boolean = listenerAccess.openSettings(from)
+
     fun sendTest() {
         synthetic.postConversation(count = 3, iconRes = R.drawable.ic_stat_quiet)
         local.update { it.copy(testSent = true) }

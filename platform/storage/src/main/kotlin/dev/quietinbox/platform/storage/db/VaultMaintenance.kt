@@ -16,6 +16,16 @@ import javax.inject.Singleton
 class MaintenanceCancellation : CancellationException("cancelled by vault maintenance")
 
 /**
+ * Told, synchronously and exactly once per run, when an exclusive maintenance run starts (before
+ * any worker is cancelled) and when it has ended. A `StateFlow` would conflate a fast
+ * true → false pair and the listener would never see the start (round-10 finding).
+ */
+interface MaintenanceListener {
+    suspend fun onMaintenanceStarted()
+    suspend fun onMaintenanceEnded()
+}
+
+/**
  * The one gate every writer of the vault goes through (QI-SEC-003).
  *
  * - [pipelineMutex] is the capture pipeline's single-writer lock; an [exclusive] run holds it for
@@ -41,6 +51,11 @@ class VaultMaintenance @Inject constructor() {
     val isActive: Boolean get() = _active.value
 
     private val workers = HashSet<Job>()
+    private val listeners = java.util.concurrent.CopyOnWriteArrayList<MaintenanceListener>()
+
+    fun addListener(listener: MaintenanceListener) {
+        listeners += listener
+    }
 
     /**
      * Runs [block] as cancellable vault work. Returns null without running it when maintenance is
@@ -62,16 +77,22 @@ class VaultMaintenance @Inject constructor() {
         }
     }
 
-    /** Stops all vault work, then runs [block] alone under the pipeline lock. Runs are serialised. */
+    /**
+     * Stops all vault work, then runs [block] alone under the pipeline lock. Runs are serialised.
+     * Listeners are called before the workers are cancelled (so the capture side has fenced its
+     * queue before the lock is even requested) and again after the flag dropped.
+     */
     suspend fun <T> exclusive(block: suspend () -> T): T = exclusiveMutex.withLock {
         _active.value = true
         try {
+            for (l in listeners) l.onMaintenanceStarted()
             val snapshot = synchronized(workers) { workers.toList() }
             for (job in snapshot) job.cancel(MaintenanceCancellation())
             snapshot.joinAll()
             pipelineMutex.withLock { block() }
         } finally {
             _active.value = false
+            for (l in listeners) l.onMaintenanceEnded()
         }
     }
 }

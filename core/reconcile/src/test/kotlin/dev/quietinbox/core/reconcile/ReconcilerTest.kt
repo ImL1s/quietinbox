@@ -7,6 +7,7 @@ import dev.quietinbox.core.model.TimestampQuality
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 
@@ -206,5 +207,30 @@ class ReconcilerAmbiguousKeepTest : FunSpec({
         repeat.decisions[0].shouldBeInstanceOf<Decision.AmbiguousRepeat>()
         repeat.newWindow.items shouldHaveSize 1
         repeat.newWindow.postedAtEpochMs shouldBe 6_000L
+    }
+})
+
+/** QI-DEDUP-009: window alignment compares proven source ids when both sides carry one. */
+class ReconcilerIdAlignmentTest : FunSpec({
+    val r = Reconciler()
+    val noIds: (String) -> KnownMessage? = { null }
+
+
+    test("a never-seen source id at an overlapping position is a new message, not a repost of the old one") {
+        // Stored: 好 with id m1. A new post carries 好 again, same sender, no timestamp, but id m2.
+        val prev = MessageWindow("k1", listOf(WindowItem(Fingerprint.of(msg("好", id = "m1")), "m1", 100L)), closed = false, postedAtEpochMs = 1_000L)
+        val s = r.reconcile("k1", listOf(msg("好", id = "m2")), prev, noIds, postedAtEpochMs = 2_000L)
+        val d = s.decisions.single().shouldBeInstanceOf<Decision.New>()
+        d.confirmedById shouldBe true
+        s.notes shouldNotContain ReconcileNote.STALE_REPLAY
+    }
+
+    test("content stored before the parser learned ids still aligns with its id-bearing repost") {
+        // Stored without an id (older parser); the same post now arrives with id m7: same message.
+        val prev = MessageWindow("k1", listOf(WindowItem(Fingerprint.of(msg("好")), null, 100L)), closed = false, postedAtEpochMs = 1_000L)
+        val s = r.reconcile("k1", listOf(msg("好", id = "m7")), prev, noIds, postedAtEpochMs = 1_000L)
+        val d = s.decisions.single().shouldBeInstanceOf<Decision.Known>()
+        d.existingMessageId shouldBe 100L
+        d.kind shouldBe KnownKind.REPOST
     }
 })

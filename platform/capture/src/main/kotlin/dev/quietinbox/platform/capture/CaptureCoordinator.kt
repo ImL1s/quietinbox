@@ -18,6 +18,7 @@ import dev.quietinbox.core.reconcile.KnownMessage
 import dev.quietinbox.core.reconcile.Reconciler
 import dev.quietinbox.parsers.apps.AppParsers
 import dev.quietinbox.platform.media.MediaCopier
+import dev.quietinbox.platform.storage.db.MaintenanceListener
 import dev.quietinbox.platform.storage.db.VaultMaintenance
 import dev.quietinbox.platform.storage.db.VaultState
 import dev.quietinbox.platform.storage.db.VaultUnavailableException
@@ -30,6 +31,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +42,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
@@ -62,6 +65,21 @@ data class CaptureStatus(
 )
 
 private class Queued(val captured: CapturedNotification, val generation: String)
+
+/**
+ * A notification held back until the source policy is known (QI-CAPTURE-013). Only the framework
+ * object is kept — nothing is read from it — so a notification from an app the user never
+ * enabled is never materialised into a snapshot. Tests enter with a pre-built snapshot instead.
+ */
+private class Held(
+    val sbn: StatusBarNotification?,
+    val captured: CapturedNotification?,
+    val origin: CaptureOrigin,
+    val generation: String,
+    val heldAtEpochMs: Long,
+) {
+    val packageName: String get() = sbn?.packageName ?: captured!!.snapshot.source.packageName
+}
 
 /**
  * Owns the capture epoch (generation token), the bounded queue and the pipeline
@@ -92,7 +110,9 @@ class CaptureCoordinator @Inject constructor(
         private set
 
     private val bootSessionId = UUID.randomUUID().toString()
-    private val snapshotFactory = SnapshotFactory(bootSessionId)
+
+    @androidx.annotation.VisibleForTesting(otherwise = androidx.annotation.VisibleForTesting.PRIVATE)
+    internal var snapshotFactory: SnapshotFactory = SnapshotFactory(bootSessionId)
     private val registry = ParserRegistry(AppParsers.all())
     private val identity = IdentityResolver()
     private val reconciler = Reconciler()
@@ -118,6 +138,13 @@ class CaptureCoordinator @Inject constructor(
 
     @Volatile
     private var maintenanceStartedAt: Long? = null
+
+    /** Notifications waiting for the source policy; bounded, oldest dropped first. Guarded by itself. */
+    private val held = ArrayDeque<Held>()
+    private var heldDropped = 0
+
+    @Volatile
+    private var coldStartJob: Job? = null
 
     @Volatile
     private var paused: Boolean = false
@@ -163,10 +190,12 @@ class CaptureCoordinator @Inject constructor(
                 pipelineMutex.withLock { guarded { loadSourcePolicy() } }
             }
         }
-        scope.launch {
-            // Plain collect: the start-of-maintenance bookkeeping must not be cancelled by a fast end.
-            maintenance.active.collect { active -> onMaintenance(active) }
-        }
+        // Explicit callbacks, not a StateFlow: a fast start → end pair would be conflated and the
+        // start (generation rotation, gap) never seen.
+        maintenance.addListener(object : MaintenanceListener {
+            override suspend fun onMaintenanceStarted() = onMaintenance(true)
+            override suspend fun onMaintenanceEnded() = onMaintenance(false)
+        })
         scope.launch {
             vault.state.collectLatest { s ->
                 _status.update { it.copy(vaultLocked = s is VaultState.Locked) }
@@ -320,12 +349,70 @@ class CaptureCoordinator @Inject constructor(
         }
     }
 
-    /** Must be called under [pipelineMutex]. */
+    /** Must be called under [pipelineMutex]. Once the policy is known, held notifications are decided. */
     private suspend fun loadSourcePolicy() {
         val list = sources.sources()
         enabledPackages = list.filter { it.enabled }.map { it.packageName }.toSet()
         pausedPackages = list.filter { it.enabled && it.paused }.map { it.packageName }.toSet()
         sourcesLoaded = true
+        releaseHeld()
+    }
+
+    // ---- cold start (QI-CAPTURE-013) ---------------------------------------------------------
+
+    /**
+     * Before the source list is known nothing is read from a third-party notification: the
+     * framework object waits in a small bounded buffer. The policy is loaded right away (which
+     * waits for the vault); once known, held notifications from enabled sources are snapshotted
+     * and queued, all others are dropped unread. If the vault does not open in time the buffer is
+     * dropped and the window is recorded as a bounded gap — fail closed, never fail open.
+     */
+    private fun hold(item: Held) {
+        synchronized(held) {
+            if (held.size >= MAX_HELD) {
+                held.removeFirst()
+                heldDropped++
+            }
+            held += item
+        }
+        if (coldStartJob?.isActive != true) {
+            coldStartJob = scope.launch { coldStart() }
+        }
+    }
+
+    private suspend fun coldStart() {
+        val loaded = withTimeoutOrNull(COLD_START_TIMEOUT_MS) {
+            pipelineMutex.withLock {
+                if (!sourcesLoaded) guarded { loadSourcePolicy() }
+                sourcesLoaded
+            }
+        } == true
+        if (!loaded) dropHeld(System.currentTimeMillis())
+    }
+
+    /** Decides every held notification against the now-known policy. Safe under the pipeline lock. */
+    private fun releaseHeld() {
+        val items = synchronized(held) { held.toList().also { held.clear() } }
+        val now = System.currentTimeMillis()
+        for (h in items) {
+            if (h.generation != activeGeneration || paused) continue
+            val pkg = h.packageName
+            if (!(pkg in enabledPackages && pkg !in pausedPackages)) continue
+            val captured = h.captured ?: runCatching { snapshotFactory.create(h.sbn!!, h.origin, h.generation, now) }
+                .onFailure {
+                    _status.update { it.copy(captureErrors = it.captureErrors + 1) }
+                    lastError = it::class.java.simpleName
+                }
+                .getOrNull() ?: continue
+            enqueue(captured, h.generation, now)
+        }
+    }
+
+    private suspend fun dropHeld(now: Long) {
+        val (items, dropped) = synchronized(held) { held.toList().also { held.clear() } to heldDropped.also { heldDropped = 0 } }
+        if (items.isEmpty() && dropped == 0) return
+        val start = items.minOfOrNull { it.heldAtEpochMs }
+        guarded { health.recordGap(start, now, GapReason.COLD_START, GapPrecision.BOUNDED, now) }
     }
 
     suspend fun addSource(packageName: String, displayName: String, adapterId: String?, now: Long) =
@@ -366,7 +453,7 @@ class CaptureCoordinator @Inject constructor(
             // The listener state is left alone: DEGRADED reads as "queue overflow" on the health
             // page, and a reset or restore is neither a failure nor a disconnect.
             _status.update { it.copy(activeGeneration = null) }
-            guarded { ended?.let { health.endSession(it, now, "MAINTENANCE") } }
+            scope.launch { guarded { ended?.let { health.endSession(it, now, "MAINTENANCE") } } }
         } else {
             val startedAt = maintenanceStartedAt ?: return
             maintenanceStartedAt = null
@@ -385,11 +472,15 @@ class CaptureCoordinator @Inject constructor(
                     },
                 )
             }
-            guarded {
-                if (resumed != null) sessionId = health.startSession(resumed, bootSessionId, now)
-                health.recordGap(startedAt, now, GapReason.MAINTENANCE, GapPrecision.EXACT, now)
+            // Bookkeeping and replay are launched, not awaited: this runs inside the maintenance
+            // caller, which must not be held hostage by a vault that is slow (or failing) to reopen.
+            scope.launch {
+                guarded {
+                    if (resumed != null) sessionId = health.startSession(resumed, bootSessionId, now)
+                    health.recordGap(startedAt, now, GapReason.MAINTENANCE, GapPrecision.EXACT, now)
+                }
+                replayJournal()
             }
-            replayJournal()
         }
     }
 
@@ -398,15 +489,17 @@ class CaptureCoordinator @Inject constructor(
     private fun offer(sbn: StatusBarNotification, origin: CaptureOrigin) {
         val gen = activeGeneration ?: return
         if (paused) return
-        // Own package: only marked synthetic notifications. Other packages: filter here only once
-        // the source list is known; before that, queue and let process() decide (cold-start events
-        // must not be silently dropped while the vault is still opening).
+        val now = System.currentTimeMillis()
+        // Own package: only marked synthetic notifications. Other packages: filtered here once the
+        // source list is known; before that the framework object is held unread (QI-CAPTURE-013).
         if (sbn.packageName == context.packageName) {
             if (!isCapturable(sbn)) return
-        } else if (sourcesLoaded && !isCapturable(sbn)) {
+        } else if (!sourcesLoaded) {
+            hold(Held(sbn, null, origin, gen, now))
+            return
+        } else if (!isCapturable(sbn)) {
             return
         }
-        val now = System.currentTimeMillis()
         val captured = runCatching { snapshotFactory.create(sbn, if (sbn.packageName == context.packageName) CaptureOrigin.SYNTHETIC else origin, gen, now) }
             .getOrElse {
                 _status.update { it.copy(captureErrors = it.captureErrors + 1) }
@@ -427,12 +520,16 @@ class CaptureCoordinator @Inject constructor(
         val gen = activeGeneration ?: return
         if (paused) return
         val pkg = captured.snapshot.source.packageName
+        val now = System.currentTimeMillis()
         if (pkg == context.packageName) {
             if (captured.snapshot.origin != CaptureOrigin.SYNTHETIC) return
-        } else if (sourcesLoaded && !(pkg in enabledPackages && pkg !in pausedPackages)) {
+        } else if (!sourcesLoaded) {
+            hold(Held(null, captured, captured.snapshot.origin, gen, now))
+            return
+        } else if (!(pkg in enabledPackages && pkg !in pausedPackages)) {
             return
         }
-        enqueue(captured, gen, System.currentTimeMillis())
+        enqueue(captured, gen, now)
     }
 
     private fun enqueue(built: CapturedNotification, gen: String, now: Long) {
@@ -608,7 +705,9 @@ class CaptureCoordinator @Inject constructor(
                     while (progressed && rounds++ < 100 && !paused) {
                         // Fetch and process under the pipeline mutex so a live event that was journaled
                         // but not yet committed cannot be replayed concurrently.
-                        val batch = ingest.pendingJournal()
+                        // Paused sources are excluded at the query so they cannot occupy the whole page
+                        // and starve everyone else; their rows are replayed when they are unpaused.
+                        val batch = ingest.pendingJournal(excludingPackages = pausedPackages)
                         if (batch.isEmpty()) break
                         progressed = false
                         for ((generation, snapshot) in batch) {
@@ -652,5 +751,11 @@ class CaptureCoordinator @Inject constructor(
         private const val DAY_MS = 24L * 60 * 60 * 1000
         private const val REASON_LOCKDOWN = 20 // NotificationListenerService.REASON_LOCKDOWN (API 29)
         private const val MAX_QUEUED_BITMAPS = 8
+
+        /** Notifications held unread before the source policy is known; the oldest is dropped first. */
+        private const val MAX_HELD = 64
+
+        /** How long a held notification waits for the vault before it is dropped and a gap recorded. */
+        private const val COLD_START_TIMEOUT_MS = 15_000L
     }
 }

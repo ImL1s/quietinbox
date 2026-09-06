@@ -23,44 +23,63 @@ class BlobCipher @Inject constructor(
 ) {
     private class Cached(val epoch: Long, val aead: Aead)
 
+    /** Outcome of one build attempt: a usable result, or "the key epoch moved meanwhile, try again". */
+    private sealed interface Build {
+        class Done(val result: KeyResult<Aead>) : Build
+        data object Stale : Build
+    }
+
     @Volatile
     private var cached: Cached? = null
 
-    /** The primitive is tied to the key epoch: a reset invalidates it (QI-SEC-003). */
+    /**
+     * The primitive is tied to the key epoch: a reset invalidates it (QI-SEC-003). A primitive
+     * built from a key that was destroyed while it was being built is never handed out either
+     * (round-10 finding): the build is retried once under the new epoch, then fails closed.
+     */
     private fun primitive(): KeyResult<Aead> {
         cached?.takeIf { it.epoch == keyMaterial.epoch }?.let { return KeyResult.Ok(it.aead) }
-        synchronized(this) {
-            cached?.takeIf { it.epoch == keyMaterial.epoch }?.let { return KeyResult.Ok(it.aead) }
-            cached = null
-            val epoch = keyMaterial.epoch
-            val raw = when (val r = keyMaterial.media.getOrCreate()) {
-                is KeyResult.Failed -> return r
-                is KeyResult.Ok -> r.value
+        repeat(2) {
+            when (val b = build()) {
+                is Build.Done -> return b.result
+                Build.Stale -> Unit
             }
-            return try {
-                AeadConfig.register()
-                val params = AesGcmParameters.builder()
-                    .setKeySizeBytes(32)
-                    .setIvSizeBytes(12)
-                    .setTagSizeBytes(16)
-                    .setVariant(AesGcmParameters.Variant.NO_PREFIX)
-                    .build()
-                val key = AesGcmKey.builder()
-                    .setParameters(params)
-                    .setKeyBytes(SecretBytes.copyFrom(raw, InsecureSecretKeyAccess.get()))
-                    .build()
-                val handle = KeysetHandle.newBuilder()
-                    .addEntry(KeysetHandle.importKey(key).withRandomId().makePrimary())
-                    .build()
-                val p = handle.getPrimitive(RegistryConfiguration.get(), Aead::class.java)
-                // A reset that raced this build wins: do not cache a primitive of a dead epoch.
-                if (epoch == keyMaterial.epoch) cached = Cached(epoch, p)
-                KeyResult.Ok(p)
-            } catch (e: Exception) {
-                KeyResult.Failed(KeyFailure.Unavailable("tink:${e::class.java.simpleName}"))
-            } finally {
-                raw.fill(0)
-            }
+        }
+        return KeyResult.Failed(KeyFailure.Unavailable("key epoch changed while building the cipher"))
+    }
+
+    private fun build(): Build = synchronized(this) {
+        cached?.takeIf { it.epoch == keyMaterial.epoch }?.let { return Build.Done(KeyResult.Ok(it.aead)) }
+        cached = null
+        val epoch = keyMaterial.epoch
+        val raw = when (val r = keyMaterial.media.getOrCreate()) {
+            is KeyResult.Failed -> return Build.Done(r)
+            is KeyResult.Ok -> r.value
+        }
+        try {
+            AeadConfig.register()
+            val params = AesGcmParameters.builder()
+                .setKeySizeBytes(32)
+                .setIvSizeBytes(12)
+                .setTagSizeBytes(16)
+                .setVariant(AesGcmParameters.Variant.NO_PREFIX)
+                .build()
+            val key = AesGcmKey.builder()
+                .setParameters(params)
+                .setKeyBytes(SecretBytes.copyFrom(raw, InsecureSecretKeyAccess.get()))
+                .build()
+            val handle = KeysetHandle.newBuilder()
+                .addEntry(KeysetHandle.importKey(key).withRandomId().makePrimary())
+                .build()
+            val p = handle.getPrimitive(RegistryConfiguration.get(), Aead::class.java)
+            // A reset that raced this build wins: a primitive of a dead epoch is neither cached nor returned.
+            if (epoch != keyMaterial.epoch) return Build.Stale
+            cached = Cached(epoch, p)
+            Build.Done(KeyResult.Ok(p))
+        } catch (e: Exception) {
+            Build.Done(KeyResult.Failed(KeyFailure.Unavailable("tink:${e::class.java.simpleName}")))
+        } finally {
+            raw.fill(0)
         }
     }
 

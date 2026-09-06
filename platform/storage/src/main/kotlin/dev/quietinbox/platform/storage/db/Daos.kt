@@ -46,6 +46,14 @@ interface JournalDao {
     @Query("SELECT * FROM event_journal WHERE state = 'PENDING' ORDER BY receivedAtEpochMs LIMIT :limit")
     suspend fun pending(limit: Int): List<EventJournalEntity>
 
+    /**
+     * Pending rows except those of [excludedPackages] (paused sources wait; they must not occupy
+     * the whole page and starve every other source, QI-SEC-001 round-10). Rows without a package
+     * (pre-v3) are included and decided by the commit fence.
+     */
+    @Query("SELECT * FROM event_journal WHERE state = 'PENDING' AND (packageName IS NULL OR packageName NOT IN (:excludedPackages)) ORDER BY receivedAtEpochMs LIMIT :limit")
+    suspend fun pendingExcluding(limit: Int, excludedPackages: List<String>): List<EventJournalEntity>
+
     /** A terminal state (anything but PENDING) also clears the payload: the text must not outlive its commit. */
     @Query(
         """
@@ -158,6 +166,16 @@ interface ConversationDao {
     @Query("SELECT COUNT(*) FROM conversation")
     fun observeCount(): Flow<Int>
 
+    /** Conversations with copies newer than the last time they were opened, optionally limited to some sources. */
+    @Query(
+        """
+        SELECT COUNT(*) FROM conversation
+        WHERE archived = 0 AND lastActivityEpochMs > COALESCE(lastViewedEpochMs, 0)
+          AND (:allPackages = 1 OR packageName IN (:packages))
+        """,
+    )
+    suspend fun unviewedCount(allPackages: Boolean, packages: List<String>): Int
+
     /**
      * Recomputes the projection (counts, preview, last sender, last activity) from the messages
      * that are still visible at [now]. The single source of truth after any deletion, expiry or
@@ -187,8 +205,11 @@ interface ConversationDao {
     @Query("SELECT DISTINCT packageName FROM conversation")
     fun observePackages(): Flow<List<String>>
 
-    @Query("SELECT * FROM conversation ORDER BY id")
-    suspend fun allForExport(): List<ConversationEntity>
+    @Query("SELECT * FROM conversation WHERE id > :afterId ORDER BY id LIMIT :limit")
+    suspend fun exportPage(afterId: Long, limit: Int): List<ConversationEntity>
+
+    @Query("SELECT COUNT(*) FROM conversation")
+    suspend fun count(): Int
 }
 
 @Dao
@@ -275,7 +296,7 @@ interface MessageDao {
      */
     @Query(
         """
-        SELECT m.conversationId, m.sortKey, m.dedupState, m.contentStatus, m.body, m.senderName, m.isSelf, c.packageName
+        SELECT m.conversationId, m.sortKey, m.dedupState, m.contentStatus, m.body, m.senderName, m.senderKey, m.isSelf, c.packageName
         FROM message m JOIN conversation c ON c.id = m.conversationId
         WHERE m.sortKey >= :since AND m.sortKey <= :until
           AND (m.expiresAtEpochMs IS NULL OR m.expiresAtEpochMs > :now)
@@ -285,8 +306,12 @@ interface MessageDao {
     )
     suspend fun statsBetween(since: Long, until: Long, limit: Int, now: Long): List<MessageStatRow>
 
-    @Query("SELECT * FROM message ORDER BY id")
-    suspend fun allForExport(): List<MessageEntity>
+    /** Export pages: keyset by id, and never a copy that is already expired (QI-DATA-007 round-10). */
+    @Query("SELECT * FROM message WHERE id > :afterId AND (expiresAtEpochMs IS NULL OR expiresAtEpochMs > :now) ORDER BY id LIMIT :limit")
+    suspend fun exportPage(afterId: Long, limit: Int, now: Long): List<MessageEntity>
+
+    @Query("SELECT COUNT(*) FROM message WHERE expiresAtEpochMs IS NULL OR expiresAtEpochMs > :now")
+    suspend fun exportCount(now: Long): Int
 
     @Query("SELECT MIN(sortKey) FROM message WHERE expiresAtEpochMs IS NULL OR expiresAtEpochMs > :now")
     suspend fun earliestSortKey(now: Long): Long?
@@ -300,8 +325,11 @@ interface RevisionDao {
     @Query("SELECT * FROM message_revision WHERE messageId = :messageId ORDER BY observedAtEpochMs")
     fun observeForMessage(messageId: Long): Flow<List<MessageRevisionEntity>>
 
-    @Query("SELECT * FROM message_revision ORDER BY id")
-    suspend fun allForExport(): List<MessageRevisionEntity>
+    @Query("SELECT * FROM message_revision WHERE id > :afterId AND messageId IN (SELECT id FROM message WHERE expiresAtEpochMs IS NULL OR expiresAtEpochMs > :now) ORDER BY id LIMIT :limit")
+    suspend fun exportPage(afterId: Long, limit: Int, now: Long): List<MessageRevisionEntity>
+
+    @Query("SELECT COUNT(*) FROM message_revision WHERE messageId IN (SELECT id FROM message WHERE expiresAtEpochMs IS NULL OR expiresAtEpochMs > :now)")
+    suspend fun exportCount(now: Long): Int
 }
 
 @Dao
@@ -348,14 +376,20 @@ interface MediaDao {
     @Query("SELECT COALESCE(SUM(byteCount), 0) FROM media_blob")
     fun observeTotalBytes(): Flow<Long>
 
-    @Query("SELECT * FROM media_blob ORDER BY id")
-    suspend fun allForExport(): List<MediaBlobEntity>
+    @Query("SELECT * FROM media_blob WHERE id > :afterId AND messageId IN (SELECT id FROM message WHERE expiresAtEpochMs IS NULL OR expiresAtEpochMs > :now) ORDER BY id LIMIT :limit")
+    suspend fun exportPage(afterId: Long, limit: Int, now: Long): List<MediaBlobEntity>
+
+    @Query("SELECT COUNT(*) FROM media_blob WHERE messageId IN (SELECT id FROM message WHERE expiresAtEpochMs IS NULL OR expiresAtEpochMs > :now)")
+    suspend fun exportCount(now: Long): Int
 }
 
 @Dao
 interface SuppressionDao {
     @Query("SELECT COUNT(*) FROM deletion_suppression WHERE scopeKey = :scopeKey AND fingerprint = :fingerprint AND expiresAtEpochMs > :now")
     suspend fun isSuppressed(scopeKey: String, fingerprint: String, now: Long): Int
+
+    @Query("SELECT * FROM deletion_suppression WHERE scopeKey = :scopeKey AND fingerprint = :fingerprint AND expiresAtEpochMs > :now LIMIT 1")
+    suspend fun token(scopeKey: String, fingerprint: String, now: Long): DeletionSuppressionEntity?
 
     @Upsert
     suspend fun upsert(entity: DeletionSuppressionEntity)
@@ -387,19 +421,21 @@ interface SearchDao {
         AND (:fromMs IS NULL OR m.sortKey >= :fromMs)
         AND (:toMs IS NULL OR m.sortKey <= :toMs)
         AND (m.expiresAtEpochMs IS NULL OR m.expiresAtEpochMs > :now)
-        ORDER BY m.sortKey DESC
-        LIMIT :limit OFFSET :offset
+        AND (m.sortKey < :beforeSortKey OR (m.sortKey = :beforeSortKey AND m.id < :beforeId))
+        ORDER BY m.sortKey DESC, m.id DESC
+        LIMIT :limit
         """,
     )
-    suspend fun search(
+    suspend fun searchCandidates(
         tokens: List<String>,
         tokenCount: Int,
         allPackages: Boolean,
         packages: List<String>,
         fromMs: Long?,
         toMs: Long?,
+        beforeSortKey: Long,
+        beforeId: Long,
         limit: Int,
-        offset: Int,
         now: Long,
     ): List<MessageEntity>
 }

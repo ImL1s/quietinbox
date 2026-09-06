@@ -188,6 +188,7 @@
     <string name="gap_reason_overflow">queue overflow</string>
     <string name="gap_reason_first_unlock">before first unlock</string>
     <string name="gap_reason_maintenance">reset or restore in progress</string>
+    <string name="gap_reason_cold_start">before the source list was loaded</string>
     <string name="gap_reason_unknown">unknown</string>
     <string name="health_diagnostics_title">Local diagnostics (last 7 days)</string>
     <string name="health_diagnostics_empty">No diagnostic events. Nothing is ever uploaded.</string>
@@ -198,6 +199,8 @@
     <string name="health_notifications_disabled">Allow QuietInbox to post notifications to send a test.</string>
     <string name="health_restricted_hint">On Android 13+, sideloaded apps may show “Restricted setting”. Open App info, tap the menu and choose “Allow restricted settings”, then return here.</string>
     <string name="health_app_info">App info</string>
+    <string name="inbox_work_profile">Work profile</string>
+    <string name="listener_settings_manual">This device has no notification-access screen QuietInbox can open. Open the system Settings app → Notifications → Notification access (some devices: Apps → Special app access → Device &amp; app notifications) and enable QuietInbox.</string>
     <string name="health_add_source_title">Choose an app</string>
     <string name="health_add_source_search">Search installed apps</string>
     <string name="health_add_by_package">Add by exact package name (generic parser)</string>
@@ -238,6 +241,10 @@
     <string name="reminder_channel">Reminders</string>
     <string name="reminder_title">QuietInbox reminder</string>
     <string name="reminder_body">You have new saved copies to review.</string>
+    <plurals name="reminder_body_count">
+        <item quantity="one">%1$d conversation has new copies to review.</item>
+        <item quantity="other">%1$d conversations have new copies to review.</item>
+    </plurals>
     <string name="section_backup">Backup &amp; restore</string>
     <string name="backup_recovery_key">Recovery key</string>
     <string name="backup_recovery_key_desc">The only way to open your backups on another device. Write it down and keep it offline.</string>
@@ -250,6 +257,7 @@
     <string name="backup_import_desc">Merges a backup into this vault after verifying every block. This can bring back content you deleted earlier. Restored sources come back disabled; re-enable them in Capture.</string>
     <string name="backup_import_key_prompt">Enter the recovery key of the device that made the backup</string>
     <string name="backup_result_ok">Done: %1$d conversations, %2$d messages, %3$d media items.</string>
+    <string name="backup_result_partial_media">%1$d media items could not be read and are not in this backup.</string>
     <string name="backup_failed_no_key">No recovery key available.</string>
     <string name="backup_failed_key">Wrong recovery key, or the file was modified.</string>
     <string name="backup_failed_truncated">The backup file is incomplete.</string>
@@ -266,6 +274,10 @@
     <string name="delete_everything_desc">Removes the vault, media, keys and settings. Backups you exported are unaffected.</string>
     <string name="delete_everything_confirm_title">Delete everything?</string>
     <string name="delete_everything_confirm_body">This cannot be undone. Type DELETE to confirm.</string>
+    <string name="delete_everything_step_database">deleting the vault database</string>
+    <string name="delete_everything_step_media">deleting media files</string>
+    <string name="delete_everything_step_keys">destroying the keys</string>
+    <string name="delete_everything_step_reopen">creating the new vault</string>
     <string name="delete_everything_failed">Not everything could be deleted (step: %1$s). Nothing was reported as done; try again or clear the app\'s storage from system settings.</string>
     <string name="section_about">About</string>
     <string name="about_version">Version %1$s</string>
@@ -274,7 +286,7 @@
     <string name="about_limitations_body">• Only what a source posts to the system as a notification can be observed; there is no reliable count of what was missed.\n• Preview-restricted notifications are recorded as placeholders.\n• Same-named contacts without a stable id are kept apart, not merged.\n• Identical single messages without ids or timestamps are marked as possible repeats.\n• Adapters for LINE, WhatsApp, Telegram, Instagram and Messenger are tested with synthetic fixtures only.</string>
     <string name="about_licenses">Open-source licences</string>
     <string name="about_licenses_body">QuietInbox is licensed under GPL-3.0-or-later. Third-party components: AndroidX (Apache-2.0), Kotlin (Apache-2.0), Dagger/Hilt (Apache-2.0), SQLCipher for Android (BSD), Tink (Apache-2.0), kotlinx libraries (Apache-2.0).</string>
-    <string name="about_source">Source code and issues: github.com/quietinbox (placeholder until the repository is published)</string>
+    <string name="about_source">Source code and issues: github.com/ImL1s/quietinbox</string>
 
     <!-- Developer (debug builds only) -->
     <string name="section_developer">Developer</string>

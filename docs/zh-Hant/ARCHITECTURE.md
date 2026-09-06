@@ -69,6 +69,10 @@ StatusBarNotification
 搜尋：`search_token(token, messageId)` 保存由 `SearchNormalizer.tokens` 產生的 CJK bigram、拉丁字詞與
 3-gram；查詢是把同一組 token 以 `GROUP BY … HAVING COUNT(DISTINCT
 token) = n` 串接，接著每個候選項目都會在 Kotlin 中以正規化子字串重新驗證一次。
+候選以 `(sortKey, id)` keyset 分頁讀取，迴圈持續到已驗證命中的頁面填滿或索引耗盡為止，因此假陽性永遠藏不住後面的真命中；`searchPage` 會回傳游標（QI-SEARCH-011）。
+
+備份（QI-BACKUP-016）：匯出是可取消的金庫工作、匯入是 exclusive 的維護執行；匯出在單一讀取交易內逐表 keyset 分頁串流，
+絕不包含已到期的副本；讀不到的媒體會被計數並回報為略過。
 
 ## 金鑰（計畫 §9）
 

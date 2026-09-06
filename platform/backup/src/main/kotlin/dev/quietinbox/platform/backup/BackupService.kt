@@ -16,6 +16,7 @@ import dev.quietinbox.platform.storage.db.MediaBlobEntity
 import dev.quietinbox.platform.storage.db.MessageEntity
 import dev.quietinbox.platform.storage.db.MessageRevisionEntity
 import dev.quietinbox.platform.storage.db.QuietInboxDatabase
+import dev.quietinbox.platform.storage.db.VaultMaintenance
 import dev.quietinbox.platform.storage.settings.SettingsRepository
 import dev.quietinbox.platform.storage.db.SearchTokenEntity
 import dev.quietinbox.platform.storage.db.SourceConfigurationEntity
@@ -38,7 +39,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 sealed interface BackupResult {
-    data class Ok(val counts: Counts) : BackupResult
+    /** [skippedMedia] > 0 means the file is a partial backup: media that could not be read or was too large is not in it. */
+    data class Ok(val counts: Counts, val skippedMedia: Int = 0) : BackupResult
     data class Failed(val reason: Reason, val detail: String? = null) : BackupResult
 
     enum class Reason { NO_RECOVERY_KEY, KEY_UNAVAILABLE, IO, BAD_HEADER, WRONG_KEY_OR_TAMPERED, CORRUPT, TRUNCATED, COUNT_MISMATCH, TOO_LARGE, UNSUPPORTED_VERSION, VAULT_UNAVAILABLE }
@@ -46,9 +48,14 @@ sealed interface BackupResult {
 
 /**
  * Encrypted export / import through SAF (plan section 11). Export is a logically consistent
- * snapshot serialised as a stream; import stages everything, verifies EOF, counts and every
- * authentication tag, and only then applies in one transaction. Wrong key, truncation and
- * tampering leave the existing vault untouched.
+ * snapshot serialised as a stream, read in keyset pages inside one read transaction (never the
+ * whole vault in memory) and never containing a copy that is already expired; import stages
+ * everything, verifies EOF, counts and every authentication tag, and only then applies in one
+ * transaction. Wrong key, truncation and tampering leave the existing vault untouched.
+ *
+ * Both run under the maintenance gate (QI-BACKUP-016): export is cancellable vault work, so a
+ * reset can stop it; import is an exclusive run, so capture, media copies, retention and a reset
+ * cannot interleave with it (the window is recorded as a capture gap).
  */
 @Singleton
 class BackupService @Inject constructor(
@@ -58,8 +65,14 @@ class BackupService @Inject constructor(
     private val blobCipher: BlobCipher,
     private val mediaDir: MediaDirectory,
     private val settings: SettingsRepository,
+    private val maintenance: VaultMaintenance,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; classDiscriminator = "type" }
+
+    private companion object {
+        /** Rows per keyset page while exporting. */
+        const val PAGE = 500
+    }
 
     /** The recovery key as text the user must save; created on first call. */
     fun recoveryKeyText(): KeyResult<String> = when (val r = keyMaterial.recovery.getOrCreate()) {
@@ -67,7 +80,10 @@ class BackupService @Inject constructor(
         is KeyResult.Ok -> KeyResult.Ok(RecoveryKeyCodec.encode(r.value)).also { r.value.fill(0) }
     }
 
-    suspend fun export(target: Uri, appVersion: String): BackupResult = withContext(Dispatchers.IO) {
+    suspend fun export(target: Uri, appVersion: String): BackupResult =
+        maintenance.work { exportNow(target, appVersion) } ?: BackupResult.Failed(BackupResult.Reason.VAULT_UNAVAILABLE, "maintenance")
+
+    private suspend fun exportNow(target: Uri, appVersion: String): BackupResult = withContext(Dispatchers.IO) {
         val key = when (val r = keyMaterial.recovery.getOrCreate()) {
             is KeyResult.Failed -> return@withContext BackupResult.Failed(BackupResult.Reason.KEY_UNAVAILABLE)
             is KeyResult.Ok -> r.value
@@ -85,7 +101,7 @@ class BackupService @Inject constructor(
             val salt = ByteArray(BackupCrypto.SALT_BYTES).also { SecureRandom().nextBytes(it) }
             val header = BackupCrypto.header(salt)
             val saead = BackupCrypto.streamingAead(key, salt)
-            val counts = FileOutputStream(staging).use { raw ->
+            val written = FileOutputStream(staging).use { raw ->
                 raw.write(header)
                 saead.newEncryptingStream(raw, header).use { enc ->
                     writeRecords(db, enc.bufferedWriter(Charsets.UTF_8), appVersion)
@@ -94,7 +110,7 @@ class BackupService @Inject constructor(
             val out: OutputStream = context.contentResolver.openOutputStream(target, "wt")
                 ?: return@withContext BackupResult.Failed(BackupResult.Reason.IO, "open")
             out.use { dest -> FileInputStream(staging).use { it.copyTo(dest) } }
-            BackupResult.Ok(counts)
+            BackupResult.Ok(written.counts, written.skippedMedia)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             BackupResult.Failed(BackupResult.Reason.IO, e::class.java.simpleName)
@@ -104,55 +120,91 @@ class BackupService @Inject constructor(
         }
     }
 
-    private suspend fun writeRecords(db: QuietInboxDatabase, w: BufferedWriter, appVersion: String): Counts {
+    private class Written(val counts: Counts, val skippedMedia: Int)
+
+    /**
+     * Streams every table in keyset pages inside one read transaction, so the counts in the
+     * manifest and the rows agree even while capture continues, and no table is ever held in
+     * memory as a whole. Expired copies are not exported: a backup holds what the user could see.
+     */
+    private suspend fun writeRecords(db: QuietInboxDatabase, w: BufferedWriter, appVersion: String): Written {
         fun line(r: BackupRecord) {
             w.write(json.encodeToString(BackupRecord.serializer(), r))
             w.write("\n")
         }
-        // Snapshot inside one transaction so counts and rows agree even while capture continues.
-        val snapshot = db.withTransaction {
-            Snapshot(
-                sources = db.sourceDao().all(),
-                conversations = db.conversationDao().allForExport(),
-                messages = db.messageDao().allForExport(),
-                revisions = db.revisionDao().allForExport(),
-                media = db.mediaDao().allForExport(),
+        val now = System.currentTimeMillis()
+        return db.withTransaction {
+            val sources = db.sourceDao().all()
+            val expected = Counts(
+                sources = sources.size,
+                conversations = db.conversationDao().count(),
+                messages = db.messageDao().exportCount(now),
+                revisions = db.revisionDao().exportCount(now),
+                media = db.mediaDao().exportCount(now),
             )
-        }
-        val sources = snapshot.sources
-        val conversations = snapshot.conversations
-        val messages = snapshot.messages
-        val revisions = snapshot.revisions
-        val media = snapshot.media
-        val expected = Counts(sources.size, conversations.size, messages.size, revisions.size, media.size)
-        line(BackupRecord.Manifest(BackupCrypto.FORMAT_VERSION.toInt(), QuietInboxDatabase.VERSION, appVersion, System.currentTimeMillis(), expected))
-        for (s in sources) line(BackupRecord.Source(s.packageName, s.displayName, s.enabled, s.paused, s.retentionDays, s.mediaEnabled, s.addedAtEpochMs, s.adapterId))
-        for (c in conversations) line(BackupRecord.Conversation(c.id, c.packageName, c.profileKey, c.accountKey, c.identityKey, c.identityConfidence, c.title, c.isGroup, c.pinned, c.archived, c.createdAtEpochMs, c.lastActivityEpochMs, c.lastViewedEpochMs))
-        for (m in messages) line(
-            BackupRecord.Message(
-                m.id, m.conversationId, m.sourceMessageId, m.senderName, m.senderKey, m.isSelf, m.body, m.kind, m.sourceTimestampEpochMs, m.timestampQuality,
-                m.observedAtEpochMs, m.postedAtEpochMs, m.origin, m.contentStatus, m.dedupState, m.revisionCount, m.observationCount, m.mediaState, m.mediaBlobId,
-                m.mediaMimeType, m.fingerprint, m.sortKey, m.expiresAtEpochMs,
-            ),
-        )
-        for (r in revisions) line(BackupRecord.Revision(r.messageId, r.body, r.observedAtEpochMs))
-        var mediaWritten = 0
-        for (b in media) {
-            val bytes = when (val r = blobCipher.decryptFile(mediaDir.file(b.fileName))) {
-                is KeyResult.Ok -> r.value
-                is KeyResult.Failed -> continue
+            line(BackupRecord.Manifest(BackupCrypto.FORMAT_VERSION.toInt(), QuietInboxDatabase.VERSION, appVersion, now, expected))
+            for (s in sources) line(BackupRecord.Source(s.packageName, s.displayName, s.enabled, s.paused, s.retentionDays, s.mediaEnabled, s.addedAtEpochMs, s.adapterId))
+            var after = 0L
+            while (true) {
+                val page = db.conversationDao().exportPage(after, PAGE)
+                if (page.isEmpty()) break
+                for (c in page) line(BackupRecord.Conversation(c.id, c.packageName, c.profileKey, c.accountKey, c.identityKey, c.identityConfidence, c.title, c.isGroup, c.pinned, c.archived, c.createdAtEpochMs, c.lastActivityEpochMs, c.lastViewedEpochMs))
+                after = page.last().id
             }
-            if (bytes.size > BackupLimits.MAX_MEDIA_BYTES) continue
-            line(BackupRecord.Media(b.id, b.messageId, b.mimeType, b.width, b.height, b.createdAtEpochMs, Base64.encodeToString(bytes, Base64.NO_WRAP)))
-            mediaWritten++
+            after = 0L
+            while (true) {
+                val page = db.messageDao().exportPage(after, PAGE, now)
+                if (page.isEmpty()) break
+                for (m in page) line(
+                    BackupRecord.Message(
+                        m.id, m.conversationId, m.sourceMessageId, m.senderName, m.senderKey, m.isSelf, m.body, m.kind, m.sourceTimestampEpochMs, m.timestampQuality,
+                        m.observedAtEpochMs, m.postedAtEpochMs, m.origin, m.contentStatus, m.dedupState, m.revisionCount, m.observationCount, m.mediaState, m.mediaBlobId,
+                        m.mediaMimeType, m.fingerprint, m.sortKey, m.expiresAtEpochMs,
+                    ),
+                )
+                after = page.last().id
+            }
+            after = 0L
+            while (true) {
+                val page = db.revisionDao().exportPage(after, PAGE, now)
+                if (page.isEmpty()) break
+                for (r in page) line(BackupRecord.Revision(r.messageId, r.body, r.observedAtEpochMs))
+                after = page.last().id
+            }
+            var mediaWritten = 0
+            var skipped = 0
+            after = 0L
+            while (true) {
+                val page = db.mediaDao().exportPage(after, PAGE, now)
+                if (page.isEmpty()) break
+                for (b in page) {
+                    val bytes = when (val r = blobCipher.decryptFile(mediaDir.file(b.fileName))) {
+                        is KeyResult.Ok -> r.value
+                        is KeyResult.Failed -> {
+                            skipped++
+                            continue
+                        }
+                    }
+                    if (bytes.size > BackupLimits.MAX_MEDIA_BYTES) {
+                        skipped++
+                        continue
+                    }
+                    line(BackupRecord.Media(b.id, b.messageId, b.mimeType, b.width, b.height, b.createdAtEpochMs, Base64.encodeToString(bytes, Base64.NO_WRAP)))
+                    mediaWritten++
+                }
+                after = page.last().id
+            }
+            val actual = expected.copy(media = mediaWritten)
+            line(BackupRecord.End(actual))
+            w.flush()
+            Written(actual, skipped)
         }
-        val actual = expected.copy(media = mediaWritten)
-        line(BackupRecord.End(actual))
-        w.flush()
-        return actual
     }
 
-    suspend fun import(source: Uri, recoveryKeyText: String): BackupResult = withContext(Dispatchers.IO) {
+    /** Exclusive: nothing else writes the vault while a restore is applied. */
+    suspend fun import(source: Uri, recoveryKeyText: String): BackupResult = maintenance.exclusive { importNow(source, recoveryKeyText) }
+
+    private suspend fun importNow(source: Uri, recoveryKeyText: String): BackupResult = withContext(Dispatchers.IO) {
         val key = RecoveryKeyCodec.decode(recoveryKeyText) ?: return@withContext BackupResult.Failed(BackupResult.Reason.WRONG_KEY_OR_TAMPERED, "key format")
         val db = try {
             holder.db()
@@ -192,14 +244,6 @@ class BackupService @Inject constructor(
         }
         apply(db, staged)
     }
-
-    private class Snapshot(
-        val sources: List<SourceConfigurationEntity>,
-        val conversations: List<ConversationEntity>,
-        val messages: List<MessageEntity>,
-        val revisions: List<MessageRevisionEntity>,
-        val media: List<MediaBlobEntity>,
-    )
 
     private val stager = BackupStager(json)
 
@@ -317,21 +361,8 @@ class BackupService @Inject constructor(
                     restoredRevisions++
                     db.revisionDao().insert(MessageRevisionEntity(messageId = mid, body = r.body, observedAtEpochMs = r.observedAtEpochMs, eventId = "restore"))
                 }
-                // Recompute counters for touched conversations.
-                for (cid in convMap.values.distinct()) {
-                    val rows = db.messageDao().forConversation(cid)
-                    val c = db.conversationDao().get(cid) ?: continue
-                    val last = rows.maxByOrNull { it.sortKey }
-                    db.conversationDao().update(
-                        c.copy(
-                            messageCount = rows.count { it.dedupState != "AMBIGUOUS_REPEAT" },
-                            ambiguousCount = rows.count { it.dedupState == "AMBIGUOUS_REPEAT" },
-                            lastActivityEpochMs = maxOf(c.lastActivityEpochMs, last?.observedAtEpochMs ?: 0L),
-                            lastMessagePreview = last?.body?.take(200) ?: c.lastMessagePreview,
-                            lastSenderName = last?.senderName ?: c.lastSenderName,
-                        ),
-                    )
-                }
+                // The one projection rebuild every deletion, expiry and restore shares (QI-DATA-004).
+                db.conversationDao().rebuildProjection(convMap.values.distinct(), now)
                 if (skippedOrphans > 0) {
                     db.diagnosticsDao().insert(dev.quietinbox.platform.storage.db.DiagnosticEventEntity(code = "RESTORE_ORPHAN_MESSAGES", detail = skippedOrphans.toString(), packageName = null, atEpochMs = System.currentTimeMillis()))
                 }

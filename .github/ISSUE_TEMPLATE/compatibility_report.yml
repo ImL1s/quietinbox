@@ -1,0 +1,52 @@
+name: Source compatibility report / 來源相容性回報
+description: A messaging app whose notifications are captured wrongly, partially or not at all. 某通訊 App 的通知被錯誤、部分或完全沒有擷取。
+labels: [capture]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is how a row in docs/COMPATIBILITY.md moves from SYNTHETIC_ONLY to REAL_DEVICE_PASSED. Only anonymised, synthetic-content fixtures are accepted: send yourself messages such as "T001 alpha" from a second test account, never real conversations. See "Submitting an anonymised fixture" in docs/COMPATIBILITY.md.
+        docs/COMPATIBILITY.md 的列要從 SYNTHETIC_ONLY 升到 REAL_DEVICE_PASSED 就靠這裡。只接受匿名、合成內容的 fixture：用第二個測試帳號傳「T001 alpha」這類訊息給自己，絕不要真實對話。流程見 docs/COMPATIBILITY.md「提交匿名 fixture」。
+  - type: input
+    id: source
+    attributes:
+      label: Source app, package name and versionCode / 來源 App、套件名稱、versionCode
+      placeholder: LINE, jp.naver.line.android, 150200
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device, Android version, OEM, system language / 裝置、Android 版本、OEM、系統語言
+    validations:
+      required: true
+  - type: input
+    id: quietinbox
+    attributes:
+      label: QuietInbox version / commit
+    validations:
+      required: true
+  - type: dropdown
+    id: shape
+    attributes:
+      label: Notification shape / 通知形狀
+      options: [MessagingStyle, BigTextStyle, InboxStyle, Group summary only, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What the notification showed vs. what QuietInbox stored (synthetic text only) / 通知顯示什麼、靜讀存了什麼（僅合成文字）
+    validations:
+      required: true
+  - type: textarea
+    id: fixture
+    attributes:
+      label: Anonymised extras dump (key names, template, shapes; no real names or bodies) / 匿名 extras 摘要
+      render: text
+  - type: checkboxes
+    id: readstate
+    attributes:
+      label: Read-state check / 已讀狀態
+      options:
+        - label: I confirmed that reading the copy in QuietInbox did NOT mark the chat as read in the source app. 我確認在靜讀讀副本不會讓來源 App 標記已讀。

@@ -58,6 +58,14 @@ class IngestRepository @Inject constructor(
 
     companion object {
         const val MAX_ATTEMPTS = 3
+
+        /** Same unit as `substr(body, 1, 200)` in `rebuildProjection`: code points, so emoji are never cut in half. */
+        const val PREVIEW_CODE_POINTS = 200
+
+        internal fun String.takeCodePoints(n: Int): String {
+            if (codePointCount(0, length) <= n) return this
+            return substring(0, offsetByCodePoints(0, n))
+        }
     }
     private val windowSerializer = ListSerializer(WindowItemJson.serializer())
 
@@ -83,9 +91,10 @@ class IngestRepository @Inject constructor(
 
     suspend fun isJournalPending(eventId: String): Boolean = holder.db().journalDao().state(eventId) == "PENDING"
 
-    suspend fun pendingJournal(limit: Int = 200): List<Pair<String, NotificationSnapshot>> {
+    suspend fun pendingJournal(limit: Int = 200, excludingPackages: Collection<String> = emptyList()): List<Pair<String, NotificationSnapshot>> {
         val db = holder.db()
-        return db.journalDao().pending(limit).mapNotNull { row ->
+        val rows = if (excludingPackages.isEmpty()) db.journalDao().pending(limit) else db.journalDao().pendingExcluding(limit, excludingPackages.toList())
+        return rows.mapNotNull { row ->
             runCatching { row.generation to json.decodeFromString(NotificationSnapshot.serializer(), row.payload) }
                 .getOrElse {
                     db.journalDao().setState(row.eventId, "FAILED", "DECODE")
@@ -226,7 +235,8 @@ class IngestRepository @Inject constructor(
                 val c = decision.candidate
                 when (decision) {
                     is Decision.New, is Decision.AmbiguousRepeat -> {
-                        if (db.suppressionDao().isSuppressed(suppressionKey, decision.fingerprint, now) > 0) {
+                        val token = db.suppressionDao().token(suppressionKey, decision.fingerprint, now)
+                        if (token != null && SuppressionRule.applies(token.sourceMessageId, token.postedAtEpochMs, c.sourceMessageId, snapshot.postedAtEpochMs)) {
                             suppressed++
                             // Nothing stored for this position; keep a verified link only.
                             storedIds[index] = (decision as? Decision.AmbiguousRepeat)?.existingMessageId?.takeIf { db.messageDao().get(it) != null }
@@ -356,7 +366,7 @@ class IngestRepository @Inject constructor(
                         lastActivityEpochMs = if (touched) maxOf(current.lastActivityEpochMs, now) else current.lastActivityEpochMs,
                         messageCount = current.messageCount + newIds.size,
                         ambiguousCount = current.ambiguousCount + ambiguousIds.size,
-                        lastMessagePreview = if (touched) lastStored?.body?.take(200) ?: current.lastMessagePreview else current.lastMessagePreview,
+                        lastMessagePreview = if (touched) lastStored?.body?.takeCodePoints(PREVIEW_CODE_POINTS) ?: current.lastMessagePreview else current.lastMessagePreview,
                         lastSenderName = if (touched) lastStored?.sender?.displayName ?: current.lastSenderName else current.lastSenderName,
                     ),
                 )
