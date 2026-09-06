@@ -72,9 +72,13 @@ exists, and no source notification is ever read.
   matching button text in both languages, seeds the demo vault and captures
   `1_inbox.png … 7_inbox_dark.png`. Use an emulator: on a real phone the listener would copy the
   owner's own notifications into the debug vault. On Android 13+ the keyboard follows the app language, so the tool disables the default input method before it launches the app, restores it afterwards, types the query one key at a time once the input method has settled, dismisses it with ENTER (the single-line field's Done action; the search is live, nothing is submitted) and refuses to shoot the search screen if the field does not show the query or an input method is still showing; every shot must also be at least 80 KB (calibrated on the 1080×2400 `QuietInbox_Phone`), the conversation shot waits (on the narrow layout) until the pinned title is on screen and the bottom bar is gone, and fails the run otherwise, the app language is set and confirmed before anything starts the process (and the process is stopped again before the launch), the seed broadcast names the demo's language (`--es lang`), and a non-English run refuses the inbox, conversation, activity and capture shots if an English AM/PM time or month appears in the app's own nodes — the sign that the process locale lagged behind the app language (the detector assumes an English device language, and the English run proves it still bites on its inbox clock).
-  Two guards decide whether a file is written at all. **The app must be the app on screen**: before every
-  capture the UI dump must contain a node belonging to `dev.quietinbox.app.debug`, and a navigation tap
-  that matches nothing fails the run rather than warning. Without them the first tablet set captured the
+  Several guards decide whether a file is written at all. **The app must be the app on screen**: before
+  every capture the UI dump must contain a node belonging to `dev.quietinbox.app.debug`. **A navigation
+  tap must take**: the tap is re-sent up to five times and the run fails unless the tapped item becomes
+  the selected one (a node of the app, marked `selected`, inside the navigation strip and covering the
+  label) — proving the app is on screen does not prove the right page is. **A dark shot must be dark**:
+  failing to switch the device into night mode fails the run. The UI dump itself retries, since every
+  capture now depends on one. Without them the first tablet set captured the
   launcher and the system settings, and the size floor passed them (a wallpaper compresses to 3.3 MB).
   **Both layouts are supported**: the harness reads the window width in dp and taps the navigation rail
   at ≥ 600dp, the bottom bar below it; on a wide window the conversation counts as ready when the pinned

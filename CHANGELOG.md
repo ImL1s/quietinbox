@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows Keep
 
 Nothing yet.
 
-## [0.1.3] — 2026-09-06
+## [0.1.3] — 2026-09-07
 
 `versionCode` 7. Two user-visible string defects that the store screenshots had baked in, and the
 screenshot harness that let a whole tablet set of the wrong screens reach Google Play.
@@ -37,12 +37,24 @@ screenshot harness that let a whole tablet set of the wrong screens reach Google
 - Round-26 review fixes (`docs/reviews/2026-09-06-round26/`): a tab tap is confirmed rather than assumed —
   after tapping, the harness re-reads the screen and requires the tapped item to be the selected one, so a
   swallowed tap fails the run instead of capturing the previous page; the bottom-bar rule is gated on the
-  narrow layout the way the rail rule is gated on the wide one, and the rail strip now bounds both edges
-  of a candidate (a two-character CJK heading in a tablet content pane ends near the 15% line); a failure
+  narrow layout the way the rail rule is gated on the wide one, and where several nodes carry a tab's
+  label the one furthest into the navigation strip wins — lowest on a bottom bar, leftmost on a rail —
+  instead of whichever Compose emitted first (on a 2076px tablet the strip is 311px and a two-character
+  CJK heading in the content pane ends at about 300px, so it is a candidate too, just a worse one); the
+  selected-item check only counts nodes belonging to the app and inside the strip, so a pulled-down
+  notification shade or a selected filter chip cannot answer for a navigation item; a failure
   to switch the device into night mode fails the run rather than producing a light `7_inbox_dark`; the UI
-  dump retries, since every screenshot now depends on one; and `LAYOUT` is declared with the other globals.
+  dump retries, since every screenshot now depends on one; the tap is re-sent on each confirmation
+  attempt rather than sent once and merely re-checked; each of `tap_tab`'s three failure paths says which
+  one it was; and `LAYOUT` is declared with the other globals. Round 27 also caught the inbox summary
+  gluing its gap clause on with an ASCII space in every language, which the Chinese and Japanese
+  screenshots showed — it goes through the same locale-aware joiner as the rest of the sentence now.
 
 ### Changed
+- The release workflow now carries the R8 mapping: `dist/` gets `quietinbox-<version>-mapping.txt` for
+  `gplay deobfuscation upload` and the GitHub release gets the gzip of it, both covered by
+  `SHA256SUMS.txt`. Play Vitals stack traces for 0.1.2 are obfuscated because the mapping for that
+  build was never uploaded and cannot be reconstructed.
 - Documentation fixes found by a full en/zh-Hant parity audit: `docs/SCOPE.md` (both languages) had four
   stale test counts (`CaptureCoordinatorTest` 16→32, `VaultMaintenanceTest` 4→5, `core:reconcile` 20→22,
   `core:analytics` 32→34), still listed release signing as not done, and still called the package id a

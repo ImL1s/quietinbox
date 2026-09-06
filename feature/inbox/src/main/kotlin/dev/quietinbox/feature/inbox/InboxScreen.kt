@@ -240,7 +240,9 @@ private fun summaryLine(state: InboxUiState): String {
     } else {
         stringResource(R.string.inbox_summary_gap_unknown)
     }
-    return "$base $gapText"
+    // Joined through the same locale-aware string as the two halves above: Chinese and Japanese do
+    // not want the ASCII space that English and Korean do.
+    return stringResource(R.string.inbox_summary_join, base, gapText)
 }
 
 @Composable

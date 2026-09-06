@@ -40,6 +40,11 @@ The two installs cannot update over each other because Play re-signs the store c
    `tracks update --track production --releases @releases.json` (`status: completed`, `versionCodes`, `releaseNotes` = `fastlane/release-notes.json`)
    → `edits validate` → `edits commit`. Uploading the CI artifact keeps the Play copy and the GitHub copy byte-identical;
    a locally built AAB is signed with the same key but may differ in bytes (no reproducible-build comparison yet).
+   Delete `--type tenInchScreenshots` as well when the tablet set changed.
+6. Upload the R8 mapping so Play Vitals stacks are readable:
+   `gplay deobfuscation upload --package dev.quietinbox.app --edit <edit> --version-code <n> --file dist/quietinbox-<version>-mapping.txt`
+   inside the same edit, before `edits commit`. Use the mapping from the CI artifact — a locally
+   rebuilt one does not match the uploaded bundle. The release also carries `…-mapping.txt.gz`.
 
 ## Screenshots
 

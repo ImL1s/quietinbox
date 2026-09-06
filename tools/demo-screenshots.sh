@@ -90,6 +90,48 @@ def centre(box):
     return (left + right) // 2, (top + bottom) // 2
 
 
+def screen(tree):
+    width = height = 0
+    for node in nodes(tree):
+        box = bounds(node)
+        if box:
+            width = max(width, box[2])
+            height = max(height, box[3])
+    return width, height
+
+
+def in_navigation_strip(box, layout, width, height):
+    if layout == "narrow":
+        return box[1] >= int(height * 0.85)
+    return box[2] <= int(width * 0.15)
+
+
+def navigation_item(tree, layout, wanted, width, height):
+    # Every node carrying one of the labels and sitting in the navigation strip is a candidate; the
+    # one that is furthest into the strip wins — lowest on a bottom bar, leftmost on a rail. Taking
+    # the first match in document order instead would depend on where Compose happens to emit the
+    # navigation relative to the content: on a 2076px tablet 15% is 311px, and a two-character CJK
+    # heading in the content pane ends at about 300px, so it is a candidate too, just a worse one.
+    # (The rail is 80dp wide; if this ever moves to the Expressive WideNavigationRail, up to 220dp
+    # expanded, widen the strip with it.)
+    best = None
+    for node in nodes(tree):
+        text = (node.get("text") or "").strip()
+        description = (node.get("content-desc") or "").strip()
+        if text not in wanted and description not in wanted:
+            continue
+        box = bounds(node)
+        if not box or not in_navigation_strip(box, layout, width, height):
+            continue
+        if best is None:
+            best = box
+        elif layout == "narrow":
+            best = box if box[1] > best[1] else best
+        else:
+            best = box if box[2] < best[2] else best
+    return best
+
+
 def main():
     command = sys.argv[1]
     tree = ET.parse(sys.stdin)
@@ -107,71 +149,45 @@ def main():
         return 1
 
     if command == "tap-tab":
-        # Like tap-text, but only nodes in the navigation container: the bottom bar (lowest 15% of the
-        # screen) on a narrow window, the left rail (leftmost 15%) on a wide one. A tile or heading
-        # that happens to carry the same word must not be mistaken for the tab, so the rail is only
-        # accepted on the layout that has one — a short CJK heading in the top-left corner of a phone
-        # screen would otherwise pass the same width test. Accepting the rail at all is what makes the
-        # tablet run navigate: the bottom-bar-only rule matched nothing there, every tab tap silently
-        # did nothing, and the shots were of whatever was behind the app.
+        # Like tap-text, but only the navigation item: the bottom bar (lowest 15%) on a narrow window,
+        # the left rail (leftmost 15%) on a wide one, and the rail only on the layout that has one —
+        # a short CJK heading in the top-left corner of a phone screen would otherwise pass the same
+        # test. Accepting the rail at all is what makes the tablet run navigate: the bottom-bar-only
+        # rule matched nothing there, every tab tap silently did nothing, and the shots were of
+        # whatever was behind the app.
         layout = sys.argv[2]
         wanted = set(sys.argv[3:])
-        width = height = 0
-        for node in nodes(tree):
-            box = bounds(node)
-            if box:
-                width = max(width, box[2])
-                height = max(height, box[3])
-        for node in nodes(tree):
-            text = (node.get("text") or "").strip()
-            description = (node.get("content-desc") or "").strip()
-            if text in wanted or description in wanted:
-                box = bounds(node)
-                if not box:
-                    continue
-                in_bottom_bar = layout == "narrow" and box[1] >= int(height * 0.85)
-                # Both edges inside the strip, not just the right one: a two-character CJK heading in
-                # the content pane of a 2076px-wide tablet can end at ~300px, and 15% is 311px. The
-                # rail itself is 80dp wide by default — if this ever moves to the Expressive
-                # WideNavigationRail (up to 220dp expanded), widen the strip with it.
-                in_left_rail = layout == "wide" and box[0] <= int(width * 0.15) and box[2] <= int(width * 0.15)
-                if in_bottom_bar or in_left_rail:
-                    print("%d %d" % centre(box))
-                    return 0
-        return 1
+        width, height = screen(tree)
+        box = navigation_item(tree, layout, wanted, width, height)
+        if not box:
+            return 1
+        print("%d %d" % centre(box))
+        return 0
 
     if command == "tab-selected":
-        # The navigation item carrying one of these labels is the selected one. Compose puts
+        # The navigation item carrying one of these labels must be the selected one. Compose puts
         # selected=true on the item container (Modifier.selectable(role = Role.Tab)), not on the text
-        # node, so the label's centre has to fall inside a node that is marked selected. Without this
-        # a tap that was swallowed — a busy frame, a stale coordinate after a relayout — leaves the
-        # previous page on screen and the capture proceeds against the wrong screen.
-        layout = sys.argv[2]
-        wanted = set(sys.argv[3:])
-        width = height = 0
+        # node, so the label's centre has to fall inside a node that is marked selected — and that
+        # node must belong to the app and sit in the navigation strip itself, or a pulled-down
+        # notification shade (its quick-settings tiles are selected too) or a selected filter chip
+        # would answer for it. Without this check a tap that was swallowed — a busy frame, a stale
+        # coordinate after a relayout — leaves the previous page on screen and the capture proceeds
+        # against the wrong screen.
+        package, layout = sys.argv[2], sys.argv[3]
+        wanted = set(sys.argv[4:])
+        width, height = screen(tree)
+        box = navigation_item(tree, layout, wanted, width, height)
+        if not box:
+            return 1
+        x, y = centre(box)
         for node in nodes(tree):
-            box = bounds(node)
-            if box:
-                width = max(width, box[2])
-                height = max(height, box[3])
-        selected = [bounds(n) for n in nodes(tree) if n.get("selected") == "true"]
-        selected = [b for b in selected if b]
-        for node in nodes(tree):
-            text = (node.get("text") or "").strip()
-            description = (node.get("content-desc") or "").strip()
-            if text not in wanted and description not in wanted:
+            if node.get("selected") != "true" or (node.get("package") or "") != package:
                 continue
-            box = bounds(node)
-            if not box:
+            marked = bounds(node)
+            if not marked or not in_navigation_strip(marked, layout, width, height):
                 continue
-            in_bottom_bar = layout == "narrow" and box[1] >= int(height * 0.85)
-            in_left_rail = layout == "wide" and box[0] <= int(width * 0.15) and box[2] <= int(width * 0.15)
-            if not (in_bottom_bar or in_left_rail):
-                continue
-            x, y = centre(box)
-            for left, top, right, bottom in selected:
-                if left <= x <= right and top <= y <= bottom:
-                    return 0
+            if marked[0] <= x <= marked[2] and marked[1] <= y <= marked[3]:
+                return 0
         return 1
 
     if command == "app-foreground":
@@ -346,19 +362,23 @@ tap_text() {
 # whole tablet set of screenshots came to be of the wrong screen: the tap did nothing, nothing said
 # so, and the capture went ahead. A tap that does not take fails the run.
 tap_tab() {
-  dump_ui || return 1
+  dump_ui || { warn "tap_tab $1: could not read the screen"; return 1; }
   local point
   if ! point="$(python3 "$HELPER" tap-tab "$LAYOUT" "$@" < "$WORK_DIR/ui.xml")"; then
+    warn "tap_tab $1: no navigation item with that label in the $LAYOUT navigation strip"
     return 1
   fi
-  # shellcheck disable=SC2086
-  shell input tap $point
   local attempt
   for attempt in 1 2 3 4 5; do
+    # The tap is repeated, not just re-checked: a swallowed tap is the whole reason this guard
+    # exists, and re-sending it costs a second where failing costs the locale's entire run.
+    # shellcheck disable=SC2086
+    shell input tap $point
     sleep 1
     dump_ui || continue
-    python3 "$HELPER" tab-selected "$LAYOUT" "$@" < "$WORK_DIR/ui.xml" && return 0
+    python3 "$HELPER" tab-selected "$APP_ID" "$LAYOUT" "$@" < "$WORK_DIR/ui.xml" && return 0
   done
+  warn "tap_tab $1: tapped $attempt times but the item never became the selected one"
   return 1
 }
 
@@ -570,7 +590,7 @@ shell am broadcast -a "$DEMO_ACTION" --es op seed --es lang "$LOCALE" -n "$DEMO_
 sleep 6
 
 # 1 — inbox
-tap_tab "$NAV_INBOX" || die "could not reach the inbox tab — the navigation container was not found in the dump"
+tap_tab "$NAV_INBOX" || die "could not reach the inbox tab (reason above)"
 assert_locale_clock "1_inbox"
 shot "1_inbox"
 
@@ -602,7 +622,7 @@ if [ "$LAYOUT" = "narrow" ]; then
 fi
 
 # 3 — search with a query typed
-tap_tab "$NAV_SEARCH" || die "could not reach the search tab — the navigation container was not found in the dump"
+tap_tab "$NAV_SEARCH" || die "could not reach the search tab (reason above)"
 sleep 1
 tap_text "$SEARCH_HINT" || die "could not focus the search field"
 # Let the input method window settle before the first key: keys injected while it is still coming
@@ -640,24 +660,24 @@ if [ "$LAYOUT" = "narrow" ]; then
 fi
 
 # 4 — activity statistics
-tap_tab "$NAV_ACTIVITY" || die "could not reach the activity tab — the navigation container was not found in the dump"
+tap_tab "$NAV_ACTIVITY" || die "could not reach the activity tab (reason above)"
 sleep 3
 assert_locale_clock "4_activity"
 shot "4_activity"
 
 # 5 — capture health
-tap_tab "$NAV_CAPTURE" || die "could not reach the capture tab — the navigation container was not found in the dump"
+tap_tab "$NAV_CAPTURE" || die "could not reach the capture tab (reason above)"
 sleep 2
 assert_locale_clock "5_capture"
 shot "5_capture"
 
 # 6 — settings
-tap_tab "$NAV_SETTINGS" || die "could not reach the settings tab — the navigation container was not found in the dump"
+tap_tab "$NAV_SETTINGS" || die "could not reach the settings tab (reason above)"
 sleep 2
 shot "6_settings"
 
 # 7 — inbox in dark mode
-tap_tab "$NAV_INBOX" || die "could not reach the inbox tab — the navigation container was not found in the dump"
+tap_tab "$NAV_INBOX" || die "could not reach the inbox tab (reason above)"
 shell cmd uimode night yes >/dev/null 2>&1 || die "could not switch the device to night mode — 7_inbox_dark would be the light inbox"
 sleep 3
 shot "7_inbox_dark"
