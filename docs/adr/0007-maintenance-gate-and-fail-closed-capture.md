@@ -39,7 +39,8 @@ Cold start read the extras of every app's notification before the user's source 
   evicted first; once the policy is known only notifications from enabled sources are snapshotted.
   Every loss — an eviction, a vault that does not open within 15 s, a loss the locked vault could
   not record at the time — is written as a bounded `COLD_START` gap as soon as the vault can be
-  written. Gaps are shown, never hidden, even when the gap table itself was unreachable.
+  written, and a loss is only forgotten once that write succeeded. Gaps are shown, never hidden,
+  even when the gap table itself was unreachable.
 - **Delete-everything is verified.** Each step (database files, media files, keys, reopen) is
   checked and the failed step is named; the vault is always reopened, so a failed reset can never
   leave the app hanging on an `Opening` vault.

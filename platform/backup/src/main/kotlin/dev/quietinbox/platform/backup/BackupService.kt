@@ -130,11 +130,14 @@ class BackupService @Inject constructor(
      * user could see.
      *
      * Media is handled *after* the transaction, one keyset page at a time: read a page, decrypt and
-     * stream its files, read the next. The manifest's media count is the number of rows considered
-     * at that moment; `End.actual.media` is the number written and `End.skippedMedia` the ones that
-     * could not be read (the stager checks `End`, not the manifest, for media). The transaction
-     * therefore holds the write lock for the row serialisation only — seconds on a very large
-     * vault, never the media decryption (round-11 / round-12 findings).
+     * stream its files, read the next. The pages are bounded to the highest blob id read *inside*
+     * the transaction, so a picture committed after the snapshot cannot be exported without its
+     * message (round-13); a blob deleted meanwhile is simply missing. The manifest's media count is
+     * the number of rows at the snapshot; `End.actual.media` is the number written and
+     * `End.skippedMedia` the ones that could not be read (the stager checks `End`, not the
+     * manifest, for media). The transaction therefore holds the write lock for the row
+     * serialisation only — seconds on a very large vault, never the media decryption (round-11 /
+     * round-12 findings).
      */
     private suspend fun writeRecords(db: QuietInboxDatabase, w: BufferedWriter, appVersion: String): Written {
         fun line(r: BackupRecord) {
@@ -142,7 +145,7 @@ class BackupService @Inject constructor(
             w.write("\n")
         }
         val now = System.currentTimeMillis()
-        val expected = db.withTransaction {
+        val (expected, mediaMaxId) = db.withTransaction {
             val sources = db.sourceDao().all()
             val expected = Counts(
                 sources = sources.size,
@@ -180,14 +183,14 @@ class BackupService @Inject constructor(
                 for (r in page) line(BackupRecord.Revision(r.messageId, r.body, r.observedAtEpochMs))
                 after = page.last().id
             }
-            expected
+            expected to db.mediaDao().maxId()
         }
         // Outside the transaction, one page at a time: disk reads and AEAD decryption of every blob.
         var mediaWritten = 0
         var skipped = 0
         var after = 0L
         while (true) {
-            val page = db.mediaDao().exportPage(after, PAGE, now)
+            val page = db.mediaDao().exportPage(after, mediaMaxId, PAGE, now)
             if (page.isEmpty()) break
             for (b in page) {
                 val bytes = when (val r = blobCipher.decryptFile(mediaDir.file(b.fileName))) {

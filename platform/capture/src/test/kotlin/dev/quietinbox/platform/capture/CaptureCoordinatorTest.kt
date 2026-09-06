@@ -652,6 +652,76 @@ class CaptureCoordinatorTest : FunSpec({
         coVerify(timeout = 5_000, exactly = 1) { h.health.closeOpenGaps(any(), GapReason.UNKNOWN) }
     }
 
+    test("a cold-start loss whose settle failed is kept and written on the next policy load") {
+        val h = Harness()
+        val factory: SnapshotFactory = mockk()
+        val locked = VaultUnavailableException(KeyFailure.Unavailable("locked"))
+        coEvery { h.sources.sources() } throws locked
+        coEvery { h.health.openGap(any(), GapReason.COLD_START, any(), any()) } throws locked
+        // The first settle fails half-way (the vault locked again); the second one succeeds.
+        coEvery { h.health.recordGap(any(), any(), GapReason.COLD_START, GapPrecision.BOUNDED, any()) } throws locked andThen Unit
+        val coordinator = h.coordinator().also { it.snapshotFactory = factory }
+        coordinator.onConnected(h.service)
+
+        coordinator.onPosted(sbnOf(ENABLED_PKG))
+        coVerify(timeout = 5_000, atLeast = 1) { h.health.openGap(any(), GapReason.COLD_START, any(), any()) }
+
+        coEvery { h.sources.sources() } returns listOf(sourceConfig(ENABLED_PKG))
+        h.observedSources.emit(listOf(sourceConfig(ENABLED_PKG)))
+        coVerify(timeout = 5_000, exactly = 1) { h.health.recordGap(any(), any(), GapReason.COLD_START, GapPrecision.BOUNDED, any()) }
+        // Not forgotten: the next policy load writes it, and only then does it stop being retried.
+        h.observedSources.emit(listOf(sourceConfig(ENABLED_PKG), sourceConfig(UNLISTED_PKG)))
+        coVerify(timeout = 5_000, exactly = 2) { h.health.recordGap(any(), any(), GapReason.COLD_START, GapPrecision.BOUNDED, any()) }
+        h.observedSources.emit(listOf(sourceConfig(ENABLED_PKG)))
+        stillHolds { coVerify(exactly = 2) { h.health.recordGap(any(), any(), GapReason.COLD_START, GapPrecision.BOUNDED, any()) } }
+        coVerify(exactly = 0) { factory.create(any(), any(), any(), any()) }
+    }
+
+    test("a cold-start gap row that lands after the policy loaded is closed at once, not left open") {
+        val h = Harness()
+        val factory: SnapshotFactory = mockk()
+        val policyReady = CompletableDeferred<Unit>()
+        val gapGate = CompletableDeferred<Unit>()
+        coEvery { h.sources.sources() } coAnswers { policyReady.await(); listOf(sourceConfig(ENABLED_PKG)) }
+        // The open-gap insert waits for the vault like any other write.
+        coEvery { h.health.openGap(any(), GapReason.COLD_START, any(), any()) } coAnswers { gapGate.await(); 7L }
+        val coordinator = h.coordinator().also { it.snapshotFactory = factory; it.coldStartTimeoutMs = 200L }
+        coordinator.onConnected(h.service)
+
+        coordinator.onPosted(sbnOf(ENABLED_PKG))
+        // The vault did not open in time: the buffer is dropped and the gap row is being opened.
+        coVerify(timeout = 5_000, exactly = 1) { h.health.openGap(any(), GapReason.COLD_START, any(), any()) }
+
+        // The vault opens and the policy loads while that insert is still waiting: its settle finds no row.
+        policyReady.complete(Unit)
+        h.observedSources.emit(listOf(sourceConfig(ENABLED_PKG)))
+        coVerify(timeout = 5_000, exactly = 1) { h.health.closeOpenGaps(any(), GapReason.COLD_START) }
+
+        // The insert lands afterwards: closed right away instead of staying open until the next policy load.
+        gapGate.complete(Unit)
+        coVerify(timeout = 5_000, exactly = 2) { h.health.closeOpenGaps(any(), GapReason.COLD_START) }
+        coVerify(exactly = 0) { factory.create(any(), any(), any(), any()) }
+    }
+
+    test("a notification held across a disconnect is recorded as a gap, not dropped silently") {
+        val h = Harness()
+        val factory: SnapshotFactory = mockk()
+        val vaultOpen = CompletableDeferred<Unit>()
+        coEvery { h.sources.sources() } coAnswers { vaultOpen.await(); listOf(sourceConfig(ENABLED_PKG)) }
+        val coordinator = h.coordinator().also { it.snapshotFactory = factory }
+        coordinator.onConnected(h.service)
+
+        coordinator.onPosted(sbnOf(ENABLED_PKG))
+        // The listener is rebound while the notification is still held: a new generation.
+        coordinator.onDisconnected()
+        coordinator.onConnected(h.service)
+        vaultOpen.complete(Unit)
+
+        // Its arrival predates the disconnect gap, so the held window gets a gap of its own.
+        coVerify(timeout = 5_000, exactly = 1) { h.health.recordGap(any(), any(), GapReason.COLD_START, GapPrecision.BOUNDED, any()) }
+        stillHolds { coVerify(exactly = 0) { factory.create(any(), any(), any(), any()) } }
+    }
+
     // ---- QI-MEDIA-006: a bitmap stays counted until the copier is done with it -------------------
 
     test("bitmaps in flight at the copier still count against the queue bound") {

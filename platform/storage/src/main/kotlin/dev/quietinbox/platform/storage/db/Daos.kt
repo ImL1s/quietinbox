@@ -376,8 +376,12 @@ interface MediaDao {
     @Query("SELECT COALESCE(SUM(byteCount), 0) FROM media_blob")
     fun observeTotalBytes(): Flow<Long>
 
-    @Query("SELECT * FROM media_blob WHERE id > :afterId AND messageId IN (SELECT id FROM message WHERE expiresAtEpochMs IS NULL OR expiresAtEpochMs > :now) ORDER BY id LIMIT :limit")
-    suspend fun exportPage(afterId: Long, limit: Int, now: Long): List<MediaBlobEntity>
+    /** Highest blob id at the time of the call; an export bounds its media pages to it so a picture committed later is never exported without its message. */
+    @Query("SELECT COALESCE(MAX(id), 0) FROM media_blob")
+    suspend fun maxId(): Long
+
+    @Query("SELECT * FROM media_blob WHERE id > :afterId AND id <= :maxId AND messageId IN (SELECT id FROM message WHERE expiresAtEpochMs IS NULL OR expiresAtEpochMs > :now) ORDER BY id LIMIT :limit")
+    suspend fun exportPage(afterId: Long, maxId: Long, limit: Int, now: Long): List<MediaBlobEntity>
 
     @Query("SELECT COUNT(*) FROM media_blob WHERE messageId IN (SELECT id FROM message WHERE expiresAtEpochMs IS NULL OR expiresAtEpochMs > :now)")
     suspend fun exportCount(now: Long): Int
