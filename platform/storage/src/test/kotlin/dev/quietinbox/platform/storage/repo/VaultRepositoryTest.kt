@@ -43,7 +43,7 @@ class VaultRepositoryTest : FunSpec({
         h.repo().deleteEverything() shouldBe ResetResult.Failed("database")
 
         coVerify(exactly = 1) { h.holder.retry() }
-        h.state.value shouldBe h.state.value.also { (it is VaultState.Ready) shouldBe true }
+        (h.state.value is VaultState.Ready) shouldBe true
         // Nothing after the failed step ran: keys were not destroyed for a vault that still exists.
         coVerify(exactly = 0) { h.keys.destroyAll() }
         h.maintenance.isActive shouldBe false

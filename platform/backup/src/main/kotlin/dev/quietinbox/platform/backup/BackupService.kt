@@ -43,7 +43,7 @@ sealed interface BackupResult {
     data class Ok(val counts: Counts, val skippedMedia: Int = 0) : BackupResult
     data class Failed(val reason: Reason, val detail: String? = null) : BackupResult
 
-    enum class Reason { NO_RECOVERY_KEY, KEY_UNAVAILABLE, IO, BAD_HEADER, WRONG_KEY_OR_TAMPERED, CORRUPT, TRUNCATED, COUNT_MISMATCH, TOO_LARGE, UNSUPPORTED_VERSION, VAULT_UNAVAILABLE }
+    enum class Reason { NO_RECOVERY_KEY, KEY_UNAVAILABLE, IO, BAD_HEADER, WRONG_KEY_OR_TAMPERED, CORRUPT, TRUNCATED, COUNT_MISMATCH, TOO_LARGE, UNSUPPORTED_VERSION, VAULT_UNAVAILABLE, MAINTENANCE }
 }
 
 /**
@@ -81,7 +81,7 @@ class BackupService @Inject constructor(
     }
 
     suspend fun export(target: Uri, appVersion: String): BackupResult =
-        maintenance.work { exportNow(target, appVersion) } ?: BackupResult.Failed(BackupResult.Reason.VAULT_UNAVAILABLE, "maintenance")
+        maintenance.work { exportNow(target, appVersion) } ?: BackupResult.Failed(BackupResult.Reason.MAINTENANCE)
 
     private suspend fun exportNow(target: Uri, appVersion: String): BackupResult = withContext(Dispatchers.IO) {
         val key = when (val r = keyMaterial.recovery.getOrCreate()) {
@@ -126,6 +126,10 @@ class BackupService @Inject constructor(
      * Streams every table in keyset pages inside one read transaction, so the counts in the
      * manifest and the rows agree even while capture continues, and no table is ever held in
      * memory as a whole. Expired copies are not exported: a backup holds what the user could see.
+     *
+     * Only the row reads happen inside the transaction (milliseconds); the media files are
+     * decrypted and streamed *after* it, so a large media set never holds the SQLite write lock
+     * against live capture (round-11 finding).
      */
     private suspend fun writeRecords(db: QuietInboxDatabase, w: BufferedWriter, appVersion: String): Written {
         fun line(r: BackupRecord) {
@@ -133,7 +137,8 @@ class BackupService @Inject constructor(
             w.write("\n")
         }
         val now = System.currentTimeMillis()
-        return db.withTransaction {
+        val mediaRows = ArrayList<MediaBlobEntity>()
+        val expected = db.withTransaction {
             val sources = db.sourceDao().all()
             val expected = Counts(
                 sources = sources.size,
@@ -171,34 +176,38 @@ class BackupService @Inject constructor(
                 for (r in page) line(BackupRecord.Revision(r.messageId, r.body, r.observedAtEpochMs))
                 after = page.last().id
             }
-            var mediaWritten = 0
-            var skipped = 0
+            // Media rows are metadata only (file name, size, dimensions): small enough to hold.
             after = 0L
             while (true) {
                 val page = db.mediaDao().exportPage(after, PAGE, now)
                 if (page.isEmpty()) break
-                for (b in page) {
-                    val bytes = when (val r = blobCipher.decryptFile(mediaDir.file(b.fileName))) {
-                        is KeyResult.Ok -> r.value
-                        is KeyResult.Failed -> {
-                            skipped++
-                            continue
-                        }
-                    }
-                    if (bytes.size > BackupLimits.MAX_MEDIA_BYTES) {
-                        skipped++
-                        continue
-                    }
-                    line(BackupRecord.Media(b.id, b.messageId, b.mimeType, b.width, b.height, b.createdAtEpochMs, Base64.encodeToString(bytes, Base64.NO_WRAP)))
-                    mediaWritten++
-                }
+                mediaRows += page
                 after = page.last().id
             }
-            val actual = expected.copy(media = mediaWritten)
-            line(BackupRecord.End(actual))
-            w.flush()
-            Written(actual, skipped)
+            expected
         }
+        // Outside the transaction: disk reads and AEAD decryption of every blob.
+        var mediaWritten = 0
+        var skipped = 0
+        for (b in mediaRows) {
+            val bytes = when (val r = blobCipher.decryptFile(mediaDir.file(b.fileName))) {
+                is KeyResult.Ok -> r.value
+                is KeyResult.Failed -> {
+                    skipped++
+                    continue
+                }
+            }
+            if (bytes.size > BackupLimits.MAX_MEDIA_BYTES) {
+                skipped++
+                continue
+            }
+            line(BackupRecord.Media(b.id, b.messageId, b.mimeType, b.width, b.height, b.createdAtEpochMs, Base64.encodeToString(bytes, Base64.NO_WRAP)))
+            mediaWritten++
+        }
+        val actual = expected.copy(media = mediaWritten)
+        line(BackupRecord.End(actual, skipped))
+        w.flush()
+        return Written(actual, skipped)
     }
 
     /** Exclusive: nothing else writes the vault while a restore is applied. */

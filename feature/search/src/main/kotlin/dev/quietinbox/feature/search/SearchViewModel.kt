@@ -57,7 +57,7 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch {
             // A query is re-run when the vault becomes ready (typed while opening, or after a retry).
             combine(local.debounce(250), vault.state) { s, v -> s to v }
-                .distinctUntilChanged { (a, va), (b, vb) -> a.query == b.query && a.range == b.range && a.packages == b.packages && va::class == vb::class }
+                .distinctUntilChanged { (a, va), (b, vb) -> a.query == b.query && a.range == b.range && a.packages == b.packages && va == vb }
                 .collect { (s, v) -> if (v is VaultState.Ready) run(s) else if (v is VaultState.Locked) local.update { it.copy(results = persistentListOf(), searching = false, searched = false) } }
         }
     }

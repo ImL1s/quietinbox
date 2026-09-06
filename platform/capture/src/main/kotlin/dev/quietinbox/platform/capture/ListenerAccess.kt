@@ -36,21 +36,23 @@ class ListenerAccess @Inject constructor(
         add(appInfoIntent())
     }.map { it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
 
-    /** The best available settings screen; kept for callers that only need one intent. */
-    fun settingsIntent(): Intent = settingsIntents().firstOrNull { it.resolveActivity(context.packageManager) != null } ?: settingsIntents().first()
+    /** The most specific settings intent; callers that can react to a failure should use [openSettings]. */
+    fun settingsIntent(): Intent = settingsIntents().first()
 
     /**
-     * Opens the first settings screen that exists on this device: listener detail → listener list →
-     * app info. Returns false when none could be started, so the caller can show the manual path.
+     * Opens the first settings screen that starts on this device: listener detail → listener list →
+     * app info. Each intent is simply tried: a `resolveActivity` pre-check would need `<queries>`
+     * entries under Android 11+ package visibility and can report "absent" for screens an OEM
+     * moved into another package. Returns false when none could be started, so the caller can
+     * show the manual path (QI-CAPTURE-014).
      */
     fun openSettings(from: Context = context): Boolean {
         for (intent in settingsIntents()) {
-            if (intent.resolveActivity(context.packageManager) == null) continue
             try {
                 from.startActivity(intent)
                 return true
             } catch (_: ActivityNotFoundException) {
-                // Resolved but refused to start on this build: try the next one.
+                // Not on this build: try the next one.
             } catch (_: SecurityException) {
                 // Some OEM settings activities are not exported to third parties.
             }

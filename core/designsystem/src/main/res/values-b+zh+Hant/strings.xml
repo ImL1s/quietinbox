@@ -240,7 +240,6 @@
     <string name="reminder_days">星期</string>
     <string name="reminder_channel">提醒</string>
     <string name="reminder_title">QuietInbox 提醒</string>
-    <string name="reminder_body">有新的副本等你查看。</string>
     <plurals name="reminder_body_count">
         <item quantity="other">有 %1$d 個會話有新的副本等你查看。</item>
     </plurals>
@@ -265,6 +264,7 @@
     <string name="backup_failed_counts">紀錄數量與 manifest 不符。</string>
     <string name="backup_failed_too_large">備份超過大小限制。</string>
     <string name="backup_failed_vault">資料庫已鎖定。</string>
+    <string name="backup_failed_maintenance">正在重設或還原；請等它完成後再試一次。</string>
     <string name="hours_short">%1$d 小時</string>
     <string name="backup_failed_corrupt">備份檔已損毀（有一筆紀錄無法讀取）。</string>
     <string name="backup_file_name">quietinbox-backup-%1$s.qibk</string>
@@ -277,6 +277,7 @@
     <string name="delete_everything_step_media">刪除媒體檔案</string>
     <string name="delete_everything_step_keys">銷毀金鑰</string>
     <string name="delete_everything_step_reopen">建立新金庫</string>
+    <string name="delete_everything_step_unexpected">未預期的錯誤</string>
     <string name="delete_everything_failed">未能刪除全部資料（失敗步驟：%1$s）。沒有任何步驟被當成已完成；請再試一次，或到系統設定清除此 App 的儲存空間。</string>
     <string name="section_about">關於</string>
     <string name="about_version">版本 %1$s</string>

@@ -31,9 +31,9 @@ interface MaintenanceListener {
  * - [pipelineMutex] is the capture pipeline's single-writer lock; an [exclusive] run holds it for
  *   its whole duration, so no event can be journaled or committed while the vault is being
  *   deleted or restored.
- * - Background work that touches the vault (media copies, journal replay, retention, backup)
- *   runs inside [work]; it is refused while maintenance is active and cancelled when maintenance
- *   starts.
+ * - Background work that touches the vault (media copies, journal replay, retention, backup
+ *   export) runs inside [work]; it is refused while maintenance is active and cancelled when
+ *   maintenance starts. Whole-vault writes (reset, backup import) are themselves [exclusive] runs.
  * - [active] lets the capture side rotate its generation (dropping everything queued) and record
  *   a gap for the maintenance window.
  *

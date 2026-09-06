@@ -47,6 +47,7 @@ class BackupRoundTripTest {
     private lateinit var mediaDir: MediaDirectory
     private lateinit var cipher: BlobCipher
     private lateinit var service: BackupService
+    private lateinit var maintenance: VaultMaintenance
     private val parser = StandardParser()
     private val identity = IdentityResolver()
     private val reconciler = Reconciler()
@@ -59,7 +60,8 @@ class BackupRoundTripTest {
         ingest = IngestRepository(holder)
         mediaDir = MediaDirectory(context)
         cipher = BlobCipher(keys)
-        service = BackupService(context, holder, keys, cipher, mediaDir, SettingsRepository(context), VaultMaintenance())
+        maintenance = VaultMaintenance()
+        service = BackupService(context, holder, keys, cipher, mediaDir, SettingsRepository(context), maintenance)
     }
 
     @After
@@ -132,6 +134,17 @@ class BackupRoundTripTest {
         val restoredOther = db2.messageDao().exportPage(0L, 10, System.currentTimeMillis()).first { it.body == "lost picture" }
         restoredOther.mediaState shouldBe MediaState.FAILED.name
         target.delete()
+        Unit
+    }
+
+    /** The gate is real: an export during a reset is refused, never half-written. */
+    @Test
+    fun exportIsRefusedWhileAnExclusiveMaintenanceRunIsActive() = runBlocking {
+        ready()
+        val target = File(context.cacheDir, "refused.qibk")
+        val result = maintenance.exclusive { service.export(Uri.fromFile(target), "test") }
+        result shouldBe BackupResult.Failed(BackupResult.Reason.MAINTENANCE)
+        target.exists() shouldBe false
         Unit
     }
 }

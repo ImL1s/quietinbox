@@ -12,7 +12,10 @@ data class SearchHit(val message: Message, val conversationTitle: String?, val p
 /** Keyset position after the last candidate examined (newest first): resume with it, never with an offset. */
 data class SearchCursor(val sortKey: Long, val id: Long)
 
-/** One page of verified hits; [next] is null when the index has no more candidates. */
+/**
+ * One page of verified hits; [next] is null when the index has no more candidates. The search
+ * screen currently shows the first page only (100 hits) and does not continue with the cursor.
+ */
 data class SearchPage(val hits: List<SearchHit>, val next: SearchCursor?)
 
 /**

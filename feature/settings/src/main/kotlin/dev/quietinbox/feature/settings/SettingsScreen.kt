@@ -113,7 +113,7 @@ fun SettingsScreen(
             "media" -> stringResource(R.string.delete_everything_step_media)
             "keys" -> stringResource(R.string.delete_everything_step_keys)
             "reopen" -> stringResource(R.string.delete_everything_step_reopen)
-            else -> step
+            else -> stringResource(R.string.delete_everything_step_unexpected)
         }
         stringResource(R.string.delete_everything_failed, stepName)
     }
@@ -420,6 +420,7 @@ private fun backupResultText(result: BackupResult?): String? = when (result) {
         BackupResult.Reason.COUNT_MISMATCH -> stringResource(R.string.backup_failed_counts)
         BackupResult.Reason.TOO_LARGE -> stringResource(R.string.backup_failed_too_large)
         BackupResult.Reason.VAULT_UNAVAILABLE -> stringResource(R.string.backup_failed_vault)
+        BackupResult.Reason.MAINTENANCE -> stringResource(R.string.backup_failed_maintenance)
     }
 }
 

@@ -309,11 +309,11 @@ class CaptureCoordinatorTest : FunSpec({
         awaitUntil { h.journaled shouldBe listOf("evt-own-synthetic") }
     }
 
-    test("an ordinary pipeline failure is marked retryable and the consumer keeps going") {
+    test("an ordinary pipeline failure after acceptance is marked retryable and the consumer keeps going") {
         val h = Harness()
-        h.journalAnswers { snapshot ->
-            if (snapshot.eventId == "evt-boom") throw IllegalStateException("boom")
-            true
+        // Accepted (journaled), then the commit path fails: the row exists and is retried later.
+        coEvery { h.ingest.markJournal(any(), any(), any()) } coAnswers {
+            if (firstArg<String>() == "evt-boom") throw IllegalStateException("boom")
         }
         val coordinator = h.coordinator()
         coordinator.onConnected(h.service)
@@ -323,7 +323,7 @@ class CaptureCoordinatorTest : FunSpec({
 
         awaitUntil { h.journaled shouldBe listOf("evt-boom", "evt-ok") }
         coVerify(timeout = 5_000, exactly = 1) { h.ingest.markJournalRetryable("evt-boom", "IllegalStateException") }
-        awaitUntil { coordinator.status.value.acceptedCount shouldBe 1L }
+        awaitUntil { coordinator.status.value.acceptedCount shouldBe 2L }
     }
 
     test("a CancellationException is propagated, never recorded as a retryable failure") {
@@ -549,6 +549,48 @@ class CaptureCoordinatorTest : FunSpec({
         stillHolds { created shouldBe listOf(ENABLED_PKG) }
     }
 
+    test("a held buffer that overflowed before the policy was known records the drop as a gap and keeps only sources") {
+        val h = Harness()
+        val factory: SnapshotFactory = mockk()
+        every { factory.create(any(), any(), any(), any()) } answers {
+            val sbn = firstArg<StatusBarNotification>()
+            captured("evt-${sbn.id}", pkg = sbn.packageName)
+        }
+        val vaultOpen = CompletableDeferred<Unit>()
+        coEvery { h.sources.sources() } coAnswers { vaultOpen.await(); listOf(sourceConfig(ENABLED_PKG)) }
+        val coordinator = h.coordinator().also { it.snapshotFactory = factory }
+        coordinator.onConnected(h.service)
+
+        // 300 notifications while the vault is still opening: more than the buffer holds.
+        for (i in 1..300) {
+            val pkg = if (i % 2 == 0) ENABLED_PKG else UNLISTED_PKG
+            coordinator.onPosted(mockk(relaxed = true) { every { packageName } returns pkg; every { id } returns i })
+        }
+        vaultOpen.complete(Unit)
+
+        // The drop is not hidden: one bounded COLD_START gap for the overflowed batch...
+        coVerify(timeout = 5_000, atLeast = 1) { h.health.recordGap(any(), any(), GapReason.COLD_START, GapPrecision.BOUNDED, any()) }
+        // ...and what survived is only the enabled source's notifications.
+        awaitUntil { h.journaled.size shouldBe 128 }
+        h.journaled.all { it.startsWith("evt-") && it.removePrefix("evt-").toInt() % 2 == 0 } shouldBe true
+        stillHolds { h.journaled.size shouldBe 128 }
+    }
+
+    test("a journal insert that throws is recorded as a gap, not marked retryable on a row that does not exist") {
+        val h = Harness()
+        h.journalAnswers { snapshot -> if (snapshot.eventId == "evt-busy") throw IllegalStateException("database is locked") else true }
+        val coordinator = h.coordinator()
+        coordinator.onConnected(h.service)
+
+        coordinator.offerCaptured(captured("evt-busy"))
+        coordinator.offerCaptured(captured("evt-ok"))
+
+        awaitUntil { h.journaled shouldBe listOf("evt-busy", "evt-ok") }
+        coVerify(timeout = 5_000, exactly = 1) { h.health.recordGap(any(), any(), GapReason.UNKNOWN, GapPrecision.EXACT, any()) }
+        coVerify(timeout = 5_000, exactly = 1) { h.ingest.diagnostic("JOURNAL_FAILED", "IllegalStateException", ENABLED_PKG, any()) }
+        coVerify(exactly = 0) { h.ingest.markJournalRetryable("evt-busy", any()) }
+    }
+
     test("when the vault does not open, held notifications are dropped unread and a bounded gap is recorded") {
         val h = Harness()
         val factory: SnapshotFactory = mockk()
@@ -558,9 +600,18 @@ class CaptureCoordinatorTest : FunSpec({
 
         coordinator.onPosted(sbnOf(ENABLED_PKG))
 
-        coVerify(timeout = 5_000) { h.health.recordGap(any(), any(), GapReason.COLD_START, GapPrecision.BOUNDED, any()) }
+        coVerify(timeout = 5_000, exactly = 1) { h.health.openGap(any(), GapReason.COLD_START, GapPrecision.BOUNDED, any()) }
         stillHolds { h.journaled shouldBe emptyList() }
         coVerify(exactly = 0) { factory.create(any(), any(), any(), any()) }
+
+        // A second notification while still locked extends the same gap instead of adding another row.
+        coordinator.onPosted(sbnOf(ENABLED_PKG))
+        stillHolds { coVerify(exactly = 1) { h.health.openGap(any(), GapReason.COLD_START, GapPrecision.BOUNDED, any()) } }
+
+        // Once the vault opens and the policy loads, the gap is closed.
+        coEvery { h.sources.sources() } returns listOf(sourceConfig(ENABLED_PKG))
+        h.observedSources.emit(listOf(sourceConfig(ENABLED_PKG)))
+        coVerify(timeout = 5_000, exactly = 1) { h.health.closeOpenGaps(any(), GapReason.COLD_START) }
     }
 
     // ---- QI-MEDIA-006: a bitmap stays counted until the copier is done with it -------------------

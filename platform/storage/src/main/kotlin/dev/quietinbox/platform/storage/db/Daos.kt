@@ -170,7 +170,7 @@ interface ConversationDao {
     @Query(
         """
         SELECT COUNT(*) FROM conversation
-        WHERE archived = 0 AND lastActivityEpochMs > COALESCE(lastViewedEpochMs, 0)
+        WHERE archived = 0 AND messageCount > 0 AND lastActivityEpochMs > COALESCE(lastViewedEpochMs, 0)
           AND (:allPackages = 1 OR packageName IN (:packages))
         """,
     )

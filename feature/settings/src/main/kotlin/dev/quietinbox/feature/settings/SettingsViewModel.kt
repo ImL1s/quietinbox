@@ -153,7 +153,8 @@ class SettingsViewModel @Inject constructor(
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (failure: Throwable) {
-            ResetResult.Failed(failure::class.java.simpleName)
+            // The class name is not a step the user can act on; the screen shows a generic message.
+            ResetResult.Failed("unexpected:" + failure::class.java.simpleName)
         }
         local.update { it.copy(busy = false, resetFailedStep = (result as? ResetResult.Failed)?.step) }
         if (result is ResetResult.Done) onDone()

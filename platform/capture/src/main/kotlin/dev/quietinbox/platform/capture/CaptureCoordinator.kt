@@ -146,6 +146,10 @@ class CaptureCoordinator @Inject constructor(
     @Volatile
     private var coldStartJob: Job? = null
 
+    /** A COLD_START gap is open; while the policy stays unknown further drops extend it instead of adding rows. */
+    @Volatile
+    private var coldStartGapId: Long? = null
+
     @Volatile
     private var paused: Boolean = false
 
@@ -355,6 +359,9 @@ class CaptureCoordinator @Inject constructor(
         enabledPackages = list.filter { it.enabled }.map { it.packageName }.toSet()
         pausedPackages = list.filter { it.enabled && it.paused }.map { it.packageName }.toSet()
         sourcesLoaded = true
+        val gap = coldStartGapId
+        coldStartGapId = null
+        if (gap != null) guarded { health.closeOpenGaps(System.currentTimeMillis(), GapReason.COLD_START) }
         releaseHeld()
     }
 
@@ -368,51 +375,70 @@ class CaptureCoordinator @Inject constructor(
      * dropped and the window is recorded as a bounded gap — fail closed, never fail open.
      */
     private fun hold(item: Held) {
+        // The job check and the launch sit inside the same lock as the buffer, so two callback
+        // threads cannot start two cold-start jobs and leave an item between them (round-11).
         synchronized(held) {
             if (held.size >= MAX_HELD) {
                 held.removeFirst()
                 heldDropped++
             }
             held += item
-        }
-        if (coldStartJob?.isActive != true) {
-            coldStartJob = scope.launch { coldStart() }
+            if (coldStartJob?.isActive != true) coldStartJob = scope.launch { coldStart() }
         }
     }
 
     private suspend fun coldStart() {
         val loaded = withTimeoutOrNull(COLD_START_TIMEOUT_MS) {
             pipelineMutex.withLock {
-                if (!sourcesLoaded) guarded { loadSourcePolicy() }
+                // Policy already known (another path loaded it while we were held): decide now,
+                // otherwise the buffered items would sit there for good (round-11 finding).
+                if (!sourcesLoaded) guarded { loadSourcePolicy() } else releaseHeld()
                 sourcesLoaded
             }
         } == true
         if (!loaded) dropHeld(System.currentTimeMillis())
     }
 
-    /** Decides every held notification against the now-known policy. Safe under the pipeline lock. */
+    /**
+     * Decides every held notification against the now-known policy. Safe under the pipeline lock.
+     * Notifications the bounded buffer had to drop before the policy was known are recorded as a
+     * bounded gap: a dropped notification is never hidden (round-11 finding). The held objects are
+     * the framework's own (`onConnected`'s resync list holds the same ones), so the bitmap bound
+     * of the queue does not apply until they are snapshotted here.
+     */
     private fun releaseHeld() {
-        val items = synchronized(held) { held.toList().also { held.clear() } }
-        val now = System.currentTimeMillis()
+        val (items, dropped) = synchronized(held) { held.toList().also { held.clear() } to heldDropped.also { heldDropped = 0 } }
+        if (dropped > 0) {
+            val start = items.minOfOrNull { it.heldAtEpochMs }
+            val now = System.currentTimeMillis()
+            scope.launch { guarded { health.recordGap(start, now, GapReason.COLD_START, GapPrecision.BOUNDED, now) } }
+        }
         for (h in items) {
             if (h.generation != activeGeneration || paused) continue
             val pkg = h.packageName
             if (!(pkg in enabledPackages && pkg !in pausedPackages)) continue
-            val captured = h.captured ?: runCatching { snapshotFactory.create(h.sbn!!, h.origin, h.generation, now) }
+            // Observed when it arrived, not when the policy finally let it through.
+            val captured = h.captured ?: runCatching { snapshotFactory.create(h.sbn!!, h.origin, h.generation, h.heldAtEpochMs) }
                 .onFailure {
                     _status.update { it.copy(captureErrors = it.captureErrors + 1) }
                     lastError = it::class.java.simpleName
                 }
                 .getOrNull() ?: continue
-            enqueue(captured, h.generation, now)
+            enqueue(captured, h.generation, h.heldAtEpochMs)
         }
     }
 
+    /**
+     * Drops what is held and records the loss as one open COLD_START gap per lock-out: while the
+     * vault stays locked every new notification would otherwise add a row of its own (round-11
+     * finding). The gap is closed when the policy finally loads.
+     */
     private suspend fun dropHeld(now: Long) {
         val (items, dropped) = synchronized(held) { held.toList().also { held.clear() } to heldDropped.also { heldDropped = 0 } }
         if (items.isEmpty() && dropped == 0) return
+        if (coldStartGapId != null) return
         val start = items.minOfOrNull { it.heldAtEpochMs }
-        guarded { health.recordGap(start, now, GapReason.COLD_START, GapPrecision.BOUNDED, now) }
+        guarded { coldStartGapId = health.openGap(start, GapReason.COLD_START, GapPrecision.BOUNDED, now) }
     }
 
     suspend fun addSource(packageName: String, displayName: String, adapterId: String?, now: Long) =
@@ -573,6 +599,7 @@ class CaptureCoordinator @Inject constructor(
         val snapshot = item.captured.snapshot
         // The bitmap is counted until the media copy has finished with it, not until it left the queue.
         var bitmapHandedOver = false
+        var journaled = false
         try {
             if (!admitted(item)) {
                 _status.update { it.copy(droppedAfterRevoke = it.droppedAfterRevoke + 1) }
@@ -587,6 +614,7 @@ class CaptureCoordinator @Inject constructor(
                     }
                     val ttl = settings.current().journalTtlHours * 60L * 60L * 1000L
                     if (!ingest.journal(snapshot, item.generation, ttl)) return
+                    journaled = true
                     _status.update { it.copy(acceptedCount = it.acceptedCount + 1) }
                     bitmapHandedOver = processJournaled(snapshot, item.generation, item.captured.bitmap)
                 } catch (e: VaultUnavailableException) {
@@ -599,7 +627,17 @@ class CaptureCoordinator @Inject constructor(
                     }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
-                    guarded { ingest.markJournalRetryable(snapshot.eventId, e::class.java.simpleName) }
+                    if (journaled) {
+                        guarded { ingest.markJournalRetryable(snapshot.eventId, e::class.java.simpleName) }
+                    } else {
+                        // The journal insert itself failed (e.g. the vault was busy): there is no row to
+                        // retry, so the loss is recorded as a gap instead of vanishing (round-11 finding).
+                        lastError = e::class.java.simpleName
+                        guarded {
+                            ingest.diagnostic("JOURNAL_FAILED", e::class.java.simpleName, snapshot.source.packageName, snapshot.observedAtEpochMs)
+                            health.recordGap(snapshot.observedAtEpochMs, snapshot.observedAtEpochMs, GapReason.UNKNOWN, GapPrecision.EXACT, snapshot.observedAtEpochMs)
+                        }
+                    }
                 }
             }
         } finally {
@@ -752,8 +790,12 @@ class CaptureCoordinator @Inject constructor(
         private const val REASON_LOCKDOWN = 20 // NotificationListenerService.REASON_LOCKDOWN (API 29)
         private const val MAX_QUEUED_BITMAPS = 8
 
-        /** Notifications held unread before the source policy is known; the oldest is dropped first. */
-        private const val MAX_HELD = 64
+        /**
+         * Notifications held unread before the source policy is known; the oldest is dropped first
+         * and every drop is recorded as a gap. Sized like the queue: it carries a whole
+         * active-notification resync on a cold start.
+         */
+        private const val MAX_HELD = 256
 
         /** How long a held notification waits for the vault before it is dropped and a gap recorded. */
         private const val COLD_START_TIMEOUT_MS = 15_000L

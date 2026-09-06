@@ -98,7 +98,8 @@ sealed interface BackupRecord {
 
     @Serializable
     @SerialName("end")
-    data class End(val actual: Counts) : BackupRecord
+    /** [skippedMedia]: media rows the exporter could not read; the manifest's media count includes them. */
+    data class End(val actual: Counts, val skippedMedia: Int = 0) : BackupRecord
 }
 
 @Serializable
