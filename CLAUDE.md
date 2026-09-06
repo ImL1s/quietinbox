@@ -122,7 +122,7 @@ notifications into the debug vault. Use an emulator for screenshots. On foldable
 
 The 2026-09-06 audit findings are GitHub issues #1–#17 (labels P0/P1/P2/audit); #17 (real-source
 fixtures) stays open because it needs real devices and accounts. Every fix cites its issue and its
-review round (`docs/reviews/2026-09-06-round{10,11,12,13,14,15}/`). ADR-0007 records the design.
+review round (`docs/reviews/2026-09-06-round{10,11,12,13,14,15,16}/`). ADR-0007 records the design.
 
 ## Review gate before a push
 

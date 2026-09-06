@@ -30,6 +30,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
@@ -545,7 +546,8 @@ class CaptureCoordinatorTest : FunSpec({
         val coordinator = h.coordinator().also { it.snapshotFactory = factory }
         coordinator.onConnected(h.service)
 
-        coordinator.onPosted(sbnOf(UNLISTED_PKG))
+        val unlisted = sbnOf(UNLISTED_PKG)
+        coordinator.onPosted(unlisted)
         coordinator.onPosted(sbnOf(ENABLED_PKG))
         // Held, not materialised: the factory has not seen either of them.
         stillHolds { created shouldBe emptyList() }
@@ -553,8 +555,13 @@ class CaptureCoordinatorTest : FunSpec({
 
         vaultOpen.complete(Unit)
         awaitUntil { h.journaled shouldBe listOf("evt-$ENABLED_PKG") }
-        // The unlisted one was dropped without ever being read.
+        // The unlisted one was dropped without ever being read: only its package name was touched.
         stillHolds { created shouldBe listOf(ENABLED_PKG) }
+        verify(exactly = 0) {
+            unlisted.key
+            unlisted.postTime
+            unlisted.notification
+        }
     }
 
     test("a held buffer that overflowed before the policy was known records the drop as a gap and keeps only sources") {
@@ -809,7 +816,7 @@ class CaptureCoordinatorTest : FunSpec({
         coVerify(timeout = 5_000, exactly = 1) { h.health.recordGap(any(), any(), GapReason.COLD_START, GapPrecision.BOUNDED, any()) }
     }
 
-    test("a disconnect landing while held notifications are released does not let a later one suppress itself") {
+    test("a disconnect landing while held notifications are released gives the later ones a gap instead of letting them suppress themselves") {
         val h = Harness()
         val factory: SnapshotFactory = mockk()
         val coordinatorRef = CompletableDeferred<CaptureCoordinator>()
@@ -829,14 +836,14 @@ class CaptureCoordinatorTest : FunSpec({
         coordinator.onPosted(sbnOf(ENABLED_PKG, id = 2))
         vaultOpen.complete(Unit)
 
-        // Both are decided against the generation the release started with: the second is
-        // snapshotted and queued (then fenced by the consumer like any queued event), never
-        // judged stale against its own key and dropped without a trace.
-        awaitUntil { coordinator.status.value.droppedAfterRevoke shouldBe 2L }
-        coVerify(exactly = 2) { factory.create(any(), any(), any(), any()) }
+        // The first was queued before the disconnect and is fenced by the consumer like any queued
+        // event; the second is stale by then and, since it was never queued, gets a gap of its own
+        // rather than being judged "queued already" by its own key.
+        awaitUntil { coordinator.status.value.droppedAfterRevoke shouldBe 1L }
+        coVerify(timeout = 5_000, exactly = 1) { h.health.recordGap(any(), any(), GapReason.COLD_START, GapPrecision.BOUNDED, any()) }
         stillHolds {
             h.journaled shouldBe emptyList()
-            coVerify(exactly = 0) { h.health.recordGap(any(), any(), GapReason.COLD_START, any(), any()) }
+            coVerify(exactly = 1) { factory.create(any(), any(), any(), any()) }
         }
     }
 

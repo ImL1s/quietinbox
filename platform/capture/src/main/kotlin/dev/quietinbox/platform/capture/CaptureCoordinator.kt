@@ -487,18 +487,17 @@ class CaptureCoordinator @Inject constructor(
             // The evicted ones arrived before every survivor: the gap starts at the first eviction.
             recordColdStartLoss(since ?: items.minOfOrNull { it.heldAtEpochMs })
         }
-        // One reading of the generation and the pause for the whole batch: a disconnect or pause
-        // landing mid-loop must not turn a later item stale against an earlier one's snapshot
-        // (round-15 finding). An item queued under a generation that dies right after is fenced
-        // by the consumer like any other queued event.
-        val liveGeneration = activeGeneration
-        val livePaused = paused
+        // Each item is decided against the generation and pause of *its* moment: one that a
+        // disconnect or pause overtakes mid-loop is stale and gets its gap below, one queued
+        // before that is fenced by the consumer like any other queued event.
         val stale = ArrayList<Held>()
-        // The posts actually queued (framework key + post time, metadata like the package name):
-        // a stale copy of one of them was offered again by the reconnect's resync, so it is no loss.
+        // The posts actually queued in this release (framework key + post time, metadata like
+        // the package name, read only for a capturable source): a stale copy of one of them was
+        // offered again by the reconnect's resync, so it is no loss. Built from what was queued,
+        // never predicted up front, so an item can never be suppressed by itself (round-15/16).
         val queuedPosts = HashSet<String>()
         for (h in items) {
-            if (h.generation != liveGeneration || livePaused) {
+            if (h.generation != activeGeneration || paused) {
                 stale += h
                 continue
             }
@@ -511,8 +510,7 @@ class CaptureCoordinator @Inject constructor(
                     lastError = it::class.java.simpleName
                 }
                 .getOrNull() ?: continue
-            enqueue(captured, h.generation, h.heldAtEpochMs)
-            h.postId?.let { queuedPosts += it }
+            if (enqueue(captured, h.generation, h.heldAtEpochMs)) h.postId?.let { queuedPosts += it }
         }
         // Held under an older generation, or while paused: a disconnect, pause or maintenance
         // happened meanwhile. Its gap starts at that event, later than this arrival, so a
@@ -693,7 +691,8 @@ class CaptureCoordinator @Inject constructor(
         enqueue(captured, gen, now)
     }
 
-    private fun enqueue(built: CapturedNotification, gen: String, now: Long) {
+    /** Queues the event; false when the bounded queue is full (recorded as an exact QUEUE_OVERFLOW gap). */
+    private fun enqueue(built: CapturedNotification, gen: String, now: Long): Boolean {
         var captured = built
         if (captured.bitmap != null) {
             // Keep at most a few bitmaps in flight; later ones fall back to a placeholder state.
@@ -712,6 +711,7 @@ class CaptureCoordinator @Inject constructor(
             }
         }
         if (!ok) scope.launch { guarded { health.recordGap(now, now, GapReason.QUEUE_OVERFLOW, GapPrecision.EXACT, now) } }
+        return ok
     }
 
     /**
