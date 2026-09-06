@@ -115,6 +115,7 @@ class CaptureCoordinator @Inject constructor(
     internal var snapshotFactory: SnapshotFactory = SnapshotFactory(bootSessionId)
 
     /** How long a cold start waits for the vault before the held buffer is dropped; a test seam. */
+    @androidx.annotation.VisibleForTesting(otherwise = androidx.annotation.VisibleForTesting.PRIVATE)
     internal var coldStartTimeoutMs: Long = COLD_START_TIMEOUT_MS
     private val registry = ParserRegistry(AppParsers.all())
     private val identity = IdentityResolver()
@@ -398,6 +399,14 @@ class CaptureCoordinator @Inject constructor(
         sourcesLoaded = true
         // Held in the instant before the flag flipped: released now, still in arrival order.
         if (synchronized(held) { held.isNotEmpty() }) releaseHeld()
+        // A cold-start row that landed between the settle above and the flag flip: `dropHeld`
+        // writes the id then reads the flag, this reads the id after writing the flag, so one of
+        // the two sees the other (both volatile) and closes the row; closing twice is idempotent.
+        val late = coldStartGapId
+        if (late != null) guarded {
+            health.closeOpenGaps(System.currentTimeMillis(), GapReason.COLD_START)
+            coldStartGapId = null
+        }
     }
 
     /**
@@ -473,18 +482,21 @@ class CaptureCoordinator @Inject constructor(
         }
         if (dropped > 0) {
             // The evicted ones arrived before every survivor: the gap starts at the first eviction.
-            val start = since ?: items.minOfOrNull { it.heldAtEpochMs }
-            val now = System.currentTimeMillis()
-            scope.launch { guarded { health.recordGap(start, now, GapReason.COLD_START, GapPrecision.BOUNDED, now) } }
+            recordColdStartLoss(since ?: items.minOfOrNull { it.heldAtEpochMs })
         }
+        // A notification still in the shade was offered again by the reconnect's resync and is
+        // held twice: the current copy is captured below, so the stale copy is no loss.
+        val liveKeys = items.mapNotNullTo(HashSet()) { if (it.generation == activeGeneration && !paused) it.sbn?.key else null }
         var staleSince: Long? = null
         for (h in items) {
             // Held under an older generation, or while paused: a disconnect, pause or maintenance
-            // happened meanwhile. Its gap starts at that event, later than this arrival, so an
-            // enabled source's held window is recorded on its own below (round-13 finding); an
+            // happened meanwhile. Its gap starts at that event, later than this arrival, so a
+            // capturable source's held window is recorded on its own below (round-13 finding); an
             // overflow gap above already starts before every survivor.
             if (h.generation != activeGeneration || paused) {
-                if (dropped == 0 && h.packageName in enabledPackages) staleSince = minOf(staleSince ?: h.heldAtEpochMs, h.heldAtEpochMs)
+                val pkg = h.packageName
+                val capturable = pkg in enabledPackages && pkg !in pausedPackages
+                if (dropped == 0 && capturable && h.sbn?.key !in liveKeys) staleSince = minOf(staleSince ?: h.heldAtEpochMs, h.heldAtEpochMs)
                 continue
             }
             val pkg = h.packageName
@@ -498,10 +510,23 @@ class CaptureCoordinator @Inject constructor(
                 .getOrNull() ?: continue
             enqueue(captured, h.generation, h.heldAtEpochMs)
         }
-        val staleStart = staleSince
-        if (staleStart != null) {
-            val now = System.currentTimeMillis()
-            scope.launch { guarded { health.recordGap(staleStart, now, GapReason.COLD_START, GapPrecision.BOUNDED, now) } }
+        if (staleSince != null) recordColdStartLoss(staleSince)
+    }
+
+    /**
+     * Writes a bounded COLD_START gap off the pipeline; a write that fails keeps the loss in
+     * [coldStartLossSince] so the next policy load writes it — a loss is only forgotten once it
+     * is on disk (round-14 finding).
+     */
+    private fun recordColdStartLoss(start: Long?) {
+        val now = System.currentTimeMillis()
+        scope.launch {
+            var written = false
+            guarded {
+                health.recordGap(start, now, GapReason.COLD_START, GapPrecision.BOUNDED, now)
+                written = true
+            }
+            if (!written && coldStartLossSince == null) coldStartLossSince = start ?: now
         }
     }
 

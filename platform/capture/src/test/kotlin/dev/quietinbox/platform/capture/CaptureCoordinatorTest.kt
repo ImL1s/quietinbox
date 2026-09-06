@@ -43,6 +43,7 @@ import java.util.Collections
 private const val APP_PKG = "dev.quietinbox.app"
 private const val ENABLED_PKG = "com.example.chat"
 private const val UNLISTED_PKG = "com.example.other"
+private const val PAUSED_PKG = "com.example.paused"
 private const val SESSION_ID = 7L
 
 /**
@@ -520,7 +521,9 @@ class CaptureCoordinatorTest : FunSpec({
     // ---- QI-CAPTURE-013: nothing is read from a notification before the policy is known ---------
 
     /** A framework notification object: only `packageName` is ever touched before the policy is known. */
-    fun sbnOf(pkg: String): StatusBarNotification = mockk(relaxed = true) { every { packageName } returns pkg }
+    var nextSbn = 0
+    fun sbnOf(pkg: String, key: String = "0|$pkg|${++nextSbn}|null|10000"): StatusBarNotification =
+        mockk(relaxed = true) { every { packageName } returns pkg; every { this@mockk.key } returns key }
 
     test("before the source list is known a notification is held unread; once known, only sources are snapshotted") {
         val h = Harness()
@@ -699,8 +702,89 @@ class CaptureCoordinatorTest : FunSpec({
 
         // The insert lands afterwards: closed right away instead of staying open until the next policy load.
         gapGate.complete(Unit)
-        coVerify(timeout = 5_000, exactly = 2) { h.health.closeOpenGaps(any(), GapReason.COLD_START) }
+        coVerify(timeout = 5_000, atLeast = 2) { h.health.closeOpenGaps(any(), GapReason.COLD_START) }
         coVerify(exactly = 0) { factory.create(any(), any(), any(), any()) }
+    }
+
+    test("a cold-start gap row that lands between the policy's settle and the flag flip is closed by the policy load") {
+        val h = Harness()
+        val factory: SnapshotFactory = mockk()
+        val policyReady = CompletableDeferred<Unit>()
+        val gapGate = CompletableDeferred<Unit>()
+        val closeStarted = CompletableDeferred<Unit>()
+        val closeGate = CompletableDeferred<Unit>()
+        coEvery { h.sources.sources() } coAnswers { policyReady.await(); listOf(sourceConfig(ENABLED_PKG)) }
+        coEvery { h.health.openGap(any(), GapReason.COLD_START, any(), any()) } coAnswers { gapGate.await(); 7L }
+        // The settle's close is held open so the row can land after it and before the flag flips.
+        coEvery { h.health.closeOpenGaps(any(), GapReason.COLD_START) } coAnswers {
+            if (!closeStarted.isCompleted) { closeStarted.complete(Unit); closeGate.await() }
+        }
+        val coordinator = h.coordinator().also { it.snapshotFactory = factory; it.coldStartTimeoutMs = 200L }
+        coordinator.onConnected(h.service)
+
+        coordinator.onPosted(sbnOf(ENABLED_PKG))
+        coVerify(timeout = 5_000, exactly = 1) { h.health.openGap(any(), GapReason.COLD_START, any(), any()) }
+        policyReady.complete(Unit)
+        h.observedSources.emit(listOf(sourceConfig(ENABLED_PKG)))
+        withTimeout(5_000) { closeStarted.await() }
+        // The row lands now, while the settle's close is still running and the flag is still false.
+        gapGate.complete(Unit)
+        stillHolds { coVerify(exactly = 1) { h.health.closeOpenGaps(any(), GapReason.COLD_START) } }
+
+        closeGate.complete(Unit)
+        // The policy load re-checks after flipping the flag and closes the late row.
+        coVerify(timeout = 5_000, atLeast = 2) { h.health.closeOpenGaps(any(), GapReason.COLD_START) }
+        coVerify(exactly = 0) { factory.create(any(), any(), any(), any()) }
+    }
+
+    test("an overflow gap whose write failed is kept and written on the next policy load") {
+        val h = Harness()
+        val factory: SnapshotFactory = mockk()
+        every { factory.create(any(), any(), any(), any()) } answers {
+            val sbn = firstArg<StatusBarNotification>()
+            captured("evt-${sbn.id}", pkg = sbn.packageName)
+        }
+        val vaultOpen = CompletableDeferred<Unit>()
+        coEvery { h.sources.sources() } coAnswers { vaultOpen.await(); listOf(sourceConfig(ENABLED_PKG)) }
+        // The overflow gap's write fails once (disk full), then succeeds.
+        coEvery { h.health.recordGap(any(), any(), GapReason.COLD_START, GapPrecision.BOUNDED, any()) } throws IllegalStateException("full") andThen Unit
+        val coordinator = h.coordinator().also { it.snapshotFactory = factory }
+        coordinator.onConnected(h.service)
+
+        for (i in 1..300) coordinator.onPosted(mockk(relaxed = true) { every { packageName } returns ENABLED_PKG; every { id } returns i })
+        vaultOpen.complete(Unit)
+        coVerify(timeout = 5_000, exactly = 1) { h.health.recordGap(any(), any(), GapReason.COLD_START, GapPrecision.BOUNDED, any()) }
+        awaitUntil { h.journaled.size shouldBe 256 }
+
+        // The loss was kept: the next policy load writes it, and only then is it forgotten.
+        h.observedSources.emit(listOf(sourceConfig(ENABLED_PKG), sourceConfig(UNLISTED_PKG)))
+        coVerify(timeout = 5_000, exactly = 2) { h.health.recordGap(any(), any(), GapReason.COLD_START, GapPrecision.BOUNDED, any()) }
+        h.observedSources.emit(listOf(sourceConfig(ENABLED_PKG)))
+        stillHolds { coVerify(exactly = 2) { h.health.recordGap(any(), any(), GapReason.COLD_START, GapPrecision.BOUNDED, any()) } }
+    }
+
+    test("a notification held across a disconnect gets no gap when it is paused or captured again by the resync") {
+        val h = Harness()
+        val factory: SnapshotFactory = mockk()
+        every { factory.create(any(), any(), any(), any()) } answers { captured("evt-live", pkg = firstArg<StatusBarNotification>().packageName) }
+        val vaultOpen = CompletableDeferred<Unit>()
+        coEvery { h.sources.sources() } coAnswers { vaultOpen.await(); listOf(sourceConfig(ENABLED_PKG), sourceConfig(PAUSED_PKG, paused = true)) }
+        val coordinator = h.coordinator().also { it.snapshotFactory = factory }
+        coordinator.onConnected(h.service)
+
+        val stillInShade = sbnOf(ENABLED_PKG, key = "0|$ENABLED_PKG|42|null|10000")
+        coordinator.onPosted(stillInShade)
+        coordinator.onPosted(sbnOf(PAUSED_PKG))
+        coordinator.onDisconnected()
+        coordinator.onConnected(h.service)
+        // The rebind's resync offers the notification that is still in the shade again (the resync
+        // runs on its own coroutine, so the same framework object is offered here, synchronously).
+        coordinator.onPosted(stillInShade)
+        vaultOpen.complete(Unit)
+
+        // The current copy is captured; the stale copy and the paused source's notification are no loss.
+        awaitUntil { h.journaled shouldBe listOf("evt-live") }
+        stillHolds { coVerify(exactly = 0) { h.health.recordGap(any(), any(), GapReason.COLD_START, any(), any()) } }
     }
 
     test("a notification held across a disconnect is recorded as a gap, not dropped silently") {
@@ -751,7 +835,7 @@ class CaptureCoordinatorTest : FunSpec({
         release.complete(Unit)
 
         awaitUntil { bitmaps.size shouldBe 9 }
-        bitmaps.take(8).all { it != null } shouldBe true
-        bitmaps[8] shouldBe null
+        // Copies are launched in order but not started in order: assert the bound, not the index.
+        bitmaps.count { it == null } shouldBe 1
     }
 })
