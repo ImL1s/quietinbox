@@ -9,7 +9,8 @@
 #
 # Nothing here reads a real notification: every conversation in the shots comes from
 # DemoDataRepository. Use an emulator — on a real phone the listener would copy the owner's own
-# notifications into the debug vault.
+# notifications into the debug vault. Phone layout only: the bottom-bar rules (tab taps, page
+# readiness) and the size floor are calibrated on QuietInbox_Phone (1080×2400), not on a rail layout.
 set -euo pipefail
 
 if [ "$#" -ne 3 ]; then
@@ -115,23 +116,6 @@ def main():
                 box = bounds(node)
                 if box and box[1] >= int(height * 0.85):
                     print("%d %d" % centre(box))
-                    return 0
-        return 1
-
-    if command == "has-tab":
-        # A bottom-navigation item with exactly this label is on screen.
-        wanted = set(sys.argv[2:])
-        height = 0
-        for node in nodes(tree):
-            box = bounds(node)
-            if box:
-                height = max(height, box[3])
-        for node in nodes(tree):
-            text = (node.get("text") or "").strip()
-            description = (node.get("content-desc") or "").strip()
-            if text in wanted or description in wanted:
-                box = bounds(node)
-                if box and box[1] >= int(height * 0.85):
                     return 0
         return 1
 
@@ -291,28 +275,23 @@ tap_tab() {
   return 0
 }
 
-# has_tab "Label" — 0 when a bottom-bar item with that label is on screen, 1 when not, 2 when the UI
-# could not be dumped (a caller must not read a failed dump as "the bar is gone").
-has_tab() {
-  dump_ui || return 2
-  python3 "$HELPER" has-tab "$@" < "$WORK_DIR/ui.xml"
-}
-
 # assert_locale_clock — a CJK locale must not show an English AM/PM time or "Sep 3" date in the app's
 # own nodes; that is the process default locale lagging behind the app language (round-21 finding),
 # not a translation gap. It assumes an English device language (the project AVDs).
+# In English the same detector must *find* the inbox clock ("7:33 AM"): the positive control that
+# proves the package filter still sees the app's nodes and the pattern still bites.
 assert_locale_clock() {
-  [ "$LOCALE" = "en-US" ] && return 0
   dump_ui || die "uiautomator could not dump the screen before $1"
   local hit
+  if [ "$LOCALE" = "en-US" ]; then
+    if [ "$1" = "1_inbox" ] && ! python3 "$HELPER" has-english-clock "$APP_ID" < "$WORK_DIR/ui.xml" >/dev/null; then
+      die "$1: the English inbox shows no AM/PM time — the clock detector no longer sees the app's nodes"
+    fi
+    return 0
+  fi
   if hit="$(python3 "$HELPER" has-english-clock "$APP_ID" < "$WORK_DIR/ui.xml")"; then
     die "$1: English date/time on a $LOCALE screen (\"$hit\") — the process locale did not follow the app language"
   fi
-}
-
-has_text() {
-  dump_ui || return 1
-  python3 "$HELPER" has-text "$@" < "$WORK_DIR/ui.xml"
 }
 
 tap_first_list_item() {
