@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  拡張版「アクティビティ」画面の文言（タブ、期間、ヒートマップ、時間帯、おしゃべり度、静かな日の割合、決まり文句）。
+  すべてのラベルは「観測したメッセージ」だけを表します: 送信元アプリが通知に載せ、QuietInbox がコピーした内容です。
+  返信、既読、実際のメッセージ総数を主張してはいけません。キーは values/strings_analytics.xml と一致させること。
+-->
+<resources>
+    <string name="analytics_tab_overview">概要</string>
+    <string name="analytics_tab_rankings">ランキング</string>
+    <string name="analytics_tab_best_time">最適な時間帯</string>
+    <string name="analytics_tab_chattiness">おしゃべり度</string>
+    <string name="analytics_tab_quiet">静かな日</string>
+
+    <string name="analytics_sub_overview">選択した期間に観測したメッセージのみ。</string>
+    <string name="analytics_sub_rankings">観測したメッセージのみ。誰が誰に返信したかの順位ではありません。</string>
+    <string name="analytics_sub_best_time">観測したメッセージのみ。会話が現れた時間帯です。</string>
+    <string name="analytics_sub_chattiness">観測したメッセージのみ。メッセージがあった日ごとの数です。</string>
+    <string name="analytics_sub_quiet">観測したメッセージのみ。静かな日は、何もキャプチャされなかっただけの場合もあります。</string>
+
+    <string name="analytics_period_7d">7 日間</string>
+    <string name="analytics_period_this_month">今月</string>
+    <string name="analytics_period_last_month">先月</string>
+    <string name="analytics_period_3m">3 か月</string>
+    <string name="analytics_period_all">すべて</string>
+    <string name="analytics_period_custom">カスタム</string>
+    <string name="analytics_period_pick">期間を選択</string>
+    <string name="analytics_period_days">%1$d 日間</string>
+    <string name="analytics_dialog_confirm">完了</string>
+    <string name="analytics_dialog_cancel">キャンセル</string>
+
+    <string name="analytics_heatmap_title">曜日 × 時間帯</string>
+    <string name="analytics_heatmap_desc">曜日と時間帯ごとの観測メッセージ数: %1$s</string>
+    <string name="analytics_heatmap_less">少</string>
+    <string name="analytics_heatmap_more">多</string>
+    <string name="analytics_heatmap_row_desc">%1$s: %2$s</string>
+    <string name="analytics_weekday_mon">月</string>
+    <string name="analytics_weekday_tue">火</string>
+    <string name="analytics_weekday_wed">水</string>
+    <string name="analytics_weekday_thu">木</string>
+    <string name="analytics_weekday_fri">金</string>
+    <string name="analytics_weekday_sat">土</string>
+    <string name="analytics_weekday_sun">日</string>
+
+    <string name="analytics_band_morning">早朝 6–10</string>
+    <string name="analytics_band_leisure">日中 10–14</string>
+    <string name="analytics_band_afternoon">午後 14–18</string>
+    <string name="analytics_band_evening">夕方 18–22</string>
+    <string name="analytics_band_night">夜間 22–6</string>
+    <string name="analytics_band_distribution_title">メッセージが現れた時間帯</string>
+    <string name="analytics_band_desc">時間帯ごとの観測メッセージ数: %1$s</string>
+    <string name="analytics_band_dominant">%1$s · 観測 %3$d 件中 %2$d%%</string>
+
+    <string name="analytics_board_all">すべての日</string>
+    <string name="analytics_board_weekdays">平日</string>
+    <string name="analytics_board_weekends">週末</string>
+    <string name="analytics_observed_count">観測 %1$d 件</string>
+
+    <string name="analytics_chattiness_title">活動日あたりのメッセージ数</string>
+    <string name="analytics_chattiness_value">活動日あたり %1$s 件</string>
+    <string name="analytics_chattiness_days">活動日 %1$d 日 · 観測 %2$d 件</string>
+    <string name="analytics_chattiness_formula">観測したメッセージ数を、少なくとも 1 件あった現地日の数で割った値です。何も観測しなかった日は分母に含めません。</string>
+
+    <string name="analytics_quiet_title">何も観測しなかった日</string>
+    <string name="analytics_quiet_value">静かな日 %1$d%%</string>
+    <string name="analytics_quiet_days">%2$d 日中 %1$d 日</string>
+    <string name="analytics_quiet_streak">最長の静かな期間: %1$d 日</string>
+    <string name="analytics_quiet_formula">選択した期間のうち観測メッセージがなかった日数を、期間内のすべての日数（会話が最初に現れる前の日も含む）で割った値です。静かな日は、送信元アプリがその日に通知を出さなかっただけの場合もあります。</string>
+
+    <string name="analytics_catchphrase_title">よく使う言い回し</string>
+    <string name="analytics_catchphrase_note">観測したメッセージの中で、送信者が 2 回以上繰り返した文字列と単語です。自分が送ったメッセージは対象外です。</string>
+    <string name="analytics_catchphrase_sender">%1$s · 観測 %2$d 件</string>
+
+    <string name="analytics_empty_messages_title">観測したメッセージが不足しています</string>
+    <string name="analytics_empty_messages_body">このビューには、選択した期間にもっと多くのメッセージが必要です。QuietInbox は通知に実際に含まれていた内容だけを数えます。</string>
+    <string name="analytics_capped">この期間には %1$d 件を超える観測メッセージがあります。最新の %1$d 件だけを集計しています。</string>
+    <string name="analytics_degraded">保管庫の一部を読み取れませんでした。このレポートは不完全な可能性があります。</string>
+</resources>

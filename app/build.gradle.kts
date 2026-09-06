@@ -71,7 +71,7 @@ android {
     }
 
     androidResources {
-        localeFilters += listOf("en", "b+zh+Hant")
+        localeFilters += listOf("en", "b+zh+Hant", "b+zh+Hans", "ja", "ko")
     }
 
     compileOptions {

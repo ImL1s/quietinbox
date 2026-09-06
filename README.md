@@ -67,7 +67,7 @@
 :platform:capture          NotificationListenerService → 有界 snapshot → 佇列 → journal → parse → identity → reconcile → commit
 :platform:media            content:// 與通知 bitmap 的限額加密複製
 :platform:backup           Tink Streaming AEAD 容器、manifest／EOF／計數驗證、原子合併還原
-:core:designsystem         Material 3 Expressive 主題、共用元件、zh-Hant + en 字串
+:core:designsystem         Material 3 Expressive 主題、共用元件、en / zh-Hant / zh-Hans / ja / ko 字串
 :feature:*                 onboarding / inbox / conversation / search / health / settings / analytics
 ```
 
@@ -96,7 +96,7 @@ adb shell cmd notification post -S messaging -t "Alice" tag "hello from shell"
 
 ### 文件
 
-- [docs/SCOPE.md](docs/SCOPE.md) — 完成定義與尚未完成清單（誠實的 gap list）
+- [docs/SCOPE.md](docs/SCOPE.md)（[中文](docs/zh-Hant/SCOPE.md)） — 完成了什麼、沒完成什麼
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)（[中文](docs/zh-Hant/ARCHITECTURE.md)） — 模組與資料流
 - [docs/adr/](docs/adr/)（[中文](docs/zh-Hant/adr/)） — 架構決策紀錄
 - [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md)（[中文](docs/zh-Hant/COMPATIBILITY.md)） — 來源相容矩陣

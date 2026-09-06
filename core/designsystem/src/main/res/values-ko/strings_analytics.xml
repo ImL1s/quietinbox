@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  확장된 ‘활동’ 화면의 문구(탭, 기간, 히트맵, 시간대, 수다스러움, 조용한 날 비율, 자주 쓰는 말).
+  모든 라벨은 ‘관측된 메시지’만 설명합니다: 원본 앱이 알림에 담고 QuietInbox가 복사한 내용입니다.
+  답장, 읽음, 실제 메시지 총량을 주장해서는 안 됩니다. 키는 values/strings_analytics.xml과 일치해야 합니다.
+-->
+<resources>
+    <string name="analytics_tab_overview">개요</string>
+    <string name="analytics_tab_rankings">순위</string>
+    <string name="analytics_tab_best_time">최적 시간대</string>
+    <string name="analytics_tab_chattiness">수다스러움</string>
+    <string name="analytics_tab_quiet">조용한 날</string>
+
+    <string name="analytics_sub_overview">선택한 기간에 관측된 메시지만 집계합니다.</string>
+    <string name="analytics_sub_rankings">관측된 메시지만 집계하며, 누가 누구에게 답장했는지는 순위에 넣지 않습니다.</string>
+    <string name="analytics_sub_best_time">관측된 메시지만 집계하며, 대화가 나타난 시간대입니다.</string>
+    <string name="analytics_sub_chattiness">관측된 메시지만 집계하며, 메시지가 있었던 날 기준입니다.</string>
+    <string name="analytics_sub_quiet">관측된 메시지만 집계합니다. 조용한 날은 아무것도 캡처되지 않았을 뿐일 수도 있습니다.</string>
+
+    <string name="analytics_period_7d">7일</string>
+    <string name="analytics_period_this_month">이번 달</string>
+    <string name="analytics_period_last_month">지난달</string>
+    <string name="analytics_period_3m">3개월</string>
+    <string name="analytics_period_all">전체</string>
+    <string name="analytics_period_custom">사용자 지정</string>
+    <string name="analytics_period_pick">기간 선택</string>
+    <string name="analytics_period_days">%1$d일</string>
+    <string name="analytics_dialog_confirm">완료</string>
+    <string name="analytics_dialog_cancel">취소</string>
+
+    <string name="analytics_heatmap_title">요일 × 시간대</string>
+    <string name="analytics_heatmap_desc">요일과 시간대별 관측 메시지 수: %1$s</string>
+    <string name="analytics_heatmap_less">적음</string>
+    <string name="analytics_heatmap_more">많음</string>
+    <string name="analytics_heatmap_row_desc">%1$s: %2$s</string>
+    <string name="analytics_weekday_mon">월</string>
+    <string name="analytics_weekday_tue">화</string>
+    <string name="analytics_weekday_wed">수</string>
+    <string name="analytics_weekday_thu">목</string>
+    <string name="analytics_weekday_fri">금</string>
+    <string name="analytics_weekday_sat">토</string>
+    <string name="analytics_weekday_sun">일</string>
+
+    <string name="analytics_band_morning">이른 시간 6–10</string>
+    <string name="analytics_band_leisure">한낮 10–14</string>
+    <string name="analytics_band_afternoon">오후 14–18</string>
+    <string name="analytics_band_evening">저녁 18–22</string>
+    <string name="analytics_band_night">밤 22–6</string>
+    <string name="analytics_band_distribution_title">메시지가 나타난 시간대</string>
+    <string name="analytics_band_desc">시간대별 관측 메시지 수: %1$s</string>
+    <string name="analytics_band_dominant">%1$s · 관측 %3$d개 중 %2$d%%</string>
+
+    <string name="analytics_board_all">모든 날</string>
+    <string name="analytics_board_weekdays">평일</string>
+    <string name="analytics_board_weekends">주말</string>
+    <string name="analytics_observed_count">관측 %1$d개</string>
+
+    <string name="analytics_chattiness_title">활동일당 메시지 수</string>
+    <string name="analytics_chattiness_value">활동일당 %1$s개</string>
+    <string name="analytics_chattiness_days">활동일 %1$d일 · 관측 %2$d개</string>
+    <string name="analytics_chattiness_formula">관측된 메시지 수를 메시지가 하나 이상 있었던 현지 날짜 수로 나눈 값입니다. 아무것도 관측되지 않은 날은 분모에 넣지 않습니다.</string>
+
+    <string name="analytics_quiet_title">아무것도 관측되지 않은 날</string>
+    <string name="analytics_quiet_value">조용한 날 %1$d%%</string>
+    <string name="analytics_quiet_days">%2$d일 중 %1$d일</string>
+    <string name="analytics_quiet_streak">가장 긴 조용한 기간: %1$d일</string>
+    <string name="analytics_quiet_formula">선택한 기간 중 관측된 메시지가 없는 날수를 기간의 전체 날수(대화가 처음 나타나기 전의 날 포함)로 나눈 값입니다. 조용한 날은 원본 앱이 그날 알림을 게시하지 않았을 뿐일 수도 있습니다.</string>
+
+    <string name="analytics_catchphrase_title">자주 쓰는 말</string>
+    <string name="analytics_catchphrase_note">관측된 메시지에서 발신자가 두 번 이상 반복한 문자열과 단어입니다. 내가 보낸 메시지는 검사하지 않습니다.</string>
+    <string name="analytics_catchphrase_sender">%1$s · 관측 %2$d개</string>
+
+    <string name="analytics_empty_messages_title">관측된 메시지가 충분하지 않습니다</string>
+    <string name="analytics_empty_messages_body">이 보기에는 선택한 기간에 더 많은 메시지가 필요합니다. QuietInbox는 알림에 실제로 담긴 내용만 집계합니다.</string>
+    <string name="analytics_capped">이 기간에는 관측된 메시지가 %1$d개를 넘습니다. 최신 %1$d개만 집계합니다.</string>
+    <string name="analytics_degraded">보관소 일부를 읽을 수 없어 이 보고서가 불완전할 수 있습니다.</string>
+</resources>

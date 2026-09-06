@@ -18,7 +18,7 @@ The two installs cannot update over each other because Play re-signs the store c
   `keystore.properties` (gitignored) points the Gradle `release` signing config at it.
 - GitHub Actions secrets: `QUIETINBOX_KEYSTORE_BASE64`, `QUIETINBOX_KEYSTORE_PASSWORD`,
   `QUIETINBOX_KEY_ALIAS`, `QUIETINBOX_KEY_PASSWORD`, `PLAY_SERVICE_ACCOUNT_JSON`.
-- Play Console app created (paid), listing texts and graphics live in `fastlane/metadata/android/`.
+- Play Console app created (paid), listing texts and graphics live in `fastlane/metadata/android/` (en-US, zh-TW, zh-CN, ja-JP, ko-KR). The release workflow uploads only the what's-new texts; a new listing language is added once in the Play Console (Store presence → Main store listing → Manage translations) from those files.
 - Privacy policy: <https://iml1s.github.io/quietinbox-privacy.html>.
 
 ## Cutting a release

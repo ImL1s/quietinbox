@@ -80,8 +80,11 @@ when the guard is removed.
   dead epoch.
 - Never zero the key array handed to `SupportOpenHelperFactory`; never overwrite an unreadable key file.
 - Debug builds skip `FLAG_SECURE` so `adb screencap` works; release honours it.
-- Strings: add to both `values/strings.xml` and `values-b+zh+Hant/strings.xml`, same names
-  (plurals included; en/zh parity is checked by reviewers).
+- Strings: every user-facing string exists in all five catalogues — `values` (en), `values-b+zh+Hant`,
+  `values-b+zh+Hans`, `values-ja`, `values-ko` — with the same names, placeholders and plurals;
+  `python3 tools/check-strings.py` (also in CI) fails on any gap. A new language also goes into
+  `localeFilters` (app/build.gradle.kts), `app/res/xml/locales_config.xml`, `fastlane/metadata/android/<locale>/`,
+  `fastlane/whatsnew/`, and `tools/demo-screenshots.sh`.
 - Lint is a hard gate in every module (`abortOnError = true`, no baseline): fix the finding, do not
   suppress it. `MissingPermission` needs the `checkSelfPermission` call in the *same method* as the
   guarded call, and the library manifest must declare the permission it uses.
@@ -122,7 +125,8 @@ notifications into the debug vault. Use an emulator for screenshots. On foldable
 
 The 2026-09-06 audit findings are GitHub issues #1–#17 (labels P0/P1/P2/audit); #17 (real-source
 fixtures) stays open because it needs real devices and accounts. Every fix cites its issue and its
-review round (`docs/reviews/2026-09-06-round{10,11,12,13,14,15,16}/`). ADR-0007 records the design.
+review round (`docs/reviews/2026-09-06-round{10,…,17}/`; rounds 13–17 re-reviewed each fix commit until
+both reviewers approved with no finding). ADR-0007 records the design.
 
 ## Review gate before a push
 

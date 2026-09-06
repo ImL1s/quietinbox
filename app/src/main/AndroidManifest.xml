@@ -26,6 +26,7 @@
     </queries>
 
     <application
+        android:localeConfig="@xml/locales_config"
         android:name=".QuietInboxApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"

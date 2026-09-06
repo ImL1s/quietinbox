@@ -1,5 +1,7 @@
 # Scope, definition of done, and honest gaps
 
+> 繁體中文：[docs/zh-Hant/SCOPE.md](zh-Hant/SCOPE.md)
+
 The plan (`QuietInbox_開源專案完整計劃`, 2026-09-05) describes a 10–14 week v1.0. This document
 records what the repository **actually delivers today** and what it does **not**. "Compiles" is not
 "done" (plan §16); every line below states its evidence.
@@ -31,7 +33,7 @@ records what the repository **actually delivers today** and what it does **not**
 | UI lock (BiometricPrompt), screenshot protection | Implemented, **partially verified** | FLAG_SECURE verified to block `screencap` in debug before the debug-only exemption was added; biometric flow not exercised |
 | Demo mode (debug builds only) | Done | `DemoDataRepository` lives in the `debug` source set of `platform:storage` behind the `DemoData` interface; release binds a no-op and its dex contains no demo class or text (checked with `strings` on `classes.dex`); `DemoDataTest` on device |
 | No INTERNET permission | Done | `aapt2 dump permissions` on debug APK; `tools/check-permissions.sh` in CI |
-| zh-Hant + en localisation | Done | `core/designsystem/res/values*` |
+| Localisation: en, zh-Hant, zh-Hans, ja, ko (UI strings, per-app language list, store listings) | Done | `core/designsystem/res/values*`, `app/res/xml/locales_config.xml`, `fastlane/metadata/android/{en-US,zh-TW,zh-CN,ja-JP,ko-KR}`; `tools/check-strings.py` in CI keeps every catalogue complete (names, placeholders, plurals); the three new languages were translated in-house and checked on the API 36 AVD, not by native reviewers yet |
 | Distribution: paid Google Play + free GitHub Releases, same binary (ADR-0006) | Done (Play: 0.1.0 under Google review; GitHub: 0.1.1) | `versionCode` 5 / 0.1.1 (the audit fixes, issues #1–#16) is the GitHub release `v0.1.1` (tag at `c6b6645`, signed APK + `SHA256SUMS.txt`); it goes to Play by `workflow_dispatch` once the 0.1.0 review clears. `versionCode` 4 / 0.1.0 submitted to Play production on 2026-09-06 (paid, 172 countries, no INTERNET permission, no Play Billing); tag `v0.1.0` → `release.yml` builds the signed APK + `SHA256SUMS.txt` and runs the permission gate; store listing (zh-TW + en-US) and images from `fastlane/metadata/android/`; screenshots reference in `docs/screenshots/` |
 | Adaptive layout (rail + list-detail on wide windows) | Done (emulator) | Foldable_Test AVD (API 36, 2076×2152): `NavigationRail` + `ListDetailSceneStrategy` show inbox and conversation side by side; phone shows bottom bar |
 

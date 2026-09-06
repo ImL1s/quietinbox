@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Store screenshots of every QuietInbox screen, filled with the synthetic demo vault.
 #
-#   tools/demo-screenshots.sh <adb-serial> <en-US|zh-TW> <out-dir>
+#   tools/demo-screenshots.sh <adb-serial> <en-US|zh-TW|zh-CN|ja-JP|ko-KR> <out-dir>
 #
 # It installs the debug APK on the named device, wipes its data, grants the notification listener
 # and POST_NOTIFICATIONS, walks onboarding, seeds the demo data through the debug-only broadcast
@@ -13,7 +13,7 @@
 set -euo pipefail
 
 if [ "$#" -ne 3 ]; then
-  echo "usage: $0 <adb-serial> <en-US|zh-TW> <out-dir>" >&2
+  echo "usage: $0 <adb-serial> <en-US|zh-TW|zh-CN|ja-JP|ko-KR> <out-dir>" >&2
   exit 2
 fi
 
@@ -22,8 +22,8 @@ LOCALE="$2"
 OUT_DIR="$3"
 
 case "$LOCALE" in
-  en-US|zh-TW) ;;
-  *) echo "locale must be en-US or zh-TW, got: $LOCALE" >&2; exit 2 ;;
+  en-US|zh-TW|zh-CN|ja-JP|ko-KR) ;;
+  *) echo "locale must be one of en-US zh-TW zh-CN ja-JP ko-KR, got: $LOCALE" >&2; exit 2 ;;
 esac
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -220,18 +220,24 @@ shot() {
 
 # ------------------------------------------------------------------ labels
 
-if [ "$LOCALE" = "zh-TW" ]; then
-  NAV_INBOX="收件匣"; NAV_SEARCH="搜尋"; NAV_ACTIVITY="活動"; NAV_CAPTURE="擷取"; NAV_SETTINGS="設定"
-  SEARCH_HINT="搜尋已保存的副本"
-else
-  NAV_INBOX="Inbox"; NAV_SEARCH="Search"; NAV_ACTIVITY="Activity"; NAV_CAPTURE="Capture"; NAV_SETTINGS="Settings"
-  SEARCH_HINT="Search saved copies"
-fi
-# Onboarding buttons are matched in both languages, so a device that ignores the locale request
-# still completes the walkthrough.
-OB_NEXT_EN="Next"; OB_NEXT_ZH="下一步"
-OB_START_EN="Start"; OB_START_ZH="開始使用"
-OB_SKIP_EN="Skip"; OB_SKIP_ZH="略過"
+# Tab labels and the search hint per locale (nav_* / search_hint in core/designsystem strings).
+case "$LOCALE" in
+  zh-TW) NAV_INBOX="收件匣"; NAV_SEARCH="搜尋"; NAV_ACTIVITY="活動"; NAV_CAPTURE="擷取"; NAV_SETTINGS="設定"; SEARCH_HINT="搜尋已保存的副本" ;;
+  zh-CN) NAV_INBOX="收件箱"; NAV_SEARCH="搜索"; NAV_ACTIVITY="活动"; NAV_CAPTURE="捕获"; NAV_SETTINGS="设置"; SEARCH_HINT="搜索已保存的副本" ;;
+  ja-JP) NAV_INBOX="受信箱"; NAV_SEARCH="検索"; NAV_ACTIVITY="活動"; NAV_CAPTURE="キャプチャ"; NAV_SETTINGS="設定"; SEARCH_HINT="保存したコピーを検索" ;;
+  ko-KR) NAV_INBOX="받은편지함"; NAV_SEARCH="검색"; NAV_ACTIVITY="활동"; NAV_CAPTURE="캡처"; NAV_SETTINGS="설정"; SEARCH_HINT="저장된 사본 검색" ;;
+  *)     NAV_INBOX="Inbox"; NAV_SEARCH="Search"; NAV_ACTIVITY="Activity"; NAV_CAPTURE="Capture"; NAV_SETTINGS="Settings"; SEARCH_HINT="Search saved copies" ;;
+esac
+# Onboarding buttons are matched in English and in the requested language, so a device that
+# ignores the locale request still completes the walkthrough.
+case "$LOCALE" in
+  zh-TW) OB_NEXT_ZH="下一步"; OB_START_ZH="開始使用"; OB_SKIP_ZH="略過" ;;
+  zh-CN) OB_NEXT_ZH="下一步"; OB_START_ZH="开始使用"; OB_SKIP_ZH="跳过" ;;
+  ja-JP) OB_NEXT_ZH="次へ"; OB_START_ZH="開始"; OB_SKIP_ZH="スキップ" ;;
+  ko-KR) OB_NEXT_ZH="다음"; OB_START_ZH="시작"; OB_SKIP_ZH="건너뛰기" ;;
+  *)     OB_NEXT_ZH="下一步"; OB_START_ZH="開始使用"; OB_SKIP_ZH="略過" ;;
+esac
+OB_NEXT_EN="Next"; OB_START_EN="Start"; OB_SKIP_EN="Skip"
 
 # -------------------------------------------------------------------- run
 

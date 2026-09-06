@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="ambiguous_count_plural">
+        <item quantity="other">%1$d 条可能重复</item>
+    </plurals>
+    <plurals name="messages_count_plural">
+        <item quantity="other">%1$d 条消息</item>
+    </plurals>
+</resources>
