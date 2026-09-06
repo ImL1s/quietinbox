@@ -28,7 +28,9 @@ object TimeFormat {
 /** "just now", "5 min", "yesterday", or a date, for list rows. */
 @Composable
 fun relativeTime(epochMs: Long, nowMs: Long = System.currentTimeMillis()): String {
-    val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
+    // Read through the composition (observable on configuration change); the fallback is only for
+    // an empty locale list, which Android never provides.
+    val locale = LocalConfiguration.current.locales.let { if (it.isEmpty) Locale.ENGLISH else it[0] }
     val diff = nowMs - epochMs
     val minutes = diff / 60_000
     val hours = diff / 3_600_000

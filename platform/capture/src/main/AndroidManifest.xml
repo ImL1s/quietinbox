@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- The synthetic test publisher posts notifications; the app declares this too. Declared here so
+         lint's MissingPermission analysis sees it for this module (not a new permission). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application>
         <service
             android:name=".QuietInboxListenerService"

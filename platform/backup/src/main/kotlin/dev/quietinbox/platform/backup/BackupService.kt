@@ -123,13 +123,18 @@ class BackupService @Inject constructor(
     private class Written(val counts: Counts, val skippedMedia: Int)
 
     /**
-     * Streams every table in keyset pages inside one read transaction, so the counts in the
-     * manifest and the rows agree even while capture continues, and no table is ever held in
-     * memory as a whole. Expired copies are not exported: a backup holds what the user could see.
+     * Streams the row tables (sources, conversations, messages, revisions) in keyset pages inside
+     * one read transaction, so the manifest counts and those rows agree even while capture
+     * continues; each page is serialised and written to the encrypted stream as it is read, so no
+     * table is held in memory as a whole. Expired copies are not exported: a backup holds what the
+     * user could see.
      *
-     * Only the row reads happen inside the transaction (milliseconds); the media files are
-     * decrypted and streamed *after* it, so a large media set never holds the SQLite write lock
-     * against live capture (round-11 finding).
+     * Media is handled *after* the transaction, one keyset page at a time: read a page, decrypt and
+     * stream its files, read the next. The manifest's media count is the number of rows considered
+     * at that moment; `End.actual.media` is the number written and `End.skippedMedia` the ones that
+     * could not be read (the stager checks `End`, not the manifest, for media). The transaction
+     * therefore holds the write lock for the row serialisation only — seconds on a very large
+     * vault, never the media decryption (round-11 / round-12 findings).
      */
     private suspend fun writeRecords(db: QuietInboxDatabase, w: BufferedWriter, appVersion: String): Written {
         fun line(r: BackupRecord) {
@@ -137,7 +142,6 @@ class BackupService @Inject constructor(
             w.write("\n")
         }
         val now = System.currentTimeMillis()
-        val mediaRows = ArrayList<MediaBlobEntity>()
         val expected = db.withTransaction {
             val sources = db.sourceDao().all()
             val expected = Counts(
@@ -176,33 +180,31 @@ class BackupService @Inject constructor(
                 for (r in page) line(BackupRecord.Revision(r.messageId, r.body, r.observedAtEpochMs))
                 after = page.last().id
             }
-            // Media rows are metadata only (file name, size, dimensions): small enough to hold.
-            after = 0L
-            while (true) {
-                val page = db.mediaDao().exportPage(after, PAGE, now)
-                if (page.isEmpty()) break
-                mediaRows += page
-                after = page.last().id
-            }
             expected
         }
-        // Outside the transaction: disk reads and AEAD decryption of every blob.
+        // Outside the transaction, one page at a time: disk reads and AEAD decryption of every blob.
         var mediaWritten = 0
         var skipped = 0
-        for (b in mediaRows) {
-            val bytes = when (val r = blobCipher.decryptFile(mediaDir.file(b.fileName))) {
-                is KeyResult.Ok -> r.value
-                is KeyResult.Failed -> {
+        var after = 0L
+        while (true) {
+            val page = db.mediaDao().exportPage(after, PAGE, now)
+            if (page.isEmpty()) break
+            for (b in page) {
+                val bytes = when (val r = blobCipher.decryptFile(mediaDir.file(b.fileName))) {
+                    is KeyResult.Ok -> r.value
+                    is KeyResult.Failed -> {
+                        skipped++
+                        continue
+                    }
+                }
+                if (bytes.size > BackupLimits.MAX_MEDIA_BYTES) {
                     skipped++
                     continue
                 }
+                line(BackupRecord.Media(b.id, b.messageId, b.mimeType, b.width, b.height, b.createdAtEpochMs, Base64.encodeToString(bytes, Base64.NO_WRAP)))
+                mediaWritten++
             }
-            if (bytes.size > BackupLimits.MAX_MEDIA_BYTES) {
-                skipped++
-                continue
-            }
-            line(BackupRecord.Media(b.id, b.messageId, b.mimeType, b.width, b.height, b.createdAtEpochMs, Base64.encodeToString(bytes, Base64.NO_WRAP)))
-            mediaWritten++
+            after = page.last().id
         }
         val actual = expected.copy(media = mediaWritten)
         line(BackupRecord.End(actual, skipped))

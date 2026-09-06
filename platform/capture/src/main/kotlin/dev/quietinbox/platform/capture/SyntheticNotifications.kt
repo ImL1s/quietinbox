@@ -1,11 +1,15 @@
 package dev.quietinbox.platform.capture
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.core.app.Person
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -55,7 +59,14 @@ class SyntheticNotifications @Inject constructor(
             .setOnlyAlertOnce(true)
             .setAutoCancel(true)
             .build()
-        runCatching { NotificationManagerCompat.from(context).notify(SYNTHETIC_TAG, id, notification) }
+        // Checked here, in the same method as notify(): lint's MissingPermission is a hard error.
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return id
+        // A plain try, not runCatching: lint only sees the permission check through a direct call.
+        try {
+            NotificationManagerCompat.from(context).notify(SYNTHETIC_TAG, id, notification)
+        } catch (_: SecurityException) {
+            // Permission revoked between the check and the call.
+        }
         return id
     }
 
@@ -72,7 +83,12 @@ class SyntheticNotifications @Inject constructor(
             .addExtras(extras)
             .setAutoCancel(true)
             .build()
-        runCatching { NotificationManagerCompat.from(context).notify(tag, SYNTHETIC_ID + 1, notification) }
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return SYNTHETIC_ID + 1
+        try {
+            NotificationManagerCompat.from(context).notify(tag, SYNTHETIC_ID + 1, notification)
+        } catch (_: SecurityException) {
+            // Permission revoked between the check and the call.
+        }
         return SYNTHETIC_ID + 1
     }
 

@@ -1,7 +1,6 @@
 package dev.quietinbox.feature.onboarding
 
 import android.content.Context
-import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -85,8 +84,6 @@ class OnboardingViewModel @Inject constructor(
         coordinator.refreshPermissionState()
         local.update { it.copy(granted = listenerAccess.isGranted()) }
     }
-
-    fun settingsIntent(): Intent = listenerAccess.settingsIntent()
 
     /** False when no settings screen exists on this device; the screen then shows the manual path. */
     fun openListenerSettings(from: Context): Boolean = listenerAccess.openSettings(from)

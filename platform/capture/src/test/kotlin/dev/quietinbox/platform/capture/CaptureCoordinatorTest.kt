@@ -614,6 +614,44 @@ class CaptureCoordinatorTest : FunSpec({
         coVerify(timeout = 5_000, exactly = 1) { h.health.closeOpenGaps(any(), GapReason.COLD_START) }
     }
 
+    test("a cold-start loss while the vault is locked is written as a bounded gap once the vault opens") {
+        val h = Harness()
+        val factory: SnapshotFactory = mockk()
+        val locked = VaultUnavailableException(KeyFailure.Unavailable("locked"))
+        coEvery { h.sources.sources() } throws locked
+        // The gap table is behind the same lock: opening a gap fails too.
+        coEvery { h.health.openGap(any(), GapReason.COLD_START, any(), any()) } throws locked
+        val coordinator = h.coordinator().also { it.snapshotFactory = factory }
+        coordinator.onConnected(h.service)
+
+        coordinator.onPosted(sbnOf(ENABLED_PKG))
+        coVerify(timeout = 5_000, atLeast = 1) { h.health.openGap(any(), GapReason.COLD_START, any(), any()) }
+        stillHolds { coVerify(exactly = 0) { h.health.recordGap(any(), any(), GapReason.COLD_START, any(), any()) } }
+
+        // The vault opens: the loss is written now, bounded, exactly once.
+        coEvery { h.sources.sources() } returns listOf(sourceConfig(ENABLED_PKG))
+        h.observedSources.emit(listOf(sourceConfig(ENABLED_PKG)))
+        coVerify(timeout = 5_000, exactly = 1) { h.health.recordGap(any(), any(), GapReason.COLD_START, GapPrecision.BOUNDED, any()) }
+        coVerify(exactly = 0) { factory.create(any(), any(), any(), any()) }
+    }
+
+    test("a lock-out gap the pipeline could not open is written as a bounded gap once the vault opens") {
+        val h = Harness()
+        val locked = VaultUnavailableException(KeyFailure.Unavailable("locked"))
+        h.journalAnswers { throw locked }
+        coEvery { h.health.openGap(any(), GapReason.UNKNOWN, any(), any()) } throws locked
+        val coordinator = h.coordinator()
+        coordinator.onConnected(h.service)
+
+        coordinator.offerCaptured(captured("evt-locked"))
+        awaitUntil { h.journaled shouldBe listOf("evt-locked") }
+        awaitUntil { coordinator.status.value.vaultLocked shouldBe true }
+
+        h.vaultState.value = VaultState.Ready(mockk(relaxed = true))
+        coVerify(timeout = 5_000, exactly = 1) { h.health.recordGap(any(), any(), GapReason.UNKNOWN, GapPrecision.BOUNDED, any()) }
+        coVerify(timeout = 5_000, exactly = 1) { h.health.closeOpenGaps(any(), GapReason.UNKNOWN) }
+    }
+
     // ---- QI-MEDIA-006: a bitmap stays counted until the copier is done with it -------------------
 
     test("bitmaps in flight at the copier still count against the queue bound") {

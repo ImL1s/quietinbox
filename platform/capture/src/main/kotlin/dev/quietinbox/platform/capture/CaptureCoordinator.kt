@@ -143,12 +143,27 @@ class CaptureCoordinator @Inject constructor(
     private val held = ArrayDeque<Held>()
     private var heldDropped = 0
 
+    /** Arrival time of the first notification the buffer had to evict; the gap starts there, not at a survivor. */
+    private var heldDroppedSince: Long? = null
+
     @Volatile
     private var coldStartJob: Job? = null
 
-    /** A COLD_START gap is open; while the policy stays unknown further drops extend it instead of adding rows. */
+    /** A COLD_START gap row is open; while the policy stays unknown further drops extend it instead of adding rows. */
     @Volatile
     private var coldStartGapId: Long? = null
+
+    /**
+     * Start of a cold-start loss the locked vault could not record at the time. Written as a
+     * bounded gap as soon as the vault can be written again (round-12 finding: a drop while the
+     * vault is locked must not vanish just because the gap table was unreachable).
+     */
+    @Volatile
+    private var coldStartLossSince: Long? = null
+
+    /** Same for the pipeline's own lock-out gap: the time `openGap` could not be written. */
+    @Volatile
+    private var vaultGapSince: Long? = null
 
     @Volatile
     private var paused: Boolean = false
@@ -206,7 +221,14 @@ class CaptureCoordinator @Inject constructor(
                 if (s is VaultState.Ready) {
                     if (vaultGapOpen) {
                         vaultGapOpen = false
-                        guarded { health.closeOpenGaps(System.currentTimeMillis(), GapReason.UNKNOWN) }
+                        val now = System.currentTimeMillis()
+                        val since = vaultGapSince
+                        vaultGapSince = null
+                        guarded {
+                            health.closeOpenGaps(now, GapReason.UNKNOWN)
+                            // The row could not be opened while the vault was locked: recorded now, bounded.
+                            if (since != null) health.recordGap(since, now, GapReason.UNKNOWN, GapPrecision.BOUNDED, now)
+                        }
                     }
                     replayJournal()
                 }
@@ -359,10 +381,24 @@ class CaptureCoordinator @Inject constructor(
         enabledPackages = list.filter { it.enabled }.map { it.packageName }.toSet()
         pausedPackages = list.filter { it.enabled && it.paused }.map { it.packageName }.toSet()
         sourcesLoaded = true
-        val gap = coldStartGapId
-        coldStartGapId = null
-        if (gap != null) guarded { health.closeOpenGaps(System.currentTimeMillis(), GapReason.COLD_START) }
+        settleColdStartGap()
         releaseHeld()
+    }
+
+    /**
+     * The policy is known and the vault writable: close the lock-out's open COLD_START row (by
+     * reason, idempotent — after a restore the row survived, after a reset it is gone) and write
+     * the loss the locked vault could not record at the time. Must run under [pipelineMutex].
+     */
+    private suspend fun settleColdStartGap() {
+        val now = System.currentTimeMillis()
+        coldStartGapId = null
+        val since = coldStartLossSince
+        coldStartLossSince = null
+        guarded {
+            health.closeOpenGaps(now, GapReason.COLD_START)
+            if (since != null) health.recordGap(since, now, GapReason.COLD_START, GapPrecision.BOUNDED, now)
+        }
     }
 
     // ---- cold start (QI-CAPTURE-013) ---------------------------------------------------------
@@ -379,8 +415,9 @@ class CaptureCoordinator @Inject constructor(
         // threads cannot start two cold-start jobs and leave an item between them (round-11).
         synchronized(held) {
             if (held.size >= MAX_HELD) {
-                held.removeFirst()
+                val evicted = held.removeFirst()
                 heldDropped++
+                if (heldDroppedSince == null) heldDroppedSince = evicted.heldAtEpochMs
             }
             held += item
             if (coldStartJob?.isActive != true) coldStartJob = scope.launch { coldStart() }
@@ -396,7 +433,12 @@ class CaptureCoordinator @Inject constructor(
                 sourcesLoaded
             }
         } == true
-        if (!loaded) dropHeld(System.currentTimeMillis())
+        if (!loaded) {
+            dropHeld(System.currentTimeMillis())
+            return
+        }
+        // Anything held in the instant between the release above and this job ending is released too.
+        if (synchronized(held) { held.isNotEmpty() }) pipelineMutex.withLock { releaseHeld() }
     }
 
     /**
@@ -407,13 +449,18 @@ class CaptureCoordinator @Inject constructor(
      * of the queue does not apply until they are snapshotted here.
      */
     private fun releaseHeld() {
-        val (items, dropped) = synchronized(held) { held.toList().also { held.clear() } to heldDropped.also { heldDropped = 0 } }
+        val (items, dropped, since) = synchronized(held) {
+            Triple(held.toList().also { held.clear() }, heldDropped.also { heldDropped = 0 }, heldDroppedSince.also { heldDroppedSince = null })
+        }
         if (dropped > 0) {
-            val start = items.minOfOrNull { it.heldAtEpochMs }
+            // The evicted ones arrived before every survivor: the gap starts at the first eviction.
+            val start = since ?: items.minOfOrNull { it.heldAtEpochMs }
             val now = System.currentTimeMillis()
             scope.launch { guarded { health.recordGap(start, now, GapReason.COLD_START, GapPrecision.BOUNDED, now) } }
         }
         for (h in items) {
+            // Held under an older generation, or while paused: a disconnect, pause or maintenance
+            // happened meanwhile, and each of those already records its own gap for that window.
             if (h.generation != activeGeneration || paused) continue
             val pkg = h.packageName
             if (!(pkg in enabledPackages && pkg !in pausedPackages)) continue
@@ -434,11 +481,19 @@ class CaptureCoordinator @Inject constructor(
      * finding). The gap is closed when the policy finally loads.
      */
     private suspend fun dropHeld(now: Long) {
-        val (items, dropped) = synchronized(held) { held.toList().also { held.clear() } to heldDropped.also { heldDropped = 0 } }
+        val (items, dropped, since) = synchronized(held) {
+            Triple(held.toList().also { held.clear() }, heldDropped.also { heldDropped = 0 }, heldDroppedSince.also { heldDroppedSince = null })
+        }
         if (items.isEmpty() && dropped == 0) return
         if (coldStartGapId != null) return
-        val start = items.minOfOrNull { it.heldAtEpochMs }
-        guarded { coldStartGapId = health.openGap(start, GapReason.COLD_START, GapPrecision.BOUNDED, now) }
+        val start = since ?: items.minOfOrNull { it.heldAtEpochMs }
+        var written = false
+        guarded {
+            coldStartGapId = health.openGap(start, GapReason.COLD_START, GapPrecision.BOUNDED, now)
+            written = true
+        }
+        // A locked vault cannot take the row: remember the loss, it is written once the vault opens.
+        if (!written && coldStartLossSince == null) coldStartLossSince = start ?: now
     }
 
     suspend fun addSource(packageName: String, displayName: String, adapterId: String?, now: Long) =
@@ -474,6 +529,8 @@ class CaptureCoordinator @Inject constructor(
             if (maintenanceStartedAt != null) return
             maintenanceStartedAt = now
             activeGeneration = null
+            // The vault may be about to disappear: a cold-start gap that was open belongs to it.
+            coldStartGapId = null
             val ended = sessionId
             sessionId = null
             // The listener state is left alone: DEGRADED reads as "queue overflow" on the health
@@ -623,7 +680,13 @@ class CaptureCoordinator @Inject constructor(
                     // one not journaled is lost): record an observable gap once per lock-out.
                     if (!vaultGapOpen) {
                         vaultGapOpen = true
-                        guarded { health.openGap(snapshot.observedAtEpochMs, GapReason.UNKNOWN, GapPrecision.BOUNDED, snapshot.observedAtEpochMs) }
+                        var written = false
+                        guarded {
+                            health.openGap(snapshot.observedAtEpochMs, GapReason.UNKNOWN, GapPrecision.BOUNDED, snapshot.observedAtEpochMs)
+                            written = true
+                        }
+                        // The gap table is behind the same lock: remembered, written when the vault opens.
+                        if (!written) vaultGapSince = snapshot.observedAtEpochMs
                     }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
@@ -793,7 +856,9 @@ class CaptureCoordinator @Inject constructor(
         /**
          * Notifications held unread before the source policy is known; the oldest is dropped first
          * and every drop is recorded as a gap. Sized like the queue: it carries a whole
-         * active-notification resync on a cold start.
+         * active-notification resync on a cold start. Memory: these are the framework's own
+         * objects (a resync list holds the same ones), each possibly carrying a BigPicture bitmap;
+         * the bound is on their number, not their bytes, and they are released within 15 s.
          */
         private const val MAX_HELD = 256
 

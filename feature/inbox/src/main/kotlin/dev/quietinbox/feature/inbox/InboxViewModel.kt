@@ -108,8 +108,6 @@ class InboxViewModel @Inject constructor(
 
     fun canPostNotifications(): Boolean = synthetic.canPost()
 
-    fun listenerSettingsIntent() = listenerAccess.settingsIntent()
-
     /** False when no settings screen exists on this device; the screen then shows the manual path. */
     fun openListenerSettings(from: android.content.Context): Boolean = listenerAccess.openSettings(from)
 

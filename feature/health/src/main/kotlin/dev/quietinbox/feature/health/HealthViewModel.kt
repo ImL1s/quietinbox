@@ -96,8 +96,6 @@ class HealthViewModel @Inject constructor(
         diagnostics.value = runCatching { health.diagnosticCounts(System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000) }.getOrDefault(emptyList())
     }
 
-    fun settingsIntent(): Intent = listenerAccess.settingsIntent()
-
     /** False when no settings screen exists on this device; the screen then shows the manual path. */
     fun openListenerSettings(from: Context): Boolean = listenerAccess.openSettings(from)
     fun appInfoIntent(): Intent = listenerAccess.appInfoIntent()

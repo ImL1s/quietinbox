@@ -36,9 +36,6 @@ class ListenerAccess @Inject constructor(
         add(appInfoIntent())
     }.map { it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
 
-    /** The most specific settings intent; callers that can react to a failure should use [openSettings]. */
-    fun settingsIntent(): Intent = settingsIntents().first()
-
     /**
      * Opens the first settings screen that starts on this device: listener detail → listener list →
      * app info. Each intent is simply tried: a `resolveActivity` pre-check would need `<queries>`

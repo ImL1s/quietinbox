@@ -23,8 +23,10 @@ class SuppressionRuleTest : FunSpec({
         SuppressionRule.applies("m1", 1_000L, null, 2_000L) shouldBe false
     }
 
-    test("without a post time on either side the token applies (conservative)") {
+    test("without a post time on either side the token applies (conservative), also when the ids differ") {
         SuppressionRule.applies(null, null, null, 5_000L) shouldBe true
         SuppressionRule.applies(null, 5_000L, null, null) shouldBe true
+        SuppressionRule.applies("m2", null, "m1", 1_000L) shouldBe true
+        SuppressionRule.applies("m2", 1_000L, "m1", null) shouldBe true
     }
 })
