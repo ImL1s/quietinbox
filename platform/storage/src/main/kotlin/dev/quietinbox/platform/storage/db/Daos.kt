@@ -46,8 +46,23 @@ interface JournalDao {
     @Query("SELECT * FROM event_journal WHERE state = 'PENDING' ORDER BY receivedAtEpochMs LIMIT :limit")
     suspend fun pending(limit: Int): List<EventJournalEntity>
 
-    @Query("UPDATE event_journal SET state = :state, attempts = attempts + 1, failureCode = :failure WHERE eventId = :eventId")
+    /** A terminal state (anything but PENDING) also clears the payload: the text must not outlive its commit. */
+    @Query(
+        """
+        UPDATE event_journal
+        SET state = :state, attempts = attempts + 1, failureCode = :failure,
+            payload = CASE WHEN :state = 'PENDING' THEN payload ELSE '' END
+        WHERE eventId = :eventId
+        """,
+    )
     suspend fun setState(eventId: String, state: String, failure: String?)
+
+    /** Pending rows of a source that was disabled or removed are discarded for good (QI-SEC-001). */
+    @Query("UPDATE event_journal SET state = 'DISCARDED', failureCode = 'SOURCE_DISABLED', payload = '' WHERE state = 'PENDING' AND packageName = :packageName")
+    suspend fun discardPending(packageName: String): Int
+
+    @Query("SELECT payload FROM event_journal WHERE eventId = :eventId")
+    suspend fun payload(eventId: String): String?
 
     @Query("SELECT attempts FROM event_journal WHERE eventId = :eventId")
     suspend fun attempts(eventId: String): Int?
@@ -143,6 +158,29 @@ interface ConversationDao {
     @Query("SELECT COUNT(*) FROM conversation")
     fun observeCount(): Flow<Int>
 
+    /**
+     * Recomputes the projection (counts, preview, last sender, last activity) from the messages
+     * that are still visible at [now]. The single source of truth after any deletion, expiry or
+     * restore (QI-DATA-004); the live commit path only increments.
+     */
+    @Query(
+        """
+        UPDATE conversation SET
+          messageCount = (SELECT COUNT(*) FROM message m WHERE m.conversationId = conversation.id
+                          AND m.dedupState != 'AMBIGUOUS_REPEAT' AND (m.expiresAtEpochMs IS NULL OR m.expiresAtEpochMs > :now)),
+          ambiguousCount = (SELECT COUNT(*) FROM message m WHERE m.conversationId = conversation.id
+                          AND m.dedupState = 'AMBIGUOUS_REPEAT' AND (m.expiresAtEpochMs IS NULL OR m.expiresAtEpochMs > :now)),
+          lastMessagePreview = (SELECT substr(m.body, 1, 200) FROM message m WHERE m.conversationId = conversation.id
+                          AND (m.expiresAtEpochMs IS NULL OR m.expiresAtEpochMs > :now) ORDER BY m.sortKey DESC, m.id DESC LIMIT 1),
+          lastSenderName = (SELECT m.senderName FROM message m WHERE m.conversationId = conversation.id
+                          AND (m.expiresAtEpochMs IS NULL OR m.expiresAtEpochMs > :now) ORDER BY m.sortKey DESC, m.id DESC LIMIT 1),
+          lastActivityEpochMs = COALESCE((SELECT MAX(m.observedAtEpochMs) FROM message m WHERE m.conversationId = conversation.id
+                          AND (m.expiresAtEpochMs IS NULL OR m.expiresAtEpochMs > :now)), conversation.createdAtEpochMs)
+        WHERE id IN (:ids)
+        """,
+    )
+    suspend fun rebuildProjection(ids: List<Long>, now: Long)
+
     @Query("SELECT id FROM conversation WHERE messageCount = 0 AND createdAtEpochMs < :before")
     suspend fun emptyOlderThan(before: Long): List<Long>
 
@@ -155,8 +193,22 @@ interface ConversationDao {
 
 @Dao
 interface MessageDao {
-    @Query("SELECT * FROM message WHERE conversationId = :conversationId ORDER BY sortKey ASC, id ASC")
-    fun observeForConversation(conversationId: Long): Flow<List<MessageEntity>>
+    /**
+     * Expired rows are hidden here, not only deleted by retention later (QI-DATA-007). [now] is
+     * fixed when the flow is collected; a screen that stays open across an expiry boundary shows
+     * the row until it is re-collected or retention removes it.
+     */
+    @Query(
+        """
+        SELECT * FROM message WHERE conversationId = :conversationId
+          AND (expiresAtEpochMs IS NULL OR expiresAtEpochMs > :now)
+        ORDER BY sortKey ASC, id ASC
+        """,
+    )
+    fun observeForConversation(conversationId: Long, now: Long): Flow<List<MessageEntity>>
+
+    @Query("SELECT DISTINCT conversationId FROM message WHERE id IN (:ids)")
+    suspend fun conversationIdsOf(ids: List<Long>): List<Long>
 
     @Query("SELECT * FROM message WHERE id = :id")
     suspend fun get(id: Long): MessageEntity?
@@ -204,11 +256,11 @@ interface MessageDao {
     @Query("UPDATE message SET expiresAtEpochMs = observedAtEpochMs + :ttlMs")
     suspend fun recomputeExpiryAll(ttlMs: Long)
 
-    @Query("SELECT COUNT(*) FROM message")
-    fun observeCount(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM message WHERE expiresAtEpochMs IS NULL OR expiresAtEpochMs > :now")
+    fun observeCount(now: Long): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM message WHERE dedupState = 'AMBIGUOUS_REPEAT'")
-    fun observeAmbiguousCount(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM message WHERE dedupState = 'AMBIGUOUS_REPEAT' AND (expiresAtEpochMs IS NULL OR expiresAtEpochMs > :now)")
+    fun observeAmbiguousCount(now: Long): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM message WHERE mediaState = 'PENDING'")
     suspend fun pendingMediaCount(): Int
@@ -226,17 +278,18 @@ interface MessageDao {
         SELECT m.conversationId, m.sortKey, m.dedupState, m.contentStatus, m.body, m.senderName, m.isSelf, c.packageName
         FROM message m JOIN conversation c ON c.id = m.conversationId
         WHERE m.sortKey >= :since AND m.sortKey <= :until
+          AND (m.expiresAtEpochMs IS NULL OR m.expiresAtEpochMs > :now)
         ORDER BY m.sortKey DESC
         LIMIT :limit
         """,
     )
-    suspend fun statsBetween(since: Long, until: Long, limit: Int): List<MessageStatRow>
+    suspend fun statsBetween(since: Long, until: Long, limit: Int, now: Long): List<MessageStatRow>
 
     @Query("SELECT * FROM message ORDER BY id")
     suspend fun allForExport(): List<MessageEntity>
 
-    @Query("SELECT MIN(sortKey) FROM message")
-    suspend fun earliestSortKey(): Long?
+    @Query("SELECT MIN(sortKey) FROM message WHERE expiresAtEpochMs IS NULL OR expiresAtEpochMs > :now")
+    suspend fun earliestSortKey(now: Long): Long?
 }
 
 @Dao
@@ -268,8 +321,23 @@ interface MediaDao {
     @Query("SELECT * FROM media_blob WHERE id = :id")
     suspend fun get(id: Long): MediaBlobEntity?
 
-    @Query("SELECT b.* FROM media_blob b LEFT JOIN message m ON m.id = b.messageId WHERE m.id IS NULL")
+    /** Blobs whose message is gone, or which the message no longer points at (a link that never completed). */
+    @Query("SELECT b.* FROM media_blob b LEFT JOIN message m ON m.id = b.messageId WHERE m.id IS NULL OR m.mediaBlobId IS NULL OR m.mediaBlobId != b.id")
     suspend fun orphans(): List<MediaBlobEntity>
+
+    @Query("SELECT * FROM media_blob WHERE messageId IN (:messageIds)")
+    suspend fun forMessages(messageIds: List<Long>): List<MediaBlobEntity>
+
+    @Query("SELECT * FROM media_blob WHERE messageId IN (SELECT id FROM message WHERE conversationId = :conversationId)")
+    suspend fun forConversation(conversationId: Long): List<MediaBlobEntity>
+
+    @Query(
+        """
+        SELECT b.* FROM media_blob b JOIN message m ON m.id = b.messageId
+        JOIN conversation c ON c.id = m.conversationId WHERE c.packageName = :packageName
+        """,
+    )
+    suspend fun forPackage(packageName: String): List<MediaBlobEntity>
 
     @Query("DELETE FROM media_blob WHERE id IN (:ids)")
     suspend fun delete(ids: List<Long>)
@@ -294,6 +362,10 @@ interface SuppressionDao {
 
     @Query("DELETE FROM deletion_suppression WHERE expiresAtEpochMs < :now")
     suspend fun deleteExpired(now: Long): Int
+
+    /** Exact prefix match (no LIKE: a package name may contain `_`, a LIKE wildcard). */
+    @Query("DELETE FROM deletion_suppression WHERE substr(scopeKey, 1, length(:prefix)) = :prefix")
+    suspend fun deleteForScopePrefix(prefix: String): Int
 }
 
 @Dao
@@ -314,6 +386,7 @@ interface SearchDao {
         AND (:allPackages = 1 OR m.conversationId IN (SELECT id FROM conversation WHERE packageName IN (:packages)))
         AND (:fromMs IS NULL OR m.sortKey >= :fromMs)
         AND (:toMs IS NULL OR m.sortKey <= :toMs)
+        AND (m.expiresAtEpochMs IS NULL OR m.expiresAtEpochMs > :now)
         ORDER BY m.sortKey DESC
         LIMIT :limit OFFSET :offset
         """,
@@ -327,6 +400,7 @@ interface SearchDao {
         toMs: Long?,
         limit: Int,
         offset: Int,
+        now: Long,
     ): List<MessageEntity>
 }
 
@@ -376,6 +450,9 @@ interface HealthDao {
 
     @Query("DELETE FROM summary_observation WHERE observedAtEpochMs < :before")
     suspend fun deleteSummariesBefore(before: Long): Int
+
+    @Query("DELETE FROM summary_observation WHERE packageName = :packageName")
+    suspend fun deleteSummariesForPackage(packageName: String): Int
 }
 
 @Dao
@@ -391,6 +468,9 @@ interface DiagnosticsDao {
 
     @Query("DELETE FROM local_diagnostic_event WHERE atEpochMs < :before")
     suspend fun deleteBefore(before: Long): Int
+
+    @Query("DELETE FROM local_diagnostic_event WHERE packageName = :packageName")
+    suspend fun deleteForPackage(packageName: String): Int
 }
 
 data class DiagnosticCount(val code: String, val n: Int)

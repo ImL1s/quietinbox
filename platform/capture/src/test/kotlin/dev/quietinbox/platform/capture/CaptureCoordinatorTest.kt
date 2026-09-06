@@ -3,11 +3,14 @@ package dev.quietinbox.platform.capture
 import android.content.Context
 import android.service.notification.NotificationListenerService
 import dev.quietinbox.core.model.CaptureOrigin
+import dev.quietinbox.core.model.GapPrecision
+import dev.quietinbox.core.model.GapReason
 import dev.quietinbox.core.model.ListenerState
 import dev.quietinbox.core.model.NotificationSnapshot
 import dev.quietinbox.core.model.SourceConfiguration
 import dev.quietinbox.core.testing.Fixtures
 import dev.quietinbox.platform.media.MediaCopier
+import dev.quietinbox.platform.storage.db.VaultMaintenance
 import dev.quietinbox.platform.storage.db.VaultState
 import dev.quietinbox.platform.storage.repo.HealthRepository
 import dev.quietinbox.platform.storage.repo.IngestRepository
@@ -28,6 +31,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import java.util.Collections
 
@@ -105,6 +109,7 @@ class CaptureCoordinatorTest : FunSpec({
         val mediaCopier: MediaCopier = mockk(relaxed = true)
         val listenerAccess: ListenerAccess = mockk(relaxed = true)
         val service: NotificationListenerService = mockk(relaxed = true)
+        val maintenance = VaultMaintenance()
 
         val observedSources = MutableSharedFlow<List<SourceConfiguration>>(replay = 1)
         val vaultState = MutableStateFlow<VaultState>(VaultState.Opening)
@@ -135,7 +140,26 @@ class CaptureCoordinatorTest : FunSpec({
             }
         }
 
-        fun coordinator() = CaptureCoordinator(context, ingest, sources, health, settings, vault, mediaCopier, listenerAccess)
+        /** The source list the coordinator reloads under the pipeline lock; tests mutate it to flip a policy. */
+        val sourceList: MutableList<SourceConfiguration> = Collections.synchronizedList(mutableListOf(sourceConfig(ENABLED_PKG)))
+
+        init {
+            coEvery { sources.sources() } answers { sourceList.toList() }
+            coEvery { sources.setEnabled(any(), any()) } coAnswers {
+                val pkg = firstArg<String>()
+                val enabled = secondArg<Boolean>()
+                val i = sourceList.indexOfFirst { it.packageName == pkg }
+                if (i >= 0) sourceList[i] = sourceList[i].copy(enabled = enabled)
+            }
+            coEvery { sources.setPaused(any(), any()) } coAnswers {
+                val pkg = firstArg<String>()
+                val paused = secondArg<Boolean>()
+                val i = sourceList.indexOfFirst { it.packageName == pkg }
+                if (i >= 0) sourceList[i] = sourceList[i].copy(paused = paused)
+            }
+        }
+
+        fun coordinator() = CaptureCoordinator(context, ingest, sources, health, settings, vault, mediaCopier, listenerAccess, maintenance)
     }
 
     /** Returns once the connect coroutine has finished, so `sessionId` is set. */
@@ -329,5 +353,146 @@ class CaptureCoordinatorTest : FunSpec({
 
         coordinator.offerCaptured(captured("evt-after-disconnect"))
         stillHolds { h.journaled shouldBe emptyList() }
+    }
+
+    // ---- QI-SEC-001: policy changes are ordered against the pipeline lock -------------------
+
+    test("a source disabled while an event waits for the pipeline lock is never journaled") {
+        val h = Harness()
+        val enteredJournal = CompletableDeferred<Unit>()
+        val releaseJournal = CompletableDeferred<Unit>()
+        h.journalAnswers { snapshot ->
+            if (snapshot.eventId == "evt-a") {
+                enteredJournal.complete(Unit)
+                releaseJournal.await()
+            }
+            true
+        }
+        val coordinator = h.coordinator()
+        coordinator.onConnected(h.service)
+        // One round trip so the source list is known and evt-b passes the first (cheap) fence.
+        coordinator.offerCaptured(captured("probe"))
+        awaitUntil { h.journaled shouldBe listOf("probe") }
+
+        coordinator.offerCaptured(captured("evt-a"))
+        withTimeout(5_000) { enteredJournal.await() }
+        // evt-b passed the pre-lock fence: the source is still enabled at this point.
+        coordinator.offerCaptured(captured("evt-b"))
+        // The policy change queues on the pipeline lock behind evt-a and ahead of evt-b (the
+        // mutex is fair), so evt-b's in-lock fence sees the source switched off.
+        val change = launch { coordinator.setSourceEnabled(ENABLED_PKG, enabled = false) }
+        delay(200)
+        releaseJournal.complete(Unit)
+        change.join()
+
+        awaitUntil { coordinator.status.value.droppedAfterRevoke shouldBe 1L }
+        stillHolds { h.journaled shouldBe listOf("probe", "evt-a") }
+        coVerify(exactly = 1) { h.ingest.discardPendingJournal(ENABLED_PKG) }
+        // And nothing new for that source is even queued any more.
+        coordinator.offerCaptured(captured("evt-c"))
+        stillHolds { h.journaled shouldBe listOf("probe", "evt-a") }
+        coordinator.status.value.droppedAfterRevoke shouldBe 1L
+    }
+
+    test("a pause between acceptance and commit leaves the event pending instead of committing it") {
+        val h = Harness()
+        val enteredCheckpoint = CompletableDeferred<Unit>()
+        val releaseCheckpoint = CompletableDeferred<Unit>()
+        coEvery { h.ingest.checkpoint(any()) } coAnswers {
+            enteredCheckpoint.complete(Unit)
+            releaseCheckpoint.await()
+            null
+        }
+        val coordinator = h.coordinator()
+        coordinator.onConnected(h.service)
+
+        // A snapshot with content: the parser yields a candidate, so the pipeline reaches the commit.
+        coordinator.offerCaptured(CapturedNotification(Fixtures.snapshot(Fixtures.base(title = "Alice", text = "hello"), packageName = ENABLED_PKG, eventId = "evt-commit"), null))
+        withTimeout(5_000) { enteredCheckpoint.await() }
+        coordinator.setPaused(true)
+        releaseCheckpoint.complete(Unit)
+
+        awaitUntil { h.journaled shouldBe listOf("evt-commit") }
+        stillHolds { coVerify(exactly = 0) { h.ingest.commit(any(), any(), any(), any(), any(), any(), any()) } }
+        // Not discarded either: it waits in the journal for the resume.
+        coVerify(exactly = 0) { h.ingest.markJournal("evt-commit", "DISCARDED", any()) }
+    }
+
+    test("replay is held while paused and runs on resume") {
+        val h = Harness()
+        coEvery { h.ingest.pendingJournal(any()) } returns emptyList()
+        val coordinator = h.coordinator()
+        coordinator.onConnected(h.service)
+        h.awaitConnected()
+        coordinator.setPaused(true)
+
+        h.vaultState.value = VaultState.Ready(mockk(relaxed = true))
+        stillHolds { coVerify(exactly = 0) { h.ingest.pendingJournal(any()) } }
+
+        coordinator.setPaused(false)
+        coVerify(timeout = 5_000, atLeast = 1) { h.ingest.pendingJournal(any()) }
+    }
+
+    test("replay discards a pending row whose source was disabled since and commits the others") {
+        val h = Harness()
+        val disabled = Fixtures.snapshot(Fixtures.base(title = null, text = null), packageName = UNLISTED_PKG, eventId = "evt-disabled")
+        val enabled = Fixtures.snapshot(Fixtures.base(title = null, text = null), packageName = ENABLED_PKG, eventId = "evt-enabled")
+        var served = false
+        coEvery { h.ingest.pendingJournal(any()) } coAnswers {
+            if (served) emptyList() else { served = true; listOf("gen-old" to disabled, "gen-old" to enabled) }
+        }
+        coEvery { h.ingest.isJournalPending(any()) } returns true
+        val coordinator = h.coordinator()
+        coordinator.onConnected(h.service)
+
+        h.vaultState.value = VaultState.Ready(mockk(relaxed = true))
+
+        coVerify(timeout = 5_000, exactly = 1) { h.ingest.markJournal("evt-disabled", "DISCARDED", "SOURCE_DISABLED") }
+        // The enabled one went through the parser (no content → SKIPPED), i.e. it was processed, not discarded.
+        coVerify(timeout = 5_000, exactly = 1) { h.ingest.markJournal("evt-enabled", "SKIPPED", any()) }
+        coVerify(exactly = 0) { h.ingest.markJournal("evt-enabled", "DISCARDED", any()) }
+        // Replay never re-journals.
+        h.journaled shouldBe emptyList()
+    }
+
+    // ---- QI-SEC-003: a maintenance run is a complete barrier ---------------------------------
+
+    test("a maintenance run drops what was queued, records an exact gap and starts a fresh generation") {
+        val h = Harness()
+        val enteredJournal = CompletableDeferred<Unit>()
+        val releaseJournal = CompletableDeferred<Unit>()
+        h.journalAnswers { snapshot ->
+            if (snapshot.eventId == "evt-a") {
+                enteredJournal.complete(Unit)
+                releaseJournal.await()
+            }
+            true
+        }
+        val coordinator = h.coordinator()
+        coordinator.onConnected(h.service)
+        h.awaitConnected()
+        val before = coordinator.status.value.activeGeneration.shouldNotBeNull()
+
+        coordinator.offerCaptured(captured("evt-a"))
+        withTimeout(5_000) { enteredJournal.await() }
+        coordinator.offerCaptured(captured("evt-b"))
+        val ran = CompletableDeferred<Unit>()
+        val exclusive = launch { h.maintenance.exclusive { ran.complete(Unit) } }
+        // Maintenance is announced before it gets the lock: nothing new is queued from here on.
+        awaitUntil { coordinator.status.value.activeGeneration shouldBe null }
+        coordinator.offerCaptured(captured("evt-during"))
+        releaseJournal.complete(Unit)
+        withTimeout(5_000) { ran.await() }
+        exclusive.join()
+
+        awaitUntil { coordinator.status.value.activeGeneration.shouldNotBeNull() shouldNotBe before }
+        coordinator.status.value.listenerState shouldBe ListenerState.CONNECTED
+        awaitUntil { coordinator.status.value.droppedAfterRevoke shouldBe 1L }
+        stillHolds { h.journaled shouldBe listOf("evt-a") }
+        coVerify(timeout = 5_000) { h.health.endSession(SESSION_ID, any(), "MAINTENANCE") }
+        coVerify(timeout = 5_000) { h.health.recordGap(any(), any(), GapReason.MAINTENANCE, GapPrecision.EXACT, any()) }
+        // Capture works again under the new generation.
+        coordinator.offerCaptured(captured("evt-after"))
+        awaitUntil { h.journaled shouldBe listOf("evt-a", "evt-after") }
     }
 })

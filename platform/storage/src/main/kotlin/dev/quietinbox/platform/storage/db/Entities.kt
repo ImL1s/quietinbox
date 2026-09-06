@@ -48,12 +48,18 @@ data class EventJournalEntity(
     val generation: String,
     val receivedAtEpochMs: Long,
     val expiresAtEpochMs: Long,
-    /** PENDING, COMMITTED, FAILED, SKIPPED */
+    /** PENDING, COMMITTED, FAILED, SKIPPED, DISCARDED */
     val state: String,
     val attempts: Int,
     val failureCode: String?,
-    /** JSON of [dev.quietinbox.core.model.NotificationSnapshot]. */
+    /**
+     * JSON of [dev.quietinbox.core.model.NotificationSnapshot] while the row is PENDING; cleared
+     * (empty string) the moment the row reaches a terminal state, so notification text never
+     * outlives its commit (QI-DATA-004).
+     */
     val payload: String,
+    /** Source package, so a disabled or removed source can discard its pending rows (schema v3). */
+    val packageName: String? = null,
 )
 
 /** Last visible window per notification stream (plan section 8: NotificationCheckpoint). */
@@ -199,6 +205,10 @@ data class DeletionSuppressionEntity(
     val scopeKey: String,
     val fingerprint: String,
     val expiresAtEpochMs: Long,
+    /** Source id of the deleted message when the parser proved one (schema v3, QI-DEDUP-009). */
+    val sourceMessageId: String? = null,
+    /** Post time of the notification the deleted message came from (schema v3, QI-DEDUP-009). */
+    val postedAtEpochMs: Long? = null,
 )
 
 @Entity(

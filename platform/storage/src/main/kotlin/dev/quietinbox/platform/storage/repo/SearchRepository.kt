@@ -30,7 +30,7 @@ class SearchRepository @Inject constructor(
         val tokens = SearchNormalizer.queryTokens(normalized).toList()
         if (tokens.isEmpty()) return emptyList()
         val db = holder.db()
-        val rows = db.searchDao().search(tokens, tokens.size, packages.isEmpty(), packages.toList(), fromMs, toMs, limit, offset)
+        val rows = db.searchDao().search(tokens, tokens.size, packages.isEmpty(), packages.toList(), fromMs, toMs, limit, offset, System.currentTimeMillis())
         val verified = rows.filter { SearchNormalizer.normalize(it.body).contains(normalized) }
         val conversations = verified.map { it.conversationId }.distinct().associateWith { db.conversationDao().get(it) }
         return verified.map { row ->

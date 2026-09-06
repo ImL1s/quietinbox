@@ -187,6 +187,7 @@
     <string name="gap_reason_paused">paused by you</string>
     <string name="gap_reason_overflow">queue overflow</string>
     <string name="gap_reason_first_unlock">before first unlock</string>
+    <string name="gap_reason_maintenance">reset or restore in progress</string>
     <string name="gap_reason_unknown">unknown</string>
     <string name="health_diagnostics_title">Local diagnostics (last 7 days)</string>
     <string name="health_diagnostics_empty">No diagnostic events. Nothing is ever uploaded.</string>
@@ -265,6 +266,7 @@
     <string name="delete_everything_desc">Removes the vault, media, keys and settings. Backups you exported are unaffected.</string>
     <string name="delete_everything_confirm_title">Delete everything?</string>
     <string name="delete_everything_confirm_body">This cannot be undone. Type DELETE to confirm.</string>
+    <string name="delete_everything_failed">Not everything could be deleted (step: %1$s). Nothing was reported as done; try again or clear the app\'s storage from system settings.</string>
     <string name="section_about">About</string>
     <string name="about_version">Version %1$s</string>
     <string name="about_offline">No internet permission · no analytics · no crash reporting</string>

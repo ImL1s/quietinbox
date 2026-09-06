@@ -14,8 +14,10 @@ records what the repository **actually delivers today** and what it does **not**
 | Multi-message parser (MessagingStyle / Inbox / BigText / summary) | Done | 10 JVM tests in `core:parser` |
 | Identity without cross-stream merging | Done | 5 JVM tests in `core:identity` |
 | Dedup with `AMBIGUOUS_REPEAT`, revisions, stale-window handling, resync-as-repost | Done | 20 JVM tests in `core:reconcile` including two 1,000-iteration property tests (the six §7.2 examples plus the closed-window ambiguous repeat are literal test cases) |
-| Encrypted vault (Room + SQLCipher, per-install random key, Keystore-wrapped) | Done | Instrumented tests `VaultRoundTripTest` + `MigrationTest` (1→2) on device; `KeystoreWrapper` sets `setUserAuthenticationRequired(false)` |
-| Journal-first commit, commit fence on revoke | Done | `IngestRepository.commit`, `CaptureCoordinator.process` generation check |
+| Encrypted vault (Room + SQLCipher, per-install random key, Keystore-wrapped) | Done | Instrumented tests `VaultRoundTripTest` + `MigrationTest` (1→2, 2→3) + `KeystoreWrapperTest` (serialised KEK creation) on device; `KeystoreWrapper` sets `setUserAuthenticationRequired(false)` |
+| Journal-first commit, commit fence on revoke / pause / source change / maintenance | Done | `CaptureCoordinator`: admission fence before and inside the pipeline lock, commit fence before the write; source policy changes under the lock; `CaptureCoordinatorTest` (16) |
+| "Delete everything" as a verified, exclusive maintenance run; cipher cache tied to the key epoch | Done | `VaultMaintenance`, `VaultRepository.deleteEverything` → `ResetResult`; `VaultMaintenanceTest` (4), `DeletionGraphTest` on device; reset walked through on the AVD |
+| Deletion graph and read-time expiry (journal payload cleared, media rows/files with their messages, projection rebuilt, expired copies hidden) | Done | `DeletionGraphTest` (5, on device) |
 | Inbox / conversation UI with quality labels | Done | Device screenshots |
 | Search (CJK bigram + Latin trigram, parameterised, paged) | Done | Instrumented test covers 開會 / hel; UI on device |
 | Activity insights (observed-only: overview, heat map, rankings, best time, chattiness, quiet rate, emoji, catchphrases) | Done | 32 JVM tests in `core:analytics` plus 8 in `AnalyticsViewModelTest` (state rules, off-main-thread computation, locked/opening vault); UI on device; at most 50,000 messages per period are loaded (every tab shows a notice when it capped) |

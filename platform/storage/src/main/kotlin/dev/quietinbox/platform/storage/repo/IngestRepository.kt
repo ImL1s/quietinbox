@@ -73,9 +73,13 @@ class IngestRepository @Inject constructor(
             attempts = 0,
             failureCode = null,
             payload = json.encodeToString(NotificationSnapshot.serializer(), snapshot),
+            packageName = snapshot.source.packageName,
         )
         return db.journalDao().insert(row) != -1L
     }
+
+    /** Pending rows of a source the user disabled or removed: discarded, payload cleared (QI-SEC-001). */
+    suspend fun discardPendingJournal(packageName: String): Int = holder.db().journalDao().discardPending(packageName)
 
     suspend fun isJournalPending(eventId: String): Boolean = holder.db().journalDao().state(eventId) == "PENDING"
 

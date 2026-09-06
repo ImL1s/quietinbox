@@ -3,6 +3,7 @@ package dev.quietinbox.platform.crypto
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -28,7 +29,18 @@ class KeyMaterial @Inject constructor(
     val media = WrappedSecretFile(File(dir, "media.key"), "media", wrapper)
     val recovery = WrappedSecretFile(File(dir, "recovery.key"), "recovery", wrapper)
 
+    private val _epoch = AtomicLong(0)
+
+    /**
+     * Incremented by [destroyAll]. A cached primitive built from a secret of an older epoch must be
+     * rebuilt, never reused: after a reset the old media key is gone and anything encrypted with
+     * its cached AEAD could never be decrypted again (QI-SEC-003).
+     */
+    val epoch: Long get() = _epoch.get()
+
     fun keystoreKeyExists(): Boolean = wrapper.exists()
+
+    fun anySecretExists(): Boolean = database.exists() || media.exists() || recovery.exists()
 
     /** True when a vault exists on disk but its key file is missing or no longer opens. */
     fun databaseKeyLooksBroken(): Boolean = database.exists() && database.read() is KeyResult.Failed
@@ -39,5 +51,6 @@ class KeyMaterial @Inject constructor(
         media.delete()
         recovery.delete()
         wrapper.destroy()
+        _epoch.incrementAndGet()
     }
 }

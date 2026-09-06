@@ -107,6 +107,14 @@ fun SettingsScreen(
         }
     }
 
+    val resetFailedText = state.resetFailedStep?.let { stringResource(R.string.delete_everything_failed, it) }
+    LaunchedEffect(state.resetFailedStep) {
+        if (resetFailedText != null) {
+            snackbar.showSnackbar(resetFailedText)
+            viewModel.clearResetResult()
+        }
+    }
+
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = { LargeFlexibleTopAppBar(title = { Text(stringResource(R.string.settings_title)) }, scrollBehavior = scrollBehavior) },

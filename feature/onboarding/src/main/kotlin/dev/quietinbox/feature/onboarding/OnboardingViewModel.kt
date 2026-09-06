@@ -98,7 +98,7 @@ class OnboardingViewModel @Inject constructor(
         val now = System.currentTimeMillis()
         for (choice in local.value.choices) {
             if (choice.packageName in local.value.selected) {
-                runCatching { sources.enable(choice.packageName, choice.label, registry.adapterFor(choice.packageName)?.id, now) }
+                runCatching { coordinator.addSource(choice.packageName, choice.label, registry.adapterFor(choice.packageName)?.id, now) }
             }
         }
     }

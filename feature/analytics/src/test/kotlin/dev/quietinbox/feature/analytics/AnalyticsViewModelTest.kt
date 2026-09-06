@@ -81,7 +81,7 @@ class AnalyticsViewModelTest : FunSpec({
         val health = mockk<HealthRepository> { every { observeGaps(any()) } returns flowOf(emptyList()) }
         // Mirrors DatabaseHolder.flowWithDb: nothing is observable while the vault is not Ready.
         val inbox = mockk<InboxRepository> {
-            every { observeCounts() } returns this@Harness.vaultState.flatMapLatest { v -> if (v is VaultState.Ready) (countsFlow ?: counts) else emptyFlow() }
+            every { observeCounts(any()) } returns this@Harness.vaultState.flatMapLatest { v -> if (v is VaultState.Ready) (countsFlow ?: counts) else emptyFlow() }
         }
         val vault = mockk<VaultRepository> { every { state } returns vaultState }
         val vm = AnalyticsViewModel(analytics, health, inbox, vault)

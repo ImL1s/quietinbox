@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import dev.quietinbox.core.model.SourceConfiguration
 import dev.quietinbox.platform.storage.db.DatabaseHolder
 import dev.quietinbox.platform.storage.db.SourceConfigurationEntity
+import dev.quietinbox.platform.storage.retention.MediaDirectory
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -13,6 +14,7 @@ import javax.inject.Singleton
 @Singleton
 class SourceRepository @Inject constructor(
     private val holder: DatabaseHolder,
+    private val mediaDir: MediaDirectory,
 ) {
     fun observeSources(): Flow<List<SourceConfiguration>> =
         holder.flowWithDb { db -> db.sourceDao().observeAll() }.map { rows -> rows.map { it.toDomain() } }
@@ -53,15 +55,28 @@ class SourceRepository @Inject constructor(
 
     /**
      * Removes a source. Stopping capture and deleting saved copies are separate user decisions
-     * (plan section 2), hence the explicit flag.
+     * (plan section 2), hence the explicit flag. Either way the source's pending journal rows are
+     * discarded: nothing captured for a source that is no longer one may be committed later.
+     * With [deleteData] the whole deletion graph goes in one transaction — conversations (which
+     * cascade to messages, revisions, links and index tokens), media rows, suppression tokens,
+     * summaries and diagnostics — and the media files right after it (QI-DATA-004).
      */
     suspend fun remove(packageName: String, deleteData: Boolean) {
         val db = holder.db()
-        db.withTransaction {
+        val files = db.withTransaction {
             db.sourceDao().delete(packageName)
             db.checkpointDao().deleteForPackage(packageName)
-            if (deleteData) db.conversationDao().deleteForPackage(packageName)
+            db.journalDao().discardPending(packageName)
+            if (!deleteData) return@withTransaction emptyList()
+            val blobs = db.mediaDao().forPackage(packageName)
+            if (blobs.isNotEmpty()) db.mediaDao().delete(blobs.map { it.id })
+            db.conversationDao().deleteForPackage(packageName)
+            db.suppressionDao().deleteForScopePrefix("$packageName|")
+            db.healthDao().deleteSummariesForPackage(packageName)
+            db.diagnosticsDao().deleteForPackage(packageName)
+            blobs.fileNames()
         }
+        for (f in files) mediaDir.delete(f)
     }
 
     companion object {

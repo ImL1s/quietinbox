@@ -11,6 +11,7 @@ import dev.quietinbox.platform.backup.BackupResult
 import dev.quietinbox.platform.backup.BackupService
 import dev.quietinbox.platform.crypto.KeyResult
 import dev.quietinbox.platform.storage.repo.DemoData
+import dev.quietinbox.platform.storage.repo.ResetResult
 import dev.quietinbox.platform.storage.repo.VaultRepository
 import dev.quietinbox.platform.storage.settings.AppSettings
 import dev.quietinbox.platform.storage.settings.SettingsRepository
@@ -31,6 +32,8 @@ data class SettingsUiState(
     val versionName: String = "",
     val recoveryKey: String? = null,
     val busy: Boolean = false,
+    /** Set when "delete everything" did not complete; names the step that failed. */
+    val resetFailedStep: String? = null,
     val lastBackup: BackupResult? = null,
     /** Gates the Developer section; false in every release build. */
     val developerTools: Boolean = false,
@@ -139,10 +142,22 @@ class SettingsViewModel @Inject constructor(
 
     fun clearDemoResult() = local.update { it.copy(lastDemo = null) }
 
+    /**
+     * "Done" is only reported when every step of the reset was verified (QI-SEC-003); otherwise
+     * the failed step is shown and the user stays on this screen.
+     */
     fun deleteEverything(onDone: () -> Unit) = viewModelScope.launch {
-        local.update { it.copy(busy = true) }
-        runCatching { vault.deleteEverything() }
-        local.update { it.copy(busy = false) }
-        onDone()
+        local.update { it.copy(busy = true, resetFailedStep = null) }
+        val result = try {
+            vault.deleteEverything()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            ResetResult.Failed(failure::class.java.simpleName)
+        }
+        local.update { it.copy(busy = false, resetFailedStep = (result as? ResetResult.Failed)?.step) }
+        if (result is ResetResult.Done) onDone()
     }
+
+    fun clearResetResult() = local.update { it.copy(resetFailedStep = null) }
 }

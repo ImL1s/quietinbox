@@ -21,13 +21,18 @@ import javax.inject.Singleton
 class BlobCipher @Inject constructor(
     private val keyMaterial: KeyMaterial,
 ) {
-    @Volatile
-    private var aead: Aead? = null
+    private class Cached(val epoch: Long, val aead: Aead)
 
+    @Volatile
+    private var cached: Cached? = null
+
+    /** The primitive is tied to the key epoch: a reset invalidates it (QI-SEC-003). */
     private fun primitive(): KeyResult<Aead> {
-        aead?.let { return KeyResult.Ok(it) }
+        cached?.takeIf { it.epoch == keyMaterial.epoch }?.let { return KeyResult.Ok(it.aead) }
         synchronized(this) {
-            aead?.let { return KeyResult.Ok(it) }
+            cached?.takeIf { it.epoch == keyMaterial.epoch }?.let { return KeyResult.Ok(it.aead) }
+            cached = null
+            val epoch = keyMaterial.epoch
             val raw = when (val r = keyMaterial.media.getOrCreate()) {
                 is KeyResult.Failed -> return r
                 is KeyResult.Ok -> r.value
@@ -48,7 +53,8 @@ class BlobCipher @Inject constructor(
                     .addEntry(KeysetHandle.importKey(key).withRandomId().makePrimary())
                     .build()
                 val p = handle.getPrimitive(RegistryConfiguration.get(), Aead::class.java)
-                aead = p
+                // A reset that raced this build wins: do not cache a primitive of a dead epoch.
+                if (epoch == keyMaterial.epoch) cached = Cached(epoch, p)
                 KeyResult.Ok(p)
             } catch (e: Exception) {
                 KeyResult.Failed(KeyFailure.Unavailable("tink:${e::class.java.simpleName}"))

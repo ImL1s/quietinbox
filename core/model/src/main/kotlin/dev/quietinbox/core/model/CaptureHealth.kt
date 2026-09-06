@@ -17,6 +17,9 @@ enum class GapReason {
     PAUSED_BY_USER,
     QUEUE_OVERFLOW,
     BEFORE_FIRST_UNLOCK,
+
+    /** A reset or restore held the vault; events during that window were not captured (QI-SEC-003). */
+    MAINTENANCE,
     UNKNOWN,
 }
 

@@ -187,6 +187,7 @@
     <string name="gap_reason_paused">你手動暫停</string>
     <string name="gap_reason_overflow">佇列溢位</string>
     <string name="gap_reason_first_unlock">首次解鎖前</string>
+    <string name="gap_reason_maintenance">重設或還原進行中</string>
     <string name="gap_reason_unknown">原因不明</string>
     <string name="health_diagnostics_title">本機診斷（最近 7 天）</string>
     <string name="health_diagnostics_empty">沒有診斷事件。任何內容都不會被上傳。</string>
@@ -265,6 +266,7 @@
     <string name="delete_everything_desc">移除資料庫、媒體、金鑰與設定。你已匯出的備份不受影響。</string>
     <string name="delete_everything_confirm_title">刪除全部？</string>
     <string name="delete_everything_confirm_body">此操作無法復原。請輸入 DELETE 確認。</string>
+    <string name="delete_everything_failed">未能刪除全部資料（失敗步驟：%1$s）。沒有任何步驟被當成已完成；請再試一次，或到系統設定清除此 App 的儲存空間。</string>
     <string name="section_about">關於</string>
     <string name="about_version">版本 %1$s</string>
     <string name="about_offline">無網路權限 · 無分析 · 無崩潰回報</string>

@@ -76,7 +76,13 @@ class KeystoreWrapper(private val alias: String = DEFAULT_ALIAS) {
         return ks.getKey(alias, null) as? SecretKey
     }
 
-    private fun getOrCreateKey(): SecretKey {
+    /**
+     * The KEK is shared by every wrapped secret (database, media, recovery), so its creation is
+     * serialised process-wide: two callers racing `existingKey() ?: generateKey()` would each mint
+     * a key under the same alias and the loser's wrapped secret could never be unwrapped again
+     * (QI-CRYPTO-005). The alias is re-checked inside the lock.
+     */
+    private fun getOrCreateKey(): SecretKey = synchronized(createLock) {
         existingKey()?.let { return it }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
         val spec = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
@@ -87,7 +93,7 @@ class KeystoreWrapper(private val alias: String = DEFAULT_ALIAS) {
             .setUserAuthenticationRequired(false)
             .build()
         generator.init(spec)
-        return generator.generateKey()
+        generator.generateKey()
     }
 
     private inline fun <T> guard(block: () -> T): KeyResult<T> = try {
@@ -104,6 +110,9 @@ class KeystoreWrapper(private val alias: String = DEFAULT_ALIAS) {
 
     companion object {
         const val DEFAULT_ALIAS = "dev.quietinbox.kek.v1"
+
+        /** One lock per process, not per instance: tests and `KeyMaterial` may hold several wrappers. */
+        private val createLock = Any()
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val IV_BYTES = 12

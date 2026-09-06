@@ -37,6 +37,15 @@ dependencies {
     androidTestImplementation(libs.hilt.android.testing)
     kspAndroidTest(libs.hilt.compiler)
     androidTestImplementation(libs.androidx.work.testing)
+
+    testImplementation(libs.kotest.runner.junit5)
+    testImplementation(libs.kotlinx.coroutines.test)
+}
+
+// JVM specs (the maintenance gate) run on the JUnit Platform; SQLCipher itself is device-only.
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+    systemProperty("kotest.framework.classpath.scanning.autoscan.disable", "true")
 }
 
 room {

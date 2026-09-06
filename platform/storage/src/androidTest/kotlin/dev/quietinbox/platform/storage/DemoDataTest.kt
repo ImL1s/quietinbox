@@ -9,6 +9,7 @@ import dev.quietinbox.platform.storage.db.VaultState
 import dev.quietinbox.platform.storage.repo.DemoDataRepository
 import dev.quietinbox.platform.storage.repo.InboxRepository
 import dev.quietinbox.platform.storage.repo.SearchRepository
+import dev.quietinbox.platform.storage.retention.MediaDirectory
 import io.kotest.matchers.collections.shouldHaveAtLeastSize
 import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
 import io.kotest.matchers.shouldBe
@@ -44,7 +45,7 @@ class DemoDataTest {
         wipe()
         holder = DatabaseHolder(context, KeyMaterial(context))
         demo = DemoDataRepository(holder)
-        inbox = InboxRepository(holder)
+        inbox = InboxRepository(holder, MediaDirectory(context))
         search = SearchRepository(holder)
     }
 

@@ -101,15 +101,17 @@ class HealthViewModel @Inject constructor(
 
     fun setPaused(paused: Boolean) = coordinator.setPaused(paused)
 
-    fun setSourceEnabled(packageName: String, enabled: Boolean) = viewModelScope.launch { runCatching { sourceRepo.setEnabled(packageName, enabled) } }
-    fun setSourcePaused(packageName: String, paused: Boolean) = viewModelScope.launch { runCatching { sourceRepo.setPaused(packageName, paused) } }
+    // Source policy goes through the coordinator so the change lands under the pipeline lock
+    // and no event that was waiting for it is committed against the old policy (QI-SEC-001).
+    fun setSourceEnabled(packageName: String, enabled: Boolean) = viewModelScope.launch { runCatching { coordinator.setSourceEnabled(packageName, enabled) } }
+    fun setSourcePaused(packageName: String, paused: Boolean) = viewModelScope.launch { runCatching { coordinator.setSourcePaused(packageName, paused) } }
 
     fun addSource(app: InstalledApp) = viewModelScope.launch {
-        runCatching { sourceRepo.enable(app.packageName, app.label, registry.adapterFor(app.packageName)?.id, System.currentTimeMillis()) }
+        runCatching { coordinator.addSource(app.packageName, app.label, registry.adapterFor(app.packageName)?.id, System.currentTimeMillis()) }
     }
 
     fun removeSource(packageName: String, deleteData: Boolean) = viewModelScope.launch {
-        runCatching { sourceRepo.remove(packageName, deleteData) }
+        runCatching { coordinator.removeSource(packageName, deleteData) }
     }
 
     fun canPostNotifications(): Boolean = synthetic.canPost()

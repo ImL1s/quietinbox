@@ -79,15 +79,22 @@ class DatabaseHolder @Inject constructor(
 
     fun vaultExists(): Boolean = context.getDatabasePath(QuietInboxDatabase.FILE_NAME).exists()
 
-    /** Closes the vault and deletes every database file. Callers handle key destruction. */
-    suspend fun closeAndDeleteFiles() = withContext(Dispatchers.IO) {
+    /**
+     * Closes the vault and deletes every database file. Callers handle key destruction. Returns
+     * false when any file is still there afterwards; a reset must not report success on hope.
+     */
+    suspend fun closeAndDeleteFiles(): Boolean = withContext(Dispatchers.IO) {
         mutex.withLock {
             (_state.value as? VaultState.Ready)?.db?.close()
             _state.value = VaultState.Opening
             val base = context.getDatabasePath(QuietInboxDatabase.FILE_NAME)
+            var allGone = true
             for (suffix in listOf("", "-wal", "-shm", "-journal")) {
-                File(base.path + suffix).delete()
+                val f = File(base.path + suffix)
+                f.delete()
+                if (f.exists()) allGone = false
             }
+            allGone
         }
     }
 

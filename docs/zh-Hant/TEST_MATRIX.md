@@ -13,11 +13,12 @@
 | L3 真實來源 App | 兩個知情同意的測試帳號、錄影紀錄 | **未執行** | — |
 | L4 故障與效能 | 終止 process、Doze、首次解鎖、撤銷、磁碟上限 | **未執行**（程式中已有 commit 圍籬（generation）；尚無注入故障的測試） | — |
 | L5 發行產物 | 合併後的 manifest、權限傾印、可重現建置 | `tools/check-permissions.sh`（CI）；尚無 SBOM／重建比對 | CI |
-| 真機測試（instrumented）儲存 | 真實的 SQLCipher + Room 遷移 | `VaultRoundTripTest`（日誌 → commit → 搜尋 → 抑制 → 以持久化的金鑰重新開啟；刪除的會話在重播後不會復活）、`MigrationTest`（對照匯出的 schema 執行 1→2）、`DemoDataTest`（示範資料寫入 → 筆數與投影 → 重複寫入不重複 → 清除後不留痕跡） | `./gradlew :platform:storage:connectedDebugAndroidTest` |
-| 真機測試（instrumented）加密 | 在真實檔案系統上的持久化金鑰寫入 | `WrappedSecretFileTest`（資料 fsync → 更名 → 對目錄執行 `Os.fsync`；只建立一次、讀回、巢狀目錄） | `./gradlew :platform:crypto:connectedDebugAndroidTest` |
+| 真機測試（instrumented）儲存 | 真實的 SQLCipher + Room 遷移 | `VaultRoundTripTest`（日誌 → commit → 搜尋 → 抑制 → 以持久化的金鑰重新開啟；刪除的會話在重播後不會復活）、`MigrationTest`（對照匯出的 schema 執行 1→2 與 2→3）、`DemoDataTest`（示範資料寫入 → 筆數與投影 → 重複寫入不重複 → 清除後不留痕跡）、`DeletionGraphTest`（5 個：journal 離開 PENDING 即清空 payload；刪除最新訊息後重算投影；到期副本在 retention 跑之前就隱藏、跑之後投影重算；移除來源並刪資料後不留任何東西；刪除全部經驗證且沒有快取的 cipher 沿用舊金鑰）——共 13 個 | `./gradlew :platform:storage:connectedDebugAndroidTest` |
+| 真機測試（instrumented）加密 | 在真實檔案系統上的持久化金鑰寫入；KEK 建立競態 | `WrappedSecretFileTest`（資料 fsync → 更名 → 對目錄執行 `Os.fsync`；只建立一次、讀回、巢狀目錄）、`KeystoreWrapperTest`（全新 alias 下三把 secret 並行建立、五輪：只有一把 KEK，新的 wrapper 都能讀回） | `./gradlew :platform:crypto:connectedDebugAndroidTest` |
 | 加密 | RFC 5869 測試向量、codec 來回轉換 | `HkdfTest`、`RecoveryKeyCodecTest` | JVM |
 | 備份 staging | 還原讀取器的格式與上限強制 | `BackupStagerTest`（21 個測試：manifest 必須在第一筆、重複 manifest、不支援的版本、end 之後仍有資料、計數不符、每一項大小上限、未知記錄型別） | `./gradlew :platform:backup:testDebugUnitTest` |
-| 擷取協調器 | 以 mock repository 驗證 commit 圍籬與冷啟動 | `CaptureCoordinatorTest`（11 個測試：暫停後丟棄排隊事件、恢復時輪換 generation 與 session、來源清單載入後丟棄非來源套件、取消會傳播） | `./gradlew :platform:capture:testDebugUnitTest` |
+| 擷取協調器 | 以 mock repository 驗證 commit 圍籬與冷啟動 | `CaptureCoordinatorTest`（16 個測試：暫停後丟棄排隊事件、恢復時輪換 generation 與 session、來源清單載入後丟棄非來源套件、取消會傳播；等鎖期間被停用的來源事件永不寫入 journal、接受與 commit 之間的暫停讓事件維持 PENDING、暫停時不重播且恢復後重播、重播會丟棄來源已停用的列、維護執行會丟棄佇列並記錄精確缺口） | `./gradlew :platform:capture:testDebugUnitTest` |
+| 維護閘門 | 金庫工作與重設／還原的先後順序，真實協程 | `VaultMaintenanceTest`（4 個測試：work 正常執行並回傳；exclusive 進行中 work 被拒絕；exclusive 會取消並等待進行中的 work；exclusive 之間與 pipeline 鎖持有者互相序列化） | `./gradlew :platform:storage:testDebugUnitTest` |
 | 分析 ViewModel | 以 mock repository 驗證活動頁的狀態規則 | `AnalyticsViewModelTest`（8 個測試：首份報表不在收集端的執行緒計算、切換期間顯示乾淨的載入佔位（不帶上一期間的截斷標籤）、資料庫變動時安靜重算不顯示載入、保險庫鎖定時顯示鎖定並在解鎖後恢復、頁面開著時鎖定再解鎖且計數不變也會恢復、開啟中維持載入直到就緒、計數查詢失敗不會卡在載入、查詢失敗會把報表標示為可能不完整） | JVM |
 
 ## 計畫所引用的情境編號（已實作成測試的子集）

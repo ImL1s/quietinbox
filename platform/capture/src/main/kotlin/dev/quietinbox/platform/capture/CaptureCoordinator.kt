@@ -18,6 +18,7 @@ import dev.quietinbox.core.reconcile.KnownMessage
 import dev.quietinbox.core.reconcile.Reconciler
 import dev.quietinbox.parsers.apps.AppParsers
 import dev.quietinbox.platform.media.MediaCopier
+import dev.quietinbox.platform.storage.db.VaultMaintenance
 import dev.quietinbox.platform.storage.db.VaultState
 import dev.quietinbox.platform.storage.db.VaultUnavailableException
 import dev.quietinbox.platform.storage.repo.HealthRepository
@@ -37,7 +38,6 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.UUID
@@ -78,6 +78,7 @@ class CaptureCoordinator @Inject constructor(
     private val vault: VaultRepository,
     private val mediaCopier: MediaCopier,
     private val listenerAccess: ListenerAccess,
+    private val maintenance: VaultMaintenance,
 ) {
     /** Pipeline failures must never crash the process: they are recorded as diagnostics instead. */
     private val crashGuard = CoroutineExceptionHandler { _, e ->
@@ -103,12 +104,20 @@ class CaptureCoordinator @Inject constructor(
     @Volatile
     private var activeGeneration: String? = null
 
+    /** Sources the user enabled (paused ones included; see [pausedPackages]). */
     @Volatile
     private var enabledPackages: Set<String> = emptySet()
+
+    /** Enabled sources the user paused: nothing new is accepted, accepted events wait (like a global pause). */
+    @Volatile
+    private var pausedPackages: Set<String> = emptySet()
 
     /** False until the first source list arrived; before that nothing is filtered at offer time. */
     @Volatile
     private var sourcesLoaded: Boolean = false
+
+    @Volatile
+    private var maintenanceStartedAt: Long? = null
 
     @Volatile
     private var paused: Boolean = false
@@ -119,8 +128,12 @@ class CaptureCoordinator @Inject constructor(
     @Volatile
     private var sessionId: Long? = null
 
-    /** Serialises live processing and journal replay so one event is never committed twice. */
-    private val pipelineMutex = Mutex()
+    /**
+     * Serialises live processing, journal replay and source-policy changes so one event is never
+     * committed twice and no event is committed for a source the user just switched off. Shared
+     * with [VaultMaintenance], which holds it for the whole of a reset or restore (QI-SEC-003).
+     */
+    private val pipelineMutex get() = maintenance.pipelineMutex
 
     /** Bitmaps waiting in the queue; bounded so a burst of BigPicture notifications cannot OOM. */
     private val queuedBitmaps = AtomicInteger(0)
@@ -143,10 +156,16 @@ class CaptureCoordinator @Inject constructor(
             }
         }
         scope.launch {
-            sources.observeSources().catch { emit(emptyList()) }.collectLatest { list ->
-                enabledPackages = list.filter { it.enabled && !it.paused }.map { it.packageName }.toSet()
-                sourcesLoaded = true
+            // The emitted list is only a trigger: the policy is re-read from the vault under the
+            // pipeline lock, so a stale emission can never overwrite a change made through
+            // [changeSourcePolicy] (QI-SEC-001).
+            sources.observeSources().catch { emit(emptyList()) }.collectLatest {
+                pipelineMutex.withLock { guarded { loadSourcePolicy() } }
             }
+        }
+        scope.launch {
+            // Plain collect: the start-of-maintenance bookkeeping must not be cancelled by a fast end.
+            maintenance.active.collect { active -> onMaintenance(active) }
         }
         scope.launch {
             vault.state.collectLatest { s ->
@@ -259,6 +278,8 @@ class CaptureCoordinator @Inject constructor(
             guarded {
                 if (value) health.openGap(now, GapReason.PAUSED_BY_USER, GapPrecision.EXACT, now) else health.closeOpenGaps(now, GapReason.PAUSED_BY_USER)
             }
+            // Accepted events waited out the pause in the journal; they are committed now.
+            if (!value) replayJournal()
         }
     }
 
@@ -282,7 +303,94 @@ class CaptureCoordinator @Inject constructor(
         if (pkg == context.packageName) {
             return sbn.notification.extras?.getBoolean(SyntheticNotifications.EXTRA_SYNTHETIC, false) == true
         }
-        return pkg in enabledPackages
+        return pkg in enabledPackages && pkg !in pausedPackages
+    }
+
+    // ---- source policy (QI-SEC-001) ----------------------------------------------------------
+
+    /**
+     * Every change to which sources are captured goes through here: the vault write and the
+     * in-memory policy update happen under the pipeline lock, so an event waiting for the lock
+     * sees the new policy in its second fence, never the old one.
+     */
+    private suspend fun changeSourcePolicy(block: suspend () -> Unit) {
+        pipelineMutex.withLock {
+            block()
+            loadSourcePolicy()
+        }
+    }
+
+    /** Must be called under [pipelineMutex]. */
+    private suspend fun loadSourcePolicy() {
+        val list = sources.sources()
+        enabledPackages = list.filter { it.enabled }.map { it.packageName }.toSet()
+        pausedPackages = list.filter { it.enabled && it.paused }.map { it.packageName }.toSet()
+        sourcesLoaded = true
+    }
+
+    suspend fun addSource(packageName: String, displayName: String, adapterId: String?, now: Long) =
+        changeSourcePolicy { sources.enable(packageName, displayName, adapterId, now) }
+
+    /** Disabling also discards the source's pending journal rows: nothing captured for it may land later. */
+    suspend fun setSourceEnabled(packageName: String, enabled: Boolean) = changeSourcePolicy {
+        sources.setEnabled(packageName, enabled)
+        if (!enabled) ingest.discardPendingJournal(packageName)
+    }
+
+    suspend fun setSourcePaused(packageName: String, paused: Boolean) {
+        changeSourcePolicy { sources.setPaused(packageName, paused) }
+        if (!paused) scope.launch { replayJournal() }
+    }
+
+    /** [SourceRepository.remove] discards the pending journal and, with [deleteData], the whole deletion graph. */
+    suspend fun removeSource(packageName: String, deleteData: Boolean) =
+        changeSourcePolicy { sources.remove(packageName, deleteData) }
+
+    // ---- maintenance (QI-SEC-003) -----------------------------------------------------------
+
+    /**
+     * A reset or restore is starting or finishing. Starting rotates the generation (everything
+     * queued is dropped, nothing new is queued) and ends the capture session; finishing starts a
+     * fresh generation and session, records the window as an exact gap and replays whatever the
+     * journal still holds. Events already inside the pipeline lock are handled by the second
+     * fence, which re-reads [VaultMaintenance.isActive].
+     */
+    private suspend fun onMaintenance(active: Boolean) {
+        val now = System.currentTimeMillis()
+        if (active) {
+            if (maintenanceStartedAt != null) return
+            maintenanceStartedAt = now
+            activeGeneration = null
+            val ended = sessionId
+            sessionId = null
+            // The listener state is left alone: DEGRADED reads as "queue overflow" on the health
+            // page, and a reset or restore is neither a failure nor a disconnect.
+            _status.update { it.copy(activeGeneration = null) }
+            guarded { ended?.let { health.endSession(it, now, "MAINTENANCE") } }
+        } else {
+            val startedAt = maintenanceStartedAt ?: return
+            maintenanceStartedAt = null
+            // The vault may be brand new: the policy is reloaded before the next event is admitted.
+            sourcesLoaded = false
+            val resumed = if (listenerBound && !paused) UUID.randomUUID().toString() else null
+            activeGeneration = resumed
+            _status.update {
+                it.copy(
+                    activeGeneration = resumed,
+                    listenerState = when {
+                        !listenerAccess.isGranted() -> ListenerState.NOT_GRANTED
+                        paused -> ListenerState.PAUSED
+                        resumed != null -> ListenerState.CONNECTED
+                        else -> ListenerState.GRANTED_DISCONNECTED
+                    },
+                )
+            }
+            guarded {
+                if (resumed != null) sessionId = health.startSession(resumed, bootSessionId, now)
+                health.recordGap(startedAt, now, GapReason.MAINTENANCE, GapPrecision.EXACT, now)
+            }
+            replayJournal()
+        }
     }
 
     // ---- pipeline -----------------------------------------------------------------------
@@ -321,7 +429,7 @@ class CaptureCoordinator @Inject constructor(
         val pkg = captured.snapshot.source.packageName
         if (pkg == context.packageName) {
             if (captured.snapshot.origin != CaptureOrigin.SYNTHETIC) return
-        } else if (sourcesLoaded && pkg !in enabledPackages) {
+        } else if (sourcesLoaded && !(pkg in enabledPackages && pkg !in pausedPackages)) {
             return
         }
         enqueue(captured, gen, System.currentTimeMillis())
@@ -348,57 +456,100 @@ class CaptureCoordinator @Inject constructor(
         if (!ok) scope.launch { guarded { health.recordGap(now, now, GapReason.QUEUE_OVERFLOW, GapPrecision.EXACT, now) } }
     }
 
+    /**
+     * Admission fence, evaluated twice: once before waiting for the pipeline lock (cheap drop)
+     * and once more inside it (QI-SEC-001), because a pause, a maintenance run, a revoke or a
+     * source switched off while the event waited must win. Synthetic notifications keep the
+     * own-package exception. Before the source list is known nothing is filtered here; the
+     * in-lock reload makes the second fence real.
+     */
+    private fun admitted(item: Queued): Boolean {
+        val snapshot = item.captured.snapshot
+        if (paused || maintenance.isActive || item.generation != activeGeneration) return false
+        if (snapshot.origin == CaptureOrigin.SYNTHETIC || !sourcesLoaded) return true
+        val pkg = snapshot.source.packageName
+        return pkg in enabledPackages && pkg !in pausedPackages
+    }
+
     private suspend fun process(item: Queued) {
         _status.update { it.copy(queueDepth = (it.queueDepth - 1).coerceAtLeast(0)) }
-        if (item.captured.bitmap != null) queuedBitmaps.decrementAndGet()
         val snapshot = item.captured.snapshot
-        // Commit fence: anything queued before a revoke/pause, or from a source disabled since,
-        // is discarded, never persisted. Synthetic notifications keep the own-package exception.
-        val stillCapturable = !sourcesLoaded || snapshot.source.packageName in enabledPackages || snapshot.origin == CaptureOrigin.SYNTHETIC
-        if (paused || item.generation != activeGeneration || !stillCapturable) {
-            _status.update { it.copy(droppedAfterRevoke = it.droppedAfterRevoke + 1) }
-            return
-        }
-        pipelineMutex.withLock {
-            try {
-                if (!sourcesLoaded) {
-                    enabledPackages = sources.sources().filter { it.enabled && !it.paused }.map { it.packageName }.toSet()
-                    sourcesLoaded = true
-                    if (!(snapshot.source.packageName in enabledPackages || snapshot.origin == CaptureOrigin.SYNTHETIC)) return
-                }
-                val ttl = settings.current().journalTtlHours * 60L * 60L * 1000L
-                if (!ingest.journal(snapshot, item.generation, ttl)) return
-                _status.update { it.copy(acceptedCount = it.acceptedCount + 1) }
-                processJournaled(snapshot, item.generation, item.captured.bitmap)
-            } catch (e: VaultUnavailableException) {
-                _status.update { it.copy(vaultLocked = true, listenerState = ListenerState.DEGRADED) }
-                // The vault went away before the commit (an event journaled first is replayed later;
-                // one not journaled is lost): record an observable gap once per lock-out.
-                if (!vaultGapOpen) {
-                    vaultGapOpen = true
-                    guarded { health.openGap(snapshot.observedAtEpochMs, GapReason.UNKNOWN, GapPrecision.BOUNDED, snapshot.observedAtEpochMs) }
-                }
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                guarded { ingest.markJournalRetryable(snapshot.eventId, e::class.java.simpleName) }
+        // The bitmap is counted until the media copy has finished with it, not until it left the queue.
+        var bitmapHandedOver = false
+        try {
+            if (!admitted(item)) {
+                _status.update { it.copy(droppedAfterRevoke = it.droppedAfterRevoke + 1) }
+                return
             }
+            pipelineMutex.withLock {
+                try {
+                    if (!sourcesLoaded) loadSourcePolicy()
+                    if (!admitted(item)) {
+                        _status.update { it.copy(droppedAfterRevoke = it.droppedAfterRevoke + 1) }
+                        return
+                    }
+                    val ttl = settings.current().journalTtlHours * 60L * 60L * 1000L
+                    if (!ingest.journal(snapshot, item.generation, ttl)) return
+                    _status.update { it.copy(acceptedCount = it.acceptedCount + 1) }
+                    bitmapHandedOver = processJournaled(snapshot, item.generation, item.captured.bitmap)
+                } catch (e: VaultUnavailableException) {
+                    _status.update { it.copy(vaultLocked = true, listenerState = ListenerState.DEGRADED) }
+                    // The vault went away before the commit (an event journaled first is replayed later;
+                    // one not journaled is lost): record an observable gap once per lock-out.
+                    if (!vaultGapOpen) {
+                        vaultGapOpen = true
+                        guarded { health.openGap(snapshot.observedAtEpochMs, GapReason.UNKNOWN, GapPrecision.BOUNDED, snapshot.observedAtEpochMs) }
+                    }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    guarded { ingest.markJournalRetryable(snapshot.eventId, e::class.java.simpleName) }
+                }
+            }
+        } finally {
+            if (item.captured.bitmap != null && !bitmapHandedOver) queuedBitmaps.decrementAndGet()
         }
     }
 
-    private suspend fun processJournaled(snapshot: NotificationSnapshot, generation: String, bitmap: Bitmap?) {
+    /**
+     * True when the event must not be committed now. A source disabled or removed since the
+     * event was accepted discards it for good; a pause (global or per source) or a maintenance
+     * run leaves it PENDING for the next replay. Synthetic notifications only honour the pause.
+     */
+    private suspend fun commitFenced(snapshot: NotificationSnapshot): Boolean {
+        val pkg = snapshot.source.packageName
+        if (snapshot.origin != CaptureOrigin.SYNTHETIC) {
+            if (pkg !in enabledPackages) {
+                ingest.markJournal(snapshot.eventId, "DISCARDED", "SOURCE_DISABLED")
+                return true
+            }
+            if (pkg in pausedPackages) return true
+        }
+        return paused || maintenance.isActive
+    }
+
+    /**
+     * Parses, reconciles and commits one journaled event. Must run under [pipelineMutex].
+     * Returns true when the bitmap was handed to the media copier (which then owns its count).
+     *
+     * Commit fence (QI-SEC-001): a source that was disabled or removed since the event was
+     * accepted discards it for good; a pause (global or per source) or a maintenance run leaves
+     * it PENDING for the next replay.
+     */
+    private suspend fun processJournaled(snapshot: NotificationSnapshot, generation: String, bitmap: Bitmap?): Boolean {
         val now = snapshot.observedAtEpochMs
+        if (commitFenced(snapshot)) return false
         val parser = registry.parserFor(snapshot)
         val batch = try {
             parser.parse(snapshot)
         } catch (e: Exception) {
             ingest.markJournal(snapshot.eventId, "FAILED", "PARSE_${e::class.java.simpleName}")
             ingest.diagnostic("PARSE_EXCEPTION", "${parser.id}@${parser.version}:${e::class.java.simpleName}", snapshot.source.packageName, now)
-            return
+            return false
         }
         if (batch.messages.isEmpty() && batch.summary == null) {
             ingest.markJournal(snapshot.eventId, "SKIPPED", batch.contentStatus.name)
             ingest.diagnostic("SKIPPED_${batch.contentStatus.name}", "${parser.id}@${parser.version}", snapshot.source.packageName, now)
-            return
+            return false
         }
         val id = if (batch.messages.isNotEmpty()) identity.resolve(snapshot, batch) else null
         val reconcile = id?.let { ident ->
@@ -414,6 +565,9 @@ class CaptureCoordinator @Inject constructor(
         val source = sources.get(snapshot.source.packageName)
         val appSettings = settings.current()
         val retentionDays = source?.retentionDays ?: appSettings.retentionDays
+        // Re-checked right before the write: parsing and the id lookups above took time, and a
+        // pause that landed meanwhile must still win (the row stays PENDING for the replay).
+        if (commitFenced(snapshot)) return false
         val outcome = ingest.commit(
             snapshot = snapshot,
             batch = batch,
@@ -426,30 +580,57 @@ class CaptureCoordinator @Inject constructor(
         if (reconcile?.degraded == true) ingest.diagnostic("RECONCILE_DEGRADED", null, snapshot.source.packageName, now)
         if (batch.warnings.isNotEmpty()) ingest.diagnostic("PARSE_WARNINGS", batch.warnings.joinToString(",") { it.name }, snapshot.source.packageName, now)
         if (outcome.pendingMediaMessageIds.isNotEmpty()) {
-            scope.launch { mediaCopier.copyPending(outcome.pendingMediaMessageIds, bitmap) }
+            scope.launch {
+                try {
+                    mediaCopier.copyPending(outcome.pendingMediaMessageIds, bitmap)
+                } finally {
+                    if (bitmap != null) queuedBitmaps.decrementAndGet()
+                }
+            }
+            return bitmap != null
         }
+        return false
     }
 
-    private suspend fun replayJournal() = withContext(Dispatchers.Default) {
-        guarded {
-            // Drain in batches until nothing is pending (a long lock-out can leave > 200 rows).
-            var rounds = 0
-            while (rounds++ < 100) {
-                // Fetch and process under the pipeline mutex so a live event that was journaled
-                // but not yet committed cannot be replayed concurrently.
-                val batch = ingest.pendingJournal()
-                if (batch.isEmpty()) break
-                for ((generation, snapshot) in batch) {
-                    // One event per lock acquisition so live capture is never starved; the
-                    // PENDING re-check inside the lock prevents double processing.
-                    pipelineMutex.withLock {
-                        if (!ingest.isJournalPending(snapshot.eventId)) return@withLock
-                        val replay = snapshot.copy(origin = if (snapshot.origin == CaptureOrigin.SYNTHETIC) snapshot.origin else CaptureOrigin.REPLAY)
-                        try {
-                            processJournaled(replay, generation, null)
-                        } catch (e: Exception) {
-                            if (e is CancellationException) throw e
-                            ingest.markJournalRetryable(snapshot.eventId, "REPLAY_${e::class.java.simpleName}")
+    /**
+     * Commits what the journal still holds. Runs as vault work (refused or cancelled by a
+     * maintenance run) and never while capture is paused: "stop" means nothing is written, and
+     * the accepted events wait for the resume (QI-SEC-001). Each event passes the commit fence
+     * in [processJournaled], so a source disabled since is discarded, not replayed.
+     */
+    private suspend fun replayJournal() {
+        maintenance.work {
+            withContext(Dispatchers.Default) {
+                guarded {
+                    // Drain in batches until nothing is pending (a long lock-out can leave > 200 rows).
+                    var rounds = 0
+                    var progressed = true
+                    while (progressed && rounds++ < 100 && !paused) {
+                        // Fetch and process under the pipeline mutex so a live event that was journaled
+                        // but not yet committed cannot be replayed concurrently.
+                        val batch = ingest.pendingJournal()
+                        if (batch.isEmpty()) break
+                        progressed = false
+                        for ((generation, snapshot) in batch) {
+                            if (paused) break
+                            // One event per lock acquisition so live capture is never starved; the
+                            // PENDING re-check inside the lock prevents double processing.
+                            pipelineMutex.withLock {
+                                if (!sourcesLoaded) loadSourcePolicy()
+                                if (!ingest.isJournalPending(snapshot.eventId)) {
+                                    progressed = true
+                                    return@withLock
+                                }
+                                val replay = snapshot.copy(origin = if (snapshot.origin == CaptureOrigin.SYNTHETIC) snapshot.origin else CaptureOrigin.REPLAY)
+                                try {
+                                    processJournaled(replay, generation, null)
+                                } catch (e: Exception) {
+                                    if (e is CancellationException) throw e
+                                    ingest.markJournalRetryable(snapshot.eventId, "REPLAY_${e::class.java.simpleName}")
+                                }
+                                // A row left PENDING on purpose (paused source, maintenance) must not spin the loop.
+                                if (!ingest.isJournalPending(snapshot.eventId)) progressed = true
+                            }
                         }
                     }
                 }

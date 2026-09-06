@@ -70,4 +70,33 @@ class MigrationTest {
         migrated.execSQL("INSERT INTO deletion_suppression (scopeKey, fingerprint, expiresAtEpochMs) VALUES ('pkg|user:0#title:A', 'fp', 1)")
         migrated.close()
     }
+
+    /** v3 only adds nullable columns: every v2 row survives unchanged and reads back with nulls. */
+    @Test
+    fun migrate2To3AddsNullableColumnsAndKeepsRows() {
+        val name = "$dbName-v3"
+        helper.createDatabase(name, 2).use { db ->
+            db.execSQL(
+                "INSERT INTO event_journal (eventId, generation, receivedAtEpochMs, expiresAtEpochMs, state, attempts, failureCode, payload) " +
+                    "VALUES ('e1', 'g', 1, 2, 'PENDING', 0, NULL, '{}')",
+            )
+            db.execSQL("INSERT INTO deletion_suppression (scopeKey, fingerprint, expiresAtEpochMs) VALUES ('pkg|user:0#title:A', 'fp', 1)")
+        }
+        val migrated = helper.runMigrationsAndValidate(name, 3, true, QuietInboxDatabase.MIGRATION_2_3)
+        migrated.query("SELECT eventId, state, payload, packageName FROM event_journal").use { c ->
+            c.moveToFirst() shouldBe true
+            c.getString(0) shouldBe "e1"
+            c.getString(1) shouldBe "PENDING"
+            c.getString(2) shouldBe "{}"
+            c.isNull(3) shouldBe true
+        }
+        migrated.query("SELECT scopeKey, fingerprint, sourceMessageId, postedAtEpochMs FROM deletion_suppression").use { c ->
+            c.moveToFirst() shouldBe true
+            c.getString(0) shouldBe "pkg|user:0#title:A"
+            c.isNull(2) shouldBe true
+            c.isNull(3) shouldBe true
+        }
+        migrated.execSQL("INSERT INTO event_journal (eventId, generation, receivedAtEpochMs, expiresAtEpochMs, state, attempts, failureCode, payload, packageName) VALUES ('e2', 'g', 1, 2, 'PENDING', 0, NULL, '{}', 'pkg')")
+        migrated.close()
+    }
 }

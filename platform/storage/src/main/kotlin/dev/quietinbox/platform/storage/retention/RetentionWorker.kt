@@ -2,7 +2,7 @@ package dev.quietinbox.platform.storage.retention
 
 import android.content.Context
 import androidx.hilt.work.HiltWorker
-import androidx.work.Constraints
+import androidx.room.withTransaction
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -11,7 +11,9 @@ import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dev.quietinbox.platform.storage.db.DatabaseHolder
+import dev.quietinbox.platform.storage.db.VaultMaintenance
 import dev.quietinbox.platform.storage.db.VaultUnavailableException
+import kotlinx.coroutines.CancellationException
 import dev.quietinbox.platform.storage.settings.SettingsRepository
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -30,9 +32,12 @@ class RetentionWorker @AssistedInject constructor(
     private val retention: RetentionService,
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = try {
-        retention.runOnce(System.currentTimeMillis())
-        Result.success()
+        // Refused (null) or cancelled by a maintenance run: try again later, nothing was lost.
+        if (retention.runOnce(System.currentTimeMillis()) == null) Result.retry() else Result.success()
     } catch (e: VaultUnavailableException) {
+        Result.retry()
+    } catch (e: CancellationException) {
+        if (isStopped) throw e
         Result.retry()
     } catch (e: Exception) {
         Result.failure()
@@ -44,15 +49,28 @@ class RetentionService @Inject constructor(
     private val holder: DatabaseHolder,
     private val settings: SettingsRepository,
     private val mediaDir: MediaDirectory,
+    private val maintenance: VaultMaintenance,
 ) {
-    suspend fun runOnce(now: Long): RetentionReport {
+    /** Null when a maintenance run (reset, restore) is in progress; the worker retries later. */
+    suspend fun runOnce(now: Long): RetentionReport? = maintenance.work { sweep(now) }
+
+    private suspend fun sweep(now: Long): RetentionReport {
         val db = holder.db()
         val s = settings.current()
         var deletedMessages = 0
         while (true) {
             val ids = db.messageDao().expiredIds(now, 500)
             if (ids.isEmpty()) break
-            db.messageDao().delete(ids)
+            // Media rows and the projection go with the messages in one transaction; files after it.
+            val files = db.withTransaction {
+                val conversations = db.messageDao().conversationIdsOf(ids)
+                val blobs = db.mediaDao().forMessages(ids)
+                if (blobs.isNotEmpty()) db.mediaDao().delete(blobs.map { it.id })
+                db.messageDao().delete(ids)
+                db.conversationDao().rebuildProjection(conversations, now)
+                blobs.flatMap { listOfNotNull(it.fileName, it.thumbFileName) }
+            }
+            for (f in files) mediaDir.delete(f)
             deletedMessages += ids.size
         }
         val orphans = db.mediaDao().orphans()
@@ -80,9 +98,9 @@ class RetentionService @Inject constructor(
         const val WORK_NAME = "quietinbox.retention"
 
         fun schedule(context: Context) {
-            val request = PeriodicWorkRequestBuilder<RetentionWorker>(12, TimeUnit.HOURS)
-                .setConstraints(Constraints.Builder().setRequiresBatteryNotLow(true).build())
-                .build()
+            // No battery constraint: the sweep is a few indexed deletes, and an expired copy that
+            // lingers because the phone is at 14 % is a privacy defect, not a saving (QI-DATA-004).
+            val request = PeriodicWorkRequestBuilder<RetentionWorker>(12, TimeUnit.HOURS).build()
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
         }
     }
@@ -112,7 +130,9 @@ class MediaDirectory @Inject constructor(
 
     fun totalBytes(): Long = dir.listFiles()?.sumOf { it.length() } ?: 0L
 
-    fun deleteAll() {
+    /** Deletes every blob; false when a file survived (the caller must not report a reset as done). */
+    fun deleteAll(): Boolean {
         dir.listFiles()?.forEach { it.delete() }
+        return dir.listFiles().isNullOrEmpty()
     }
 }

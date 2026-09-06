@@ -14,6 +14,7 @@ import dev.quietinbox.platform.storage.db.VaultState
 import dev.quietinbox.platform.storage.repo.IngestRepository
 import dev.quietinbox.platform.storage.repo.InboxRepository
 import dev.quietinbox.platform.storage.repo.SearchRepository
+import dev.quietinbox.platform.storage.retention.MediaDirectory
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -45,7 +46,7 @@ class VaultRoundTripTest {
         val keys = KeyMaterial(context)
         holder = DatabaseHolder(context, keys)
         ingest = IngestRepository(holder)
-        inbox = InboxRepository(holder)
+        inbox = InboxRepository(holder, MediaDirectory(context))
         search = SearchRepository(holder)
     }
 
@@ -71,7 +72,7 @@ class VaultRoundTripTest {
         val identity = IdentityResolver()
         val reconciler = Reconciler()
 
-        // Window 1: [A, B]
+        // Window 1: [A, B]. No retention: the fixture timestamps are in 2023 and expired copies are hidden at read time.
         val s1 = Fixtures.snapshot(
             Fixtures.messaging(conversationTitle = "Vault Test", isGroup = true, shortcutId = "sc-1") {
                 message("Alice", "明天開會 A", 1_000)
@@ -85,7 +86,7 @@ class VaultRoundTripTest {
         val b1 = parser.parse(s1)
         val id1 = identity.resolve(s1, b1)
         val r1 = reconciler.reconcile(s1.notificationKey, b1.messages, ingest.checkpoint(id1.streamKey), lookupById = { null })
-        val out1 = ingest.commit(s1, b1, id1, r1, "gen", 30L * 86_400_000, mediaAllowed = true)
+        val out1 = ingest.commit(s1, b1, id1, r1, "gen", null, mediaAllowed = true)
         out1.newMessageIds shouldHaveSize 2
 
         // Window 2: [A, B, C] on the same notification key → only C is new.
@@ -103,7 +104,7 @@ class VaultRoundTripTest {
         val b2 = parser.parse(s2)
         val id2 = identity.resolve(s2, b2)
         val r2 = reconciler.reconcile(s2.notificationKey, b2.messages, ingest.checkpoint(id2.streamKey), lookupById = { null })
-        val out2 = ingest.commit(s2, b2, id2, r2, "gen", 30L * 86_400_000, mediaAllowed = true)
+        val out2 = ingest.commit(s2, b2, id2, r2, "gen", null, mediaAllowed = true)
         out2.newMessageIds shouldHaveSize 1
         out2.conversationId shouldBe out1.conversationId
 
@@ -124,7 +125,7 @@ class VaultRoundTripTest {
         // Deleting suppresses replay of the same fingerprint.
         inbox.deleteMessages(listOf(messages[2].id), s2.observedAtEpochMs, 86_400_000)
         val r3 = reconciler.reconcile(s2.notificationKey, b2.messages, null, lookupById = { null })
-        val out3 = ingest.commit(s2.copy(eventId = "e3"), b2, id2, r3, "gen", 30L * 86_400_000, mediaAllowed = true)
+        val out3 = ingest.commit(s2.copy(eventId = "e3"), b2, id2, r3, "gen", null, mediaAllowed = true)
         out3.suppressedCount shouldBe 1
         // A and B already exist: with no checkpoint they are matched by fingerprint, not duplicated.
         out3.newMessageIds shouldHaveSize 0
@@ -148,7 +149,7 @@ class VaultRoundTripTest {
         (holder.state.value as VaultState.Ready).db.close()
         val again = DatabaseHolder(context, KeyMaterial(context))
         withTimeout(20_000) { again.state.filterIsInstance<VaultState.Ready>().first() }
-        val rows = InboxRepository(again).observeConversations(false, emptySet()).first()
+        val rows = InboxRepository(again, MediaDirectory(context)).observeConversations(false, emptySet()).first()
         rows shouldHaveSize 1
         rows[0].lastMessagePreview shouldBe "persist me"
         again.state.value.shouldBeInstanceOf<VaultState.Ready>()

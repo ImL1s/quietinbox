@@ -49,7 +49,7 @@ abstract class QuietInboxDatabase : RoomDatabase() {
     abstract fun demoDao(): DemoDao
 
     companion object {
-        const val VERSION = 2
+        const val VERSION = 3
         const val FILE_NAME = "quietinbox.vault"
 
         /**
@@ -81,6 +81,20 @@ abstract class QuietInboxDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2)
+        /**
+         * v2 -> v3: the journal remembers the source package (so a disabled or removed source can
+         * discard its pending rows) and a deletion token remembers the deleted message's source id
+         * and post time (so suppression can tell a replay from a genuinely new message). Columns
+         * are added nullable; no row is rewritten and no user content is touched.
+         */
+        val MIGRATION_2_3: Migration = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE event_journal ADD COLUMN packageName TEXT")
+                db.execSQL("ALTER TABLE deletion_suppression ADD COLUMN sourceMessageId TEXT")
+                db.execSQL("ALTER TABLE deletion_suppression ADD COLUMN postedAtEpochMs INTEGER")
+            }
+        }
+
+        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
     }
 }

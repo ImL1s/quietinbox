@@ -29,7 +29,12 @@ data class AppSettings(
     val screenshotProtection: Boolean = true,
     val dynamicColor: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
-    val mediaCopyEnabled: Boolean = true,
+    /**
+     * Effective value: media is copied only when the switch is on **and** the disclosure was
+     * accepted (QI-PRIV-002). Off on a fresh install; an existing install that had the old
+     * default but never saw the disclosure reads as off too.
+     */
+    val mediaCopyEnabled: Boolean = false,
     val mediaDisclosureAccepted: Boolean = false,
     val remindersEnabled: Boolean = false,
     val reminderHour: Int = 20,
@@ -74,7 +79,7 @@ class SettingsRepository @Inject constructor(
             screenshotProtection = p[Keys.screenshot] ?: true,
             dynamicColor = p[Keys.dynamicColor] ?: false,
             themeMode = p[Keys.theme]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM,
-            mediaCopyEnabled = p[Keys.mediaCopy] ?: true,
+            mediaCopyEnabled = (p[Keys.mediaCopy] ?: false) && (p[Keys.mediaDisclosure] ?: false),
             mediaDisclosureAccepted = p[Keys.mediaDisclosure] ?: false,
             remindersEnabled = p[Keys.reminders] ?: false,
             reminderHour = p[Keys.reminderHour] ?: 20,

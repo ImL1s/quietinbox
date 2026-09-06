@@ -12,4 +12,5 @@ dependencies {
     api(project(":core:model"))
     implementation(project(":platform:crypto"))
     implementation(project(":platform:storage"))
+    implementation(libs.androidx.room.runtime)
 }

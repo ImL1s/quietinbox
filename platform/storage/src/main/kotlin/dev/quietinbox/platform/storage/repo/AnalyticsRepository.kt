@@ -18,7 +18,7 @@ class AnalyticsRepository @Inject constructor(
      * that receives exactly [limit] rows must tell the user the period was capped.
      */
     suspend fun messagesBetween(since: Long, until: Long, limit: Int = MESSAGE_CAP): List<ObservedMessage> =
-        holder.db().messageDao().statsBetween(since, until, limit).asReversed().map {
+        holder.db().messageDao().statsBetween(since, until, limit, System.currentTimeMillis()).asReversed().map {
             ObservedMessage(
                 conversationId = it.conversationId,
                 packageName = it.packageName,
@@ -41,7 +41,7 @@ class AnalyticsRepository @Inject constructor(
     /** Summary-only observations inside a closed period (a past month must not count later summaries). */
     suspend fun summaryCountBetween(since: Long, until: Long): Int = holder.db().healthDao().summaryCountBetween(since, until)
 
-    suspend fun earliestTimestamp(): Long? = holder.db().messageDao().earliestSortKey()
+    suspend fun earliestTimestamp(): Long? = holder.db().messageDao().earliestSortKey(System.currentTimeMillis())
 
     companion object {
         /** Upper bound on messages loaded into memory for one analytics computation. */
