@@ -79,6 +79,9 @@ private class Held(
     val heldAtEpochMs: Long,
 ) {
     val packageName: String get() = sbn?.packageName ?: captured!!.snapshot.source.packageName
+
+    /** The framework's identity of this post (key + post time); metadata, read only for a capturable source. */
+    val postId: String? get() = sbn?.let { it.key + "|" + it.postTime }
 }
 
 /**
@@ -484,19 +487,19 @@ class CaptureCoordinator @Inject constructor(
             // The evicted ones arrived before every survivor: the gap starts at the first eviction.
             recordColdStartLoss(since ?: items.minOfOrNull { it.heldAtEpochMs })
         }
-        // A notification still in the shade was offered again by the reconnect's resync and is
-        // held twice: the current copy is captured below, so the stale copy is no loss.
-        val liveKeys = items.mapNotNullTo(HashSet()) { if (it.generation == activeGeneration && !paused) it.sbn?.key else null }
-        var staleSince: Long? = null
+        // One reading of the generation and the pause for the whole batch: a disconnect or pause
+        // landing mid-loop must not turn a later item stale against an earlier one's snapshot
+        // (round-15 finding). An item queued under a generation that dies right after is fenced
+        // by the consumer like any other queued event.
+        val liveGeneration = activeGeneration
+        val livePaused = paused
+        val stale = ArrayList<Held>()
+        // The posts actually queued (framework key + post time, metadata like the package name):
+        // a stale copy of one of them was offered again by the reconnect's resync, so it is no loss.
+        val queuedPosts = HashSet<String>()
         for (h in items) {
-            // Held under an older generation, or while paused: a disconnect, pause or maintenance
-            // happened meanwhile. Its gap starts at that event, later than this arrival, so a
-            // capturable source's held window is recorded on its own below (round-13 finding); an
-            // overflow gap above already starts before every survivor.
-            if (h.generation != activeGeneration || paused) {
-                val pkg = h.packageName
-                val capturable = pkg in enabledPackages && pkg !in pausedPackages
-                if (dropped == 0 && capturable && h.sbn?.key !in liveKeys) staleSince = minOf(staleSince ?: h.heldAtEpochMs, h.heldAtEpochMs)
+            if (h.generation != liveGeneration || livePaused) {
+                stale += h
                 continue
             }
             val pkg = h.packageName
@@ -509,8 +512,22 @@ class CaptureCoordinator @Inject constructor(
                 }
                 .getOrNull() ?: continue
             enqueue(captured, h.generation, h.heldAtEpochMs)
+            h.postId?.let { queuedPosts += it }
         }
-        if (staleSince != null) recordColdStartLoss(staleSince)
+        // Held under an older generation, or while paused: a disconnect, pause or maintenance
+        // happened meanwhile. Its gap starts at that event, later than this arrival, so a
+        // capturable source's held window is recorded on its own (round-13 finding); an overflow
+        // gap above already starts before every survivor.
+        if (dropped == 0) {
+            var staleSince: Long? = null
+            for (h in stale) {
+                val pkg = h.packageName
+                if (!(pkg in enabledPackages && pkg !in pausedPackages)) continue
+                if (h.postId in queuedPosts) continue
+                staleSince = minOf(staleSince ?: h.heldAtEpochMs, h.heldAtEpochMs)
+            }
+            if (staleSince != null) recordColdStartLoss(staleSince)
+        }
     }
 
     /**

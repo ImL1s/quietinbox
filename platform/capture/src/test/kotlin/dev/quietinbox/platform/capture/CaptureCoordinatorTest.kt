@@ -522,8 +522,13 @@ class CaptureCoordinatorTest : FunSpec({
 
     /** A framework notification object: only `packageName` is ever touched before the policy is known. */
     var nextSbn = 0
-    fun sbnOf(pkg: String, key: String = "0|$pkg|${++nextSbn}|null|10000"): StatusBarNotification =
-        mockk(relaxed = true) { every { packageName } returns pkg; every { this@mockk.key } returns key }
+    fun sbnOf(pkg: String, id: Int = ++nextSbn, key: String = "0|$pkg|$id|null|10000", postTime: Long = 0L): StatusBarNotification =
+        mockk(relaxed = true) {
+            every { packageName } returns pkg
+            every { this@mockk.id } returns id
+            every { this@mockk.key } returns key
+            every { this@mockk.postTime } returns postTime
+        }
 
     test("before the source list is known a notification is held unread; once known, only sources are snapshotted") {
         val h = Harness()
@@ -565,10 +570,7 @@ class CaptureCoordinatorTest : FunSpec({
         coordinator.onConnected(h.service)
 
         // 300 notifications while the vault is still opening: more than the buffer holds.
-        for (i in 1..300) {
-            val pkg = if (i % 2 == 0) ENABLED_PKG else UNLISTED_PKG
-            coordinator.onPosted(mockk(relaxed = true) { every { packageName } returns pkg; every { id } returns i })
-        }
+        for (i in 1..300) coordinator.onPosted(sbnOf(if (i % 2 == 0) ENABLED_PKG else UNLISTED_PKG, id = i))
         vaultOpen.complete(Unit)
 
         // The drop is not hidden: one bounded COLD_START gap for the overflowed batch...
@@ -751,7 +753,7 @@ class CaptureCoordinatorTest : FunSpec({
         val coordinator = h.coordinator().also { it.snapshotFactory = factory }
         coordinator.onConnected(h.service)
 
-        for (i in 1..300) coordinator.onPosted(mockk(relaxed = true) { every { packageName } returns ENABLED_PKG; every { id } returns i })
+        for (i in 1..300) coordinator.onPosted(sbnOf(ENABLED_PKG, id = i))
         vaultOpen.complete(Unit)
         coVerify(timeout = 5_000, exactly = 1) { h.health.recordGap(any(), any(), GapReason.COLD_START, GapPrecision.BOUNDED, any()) }
         awaitUntil { h.journaled.size shouldBe 256 }
@@ -785,6 +787,57 @@ class CaptureCoordinatorTest : FunSpec({
         // The current copy is captured; the stale copy and the paused source's notification are no loss.
         awaitUntil { h.journaled shouldBe listOf("evt-live") }
         stillHolds { coVerify(exactly = 0) { h.health.recordGap(any(), any(), GapReason.COLD_START, any(), any()) } }
+    }
+
+    test("a stale copy with the same key but an older post time is a loss of its own") {
+        val h = Harness()
+        val factory: SnapshotFactory = mockk()
+        every { factory.create(any(), any(), any(), any()) } answers { captured("evt-live", pkg = firstArg<StatusBarNotification>().packageName) }
+        val vaultOpen = CompletableDeferred<Unit>()
+        coEvery { h.sources.sources() } coAnswers { vaultOpen.await(); listOf(sourceConfig(ENABLED_PKG)) }
+        val coordinator = h.coordinator().also { it.snapshotFactory = factory }
+        coordinator.onConnected(h.service)
+
+        // The app replaced the notification's content under the same key while the listener was away.
+        coordinator.onPosted(sbnOf(ENABLED_PKG, id = 42, postTime = 1_000L))
+        coordinator.onDisconnected()
+        coordinator.onConnected(h.service)
+        coordinator.onPosted(sbnOf(ENABLED_PKG, id = 42, postTime = 2_000L))
+        vaultOpen.complete(Unit)
+
+        awaitUntil { h.journaled shouldBe listOf("evt-live") }
+        coVerify(timeout = 5_000, exactly = 1) { h.health.recordGap(any(), any(), GapReason.COLD_START, GapPrecision.BOUNDED, any()) }
+    }
+
+    test("a disconnect landing while held notifications are released does not let a later one suppress itself") {
+        val h = Harness()
+        val factory: SnapshotFactory = mockk()
+        val coordinatorRef = CompletableDeferred<CaptureCoordinator>()
+        every { factory.create(any(), any(), any(), any()) } answers {
+            val sbn = firstArg<StatusBarNotification>()
+            // The listener is rebound in the middle of the release, right after the first snapshot.
+            if (sbn.id == 1) coordinatorRef.getCompleted().onDisconnected()
+            captured("evt-${sbn.id}", pkg = sbn.packageName)
+        }
+        val vaultOpen = CompletableDeferred<Unit>()
+        coEvery { h.sources.sources() } coAnswers { vaultOpen.await(); listOf(sourceConfig(ENABLED_PKG)) }
+        val coordinator = h.coordinator().also { it.snapshotFactory = factory }
+        coordinatorRef.complete(coordinator)
+        coordinator.onConnected(h.service)
+
+        coordinator.onPosted(sbnOf(ENABLED_PKG, id = 1))
+        coordinator.onPosted(sbnOf(ENABLED_PKG, id = 2))
+        vaultOpen.complete(Unit)
+
+        // Both are decided against the generation the release started with: the second is
+        // snapshotted and queued (then fenced by the consumer like any queued event), never
+        // judged stale against its own key and dropped without a trace.
+        awaitUntil { coordinator.status.value.droppedAfterRevoke shouldBe 2L }
+        coVerify(exactly = 2) { factory.create(any(), any(), any(), any()) }
+        stillHolds {
+            h.journaled shouldBe emptyList()
+            coVerify(exactly = 0) { h.health.recordGap(any(), any(), GapReason.COLD_START, any(), any()) }
+        }
     }
 
     test("a notification held across a disconnect is recorded as a gap, not dropped silently") {
