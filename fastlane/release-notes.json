@@ -1,22 +1,22 @@
 [
   {
     "language": "en-US",
-    "text": "0.1.1 fixes the independent security audit's findings: stopping, pausing or removing a source really stops its copies; image copies stay off until you accept the disclosure; \"Delete all data\" is verified step by step; deleted content leaves the event journal; expired copies are hidden at once; search never misses a later match; backups skip expired copies and report unreadable media; reminders fire only when something is unread; the Activity page no longer spins while the vault is locked."
+    "text": "0.1.2 adds Simplified Chinese, Japanese and Korean with a per-app language setting on Android 13+; dates and times follow the app language, and the date and time pickers are Chinese for Chinese users. It also carries the 0.1.1 audit fixes: stopping, pausing or removing a source really stops its copies; image copies stay off until you accept the disclosure; \"Delete all data\" is verified step by step; search never misses a later match; reminders fire only when something is unread."
   },
   {
     "language": "zh-TW",
-    "text": "0.1.1 修正獨立安全審計的發現：停止、暫停或移除來源後，副本真的不會再被保存；圖片複製在你接受揭露前維持關閉；「刪除所有資料」逐步驗證；已刪內容不再殘留在事件日誌；到期副本立即隱藏；搜尋不會漏掉後面的命中；備份排除到期副本並回報無法納入的媒體；提醒只在有未讀時發出。活動頁在保險庫鎖定時不再無限轉圈。"
+    "text": "0.1.2 新增簡體中文、日文與韓文，Android 13 以上可在系統設定為 App 單獨選擇語言；日期與時間跟著 App 語言顯示，日期／時間選擇器對中文使用者也是中文。同時包含 0.1.1 的安全審計修正：停止、暫停或移除來源後副本真的不再保存；圖片複製在你接受揭露前維持關閉；「刪除所有資料」逐步驗證；到期副本立即隱藏；搜尋不會漏掉後面的命中；提醒只在有未讀時發出。"
   },
   {
     "language": "zh-CN",
-    "text": "0.1.1 修正独立安全审计的发现：停止、暂停或移除来源后，副本真的不会再被保存；图片复制在你接受披露前保持关闭；“删除所有数据”逐步验证；已删内容不再残留在事件日志；到期副本立即隐藏；搜索不会漏掉后面的命中；备份排除到期副本并报告无法纳入的媒体；提醒只在有未读时发出。活动页在保险库锁定时不再无限转圈。"
+    "text": "0.1.2 新增简体中文、日语和韩语，Android 13 及以上可在系统设置中为应用单独选择语言；日期和时间跟随应用语言显示，日期/时间选择器对中文用户也是中文。同时包含 0.1.1 的安全审计修正：停止、暂停或移除来源后副本真的不再保存；图片复制在你接受披露前保持关闭；“删除所有数据”逐步验证；到期副本立即隐藏；搜索不会漏掉后面的命中；提醒只在有未读时发出。"
   },
   {
     "language": "ja-JP",
-    "text": "0.1.1 は独立したセキュリティ監査の指摘を修正: ソースの停止・一時停止・削除でコピーの保存が確実に止まる、画像のコピーは注意事項に同意するまでオフ、「すべてのデータを削除」は段階ごとに検証、削除した内容がイベントジャーナルに残らない、期限切れのコピーは即座に非表示、検索が後続の一致を見逃さない、バックアップは期限切れを除外し含められなかったメディアを報告、リマインダーは未読があるときだけ通知。保管庫ロック中に活動画面が回り続けなくなりました。"
+    "text": "0.1.2 では簡体字中国語・日本語・韓国語を追加し、Android 13 以降のアプリごとの言語設定に対応しました。日付と時刻はアプリの言語に従い、日付・時刻の選択画面も中国語ユーザーには中国語で表示されます。0.1.1 のセキュリティ監査の修正も含みます: ソースの停止・一時停止・削除でコピーの保存が確実に止まる、画像のコピーは注意事項に同意するまでオフ、「すべてのデータを削除」は段階ごとに検証、期限切れのコピーは即座に非表示、検索が後続の一致を見逃さない、リマインダーは未読があるときだけ通知。"
   },
   {
     "language": "ko-KR",
-    "text": "0.1.1은 독립 보안 감사의 지적 사항을 수정합니다: 소스를 중지·일시중지·제거하면 사본 저장이 확실히 멈춤, 이미지 복사는 안내에 동의하기 전까지 꺼짐, ‘모든 데이터 삭제’를 단계별로 검증, 삭제한 내용이 이벤트 저널에 남지 않음, 만료된 사본은 즉시 숨김, 검색이 뒤쪽 일치를 놓치지 않음, 백업은 만료된 사본을 제외하고 포함하지 못한 미디어를 보고, 리마인더는 읽지 않은 항목이 있을 때만 발송. 보관소가 잠긴 동안 활동 화면이 계속 돌지 않습니다."
+    "text": "0.1.2에서는 중국어 간체, 일본어, 한국어를 추가하고 Android 13 이상의 앱별 언어 설정을 지원합니다. 날짜와 시간은 앱 언어를 따르며, 날짜·시간 선택 화면도 중국어 사용자에게 중국어로 표시됩니다. 0.1.1의 보안 감사 수정 사항도 포함합니다: 소스를 중지·일시중지·제거하면 사본 저장이 확실히 멈춤, 이미지 복사는 안내에 동의하기 전까지 꺼짐, ‘모든 데이터 삭제’를 단계별로 검증, 만료된 사본은 즉시 숨김, 검색이 뒤쪽 일치를 놓치지 않음, 리마인더는 읽지 않은 항목이 있을 때만 발송."
   }
 ]

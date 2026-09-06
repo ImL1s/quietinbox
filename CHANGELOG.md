@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows Keep
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.2] — 2026-09-06
+
+`versionCode` 6. Three more UI languages and the review rounds 13–23 fixes on top of 0.1.1. Play users update from 0.1.0 straight to 0.1.2 (0.1.1 was released on GitHub only), so the store notes for `versionCode` 6 also carry the 0.1.1 audit fixes.
+
 ### Added
 - Simplified Chinese (zh-Hans), Japanese (ja) and Korean (ko) localisations of every UI string and the listener label, an Android 13+ per-app language list (`locales_config.xml`), and Google Play listings, release notes and what's-new texts for zh-CN, ja-JP and ko-KR. `tools/check-strings.py` (run in CI) fails the build when any catalogue is missing a name, a placeholder or a plurals `other` item. The demo vault speaks the app's language too (`DemoLocalisation`: names, group titles and bodies in zh-Hans / ja / ko), so the store screenshots for the new languages read naturally. `localeFilters` also keeps the AndroidX `zh-rCN` / `zh-rTW` / `zh-rHK` resources, so the material3 date and time pickers and content descriptions are Chinese for Chinese users (they were English in 0.1.0 and 0.1.1).
 
@@ -59,6 +65,10 @@ All notable changes to this project are documented here. The format follows Keep
 ### Changed
 - Round 7 review: the activity page's loading placeholder no longer carries the previous period's report or "capped" honesty label; a locked vault is shown as "Vault locked" on the activity page instead of an endless spinner, and an opening vault keeps loading until it is ready; a failing vault-count query emits a fallback tick and retries with back-off instead of silently ending the recompute ticks; every query in the analytics computation propagates cancellation through one helper; cancellation is checked between the CPU stages so a period switch during a notification burst is not starved; the period chips reflect a tap at once even while a slow query is still being cancelled.
 - Round 8 review: the vault state is now the outer signal of the analytics pipeline (`flatMapLatest`), so unlocking the vault recovers the activity page even when the message counts did not change; the ViewModel test harness mirrors the storage layer (counts are observable only while the vault is ready) and no longer depends on coroutine worker thread names; a query that fails during a computation now marks the report "may be incomplete" (honesty label) instead of silently showing a smaller report; the count-query back-off restarts after a minute without failures (a flapping query keeps backing off).
+
+### Known issues in 0.1.1 (fixed in 0.1.2)
+- The material3 date and time pickers and AndroidX content descriptions were English for Chinese users: `localeFilters` kept only the app's own `b+zh+Hant` catalogue and dropped the AndroidX `zh-rTW` / `zh-rCN` / `zh-rHK` resources (also in 0.1.0).
+- Dates and times did not follow an Android 13+ per-app language while the process stayed alive (the notification listener keeps it alive): a user who switched QuietInbox to Traditional Chinese on an English system saw Chinese strings with English dates and AM/PM times until the process restarted (also in 0.1.0).
 
 ## [0.1.0] — 2026-09-06
 
