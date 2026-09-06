@@ -11,15 +11,19 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 
-/** Locale-aware, time-zone-explicit formatting helpers (never fabricate precision). */
+/**
+ * Locale-aware, time-zone-explicit formatting helpers (never fabricate precision). The locale is
+ * required on purpose: the UI passes [currentLocale], and a default of `Locale.getDefault()` would
+ * quietly bring back the process-default bug the moment a call site forgot it.
+ */
 object TimeFormat {
-    fun time(epochMs: Long, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String =
+    fun time(epochMs: Long, zone: ZoneId = ZoneId.systemDefault(), locale: Locale): String =
         DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale).format(Instant.ofEpochMilli(epochMs).atZone(zone))
 
-    fun dateTime(epochMs: Long, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String =
+    fun dateTime(epochMs: Long, zone: ZoneId = ZoneId.systemDefault(), locale: Locale): String =
         DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).withLocale(locale).format(Instant.ofEpochMilli(epochMs).atZone(zone))
 
-    fun date(epochMs: Long, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String =
+    fun date(epochMs: Long, zone: ZoneId = ZoneId.systemDefault(), locale: Locale): String =
         DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale).format(Instant.ofEpochMilli(epochMs).atZone(zone))
 
     fun localDate(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): LocalDate = Instant.ofEpochMilli(epochMs).atZone(zone).toLocalDate()

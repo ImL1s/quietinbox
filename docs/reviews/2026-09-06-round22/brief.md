@@ -1,0 +1,17 @@
+# Review round 22 (mini re-review of the round-21 fixes) — QuietInbox
+
+DO NOT activate workflow modes; READ-ONLY review only. No edits, no state-changing git, no instrumented tests, no devices.
+
+Repository: /Users/iml1s/Documents/mine/quietinbox, branch main. Review `git diff 8954af1..b813c41` (one commit, `b813c41`). Round-21 reports: `docs/reviews/2026-09-06-round21/{gemini-3.8-flash-high-agy,claude-subagent}.md` — this commit answers the subagent's Important I-1 (process-default locale) and Minors 1–4, and its observations 1–4, 6, 7. Verify against the diff:
+
+1. App: `currentLocale()` in `core/designsystem/.../Formatting.kt` (composition locale via `LocalConfiguration.current.locales`), used by `relativeTime`, `dayLabel` and every `TimeFormat.*` call in `InboxScreen` (gap times), `HealthScreen` (gap start/end, connected-since), `AnalyticsScreen` (range dates, `oneDecimal(value, locale)`), `ConversationScreen` (message times). Is any UI formatting still on `Locale.getDefault()` (grep the feature and app modules; `ReminderScheduler` / notifications outside Compose are a different question — say whether they need it)? Are the `currentLocale()` calls inside inline lambdas (`let`, `buildString`) valid composable calls? `TimeFormatTest` (2): does it really fail if the formatters ignored the given locale (mentally patch `withLocale(locale)` out)?
+2. Tool (`tools/demo-screenshots.sh`): app language set + confirmed (`app_locale_is`, dump captured into a variable) *before* `allow_listener` / `pm grant`, then `am force-stop` before `am start`; `assert_locale_clock` (skipped for en-US) before shots 1, 2, 4, 5 with the `has-english-clock` regex `\b(AM|PM)\b|\b(Jan|…|Dec) \d` — false positives on demo bodies? (\"Reminder: the retro meeting moved to Thursday 16:00\", URLs, \"Sounds good — let's keep the meeting short\"; none contain a month + digit or AM/PM; \"May\" + digit?); `conversation_ready` = pinned title present AND `has_tab "$NAV_INBOX"` false; a lingering input method now `die`s; `query_shown` retried 5×; ENTER wording; `wait_text` \"attempts\". Claimed: all five locales ran green with the assertions on (ja-JP needed the retry once), smallest PNG 145 KB.
+3. Docs: CHANGELOG Fixed entry + 212 JVM; TEST_MATRIX en/zh (Design system row incl. `TimeFormatTest`, harness bullet), CLAUDE.md (working rule + audit trail 10–21), reviews index rows 20 (`8954af1`, ENTER wording) and 21 (fix column \"follow-up commit\" — expected until the next docs commit); zh TEST_MATRIX stray space removed; `DemoReceiver` constant order.
+4. Screenshots: 35 PNGs replaced again; open a few read-only: ja-JP / ko-KR `1_inbox`, `2_conversation`, `4_activity`, `5_capture` must show 24-hour or 오전/오후 times and yyyy/MM/dd or yyyy. M. d. dates; `3_search` shows \"meeting\" with results and no keyboard; docs/ and fastlane/ copies identical.
+Claimed verification: parity OK; `./gradlew :app:assembleDebug test lint` green (212 JVM, 0 lint errors); androidTest sources compile.
+
+You may run `python3 tools/check-strings.py`, `bash -n tools/demo-screenshots.sh`, `./gradlew :core:designsystem:testDebugUnitTest --console=plain -q` (ANDROID_HOME=$HOME/Library/Android/sdk); no instrumented tests, no devices.
+
+## Output format (繁體中文)
+- Verdict: APPROVE | APPROVE WITH MINOR FIXES | REQUEST CHANGES
+- Round-21 verification table (finding → fixed? evidence); new findings (Critical / Important / Minor) with concrete scenario and file:line; other observations

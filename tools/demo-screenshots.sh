@@ -136,15 +136,40 @@ def main():
         return 1
 
     if command == "has-english-clock":
-        # An AM/PM time or an English month before a day number anywhere on screen: what a CJK
-        # locale shows when the process default locale lagged behind the app language.
+        # An AM/PM time or an English month before a day number in one of the app's own nodes
+        # (argv[2] is the package; the status bar clock belongs to SystemUI and is ignored): what
+        # a CJK locale shows when the process default locale lagged behind the app language.
+        package = sys.argv[2]
         pattern = re.compile(r"\b(AM|PM)\b|\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d")
         for node in nodes(tree):
+            if (node.get("package") or "") != package:
+                continue
             for value in (node.get("text") or "", node.get("content-desc") or ""):
                 if pattern.search(value):
                     print(value.strip())
                     return 0
         return 1
+
+    if command == "conversation-ready":
+        # The conversation page: the pinned title is on screen and no bottom-bar item with the
+        # inbox label remains (the inbox row carries the same title; the phone layout hides the bar).
+        title, inbox_tab = sys.argv[2], sys.argv[3]
+        height = 0
+        for node in nodes(tree):
+            box = bounds(node)
+            if box:
+                height = max(height, box[3])
+        title_seen = False
+        for node in nodes(tree):
+            text = (node.get("text") or "").strip()
+            description = (node.get("content-desc") or "").strip()
+            if text == title or description == title:
+                title_seen = True
+            if text == inbox_tab or description == inbox_tab:
+                box = bounds(node)
+                if box and box[1] >= int(height * 0.85):
+                    return 1
+        return 0 if title_seen else 1
 
     if command == "has-text":
         wanted = set(sys.argv[2:])
@@ -232,17 +257,6 @@ ime_shown() {
   grep -qE '(mInputShown|isInputShown)=true|mImeWindowVis=(0x)?[1-9a-f]' <<< "$dump"
 }
 
-# wait_text "Label" [attempts] — polls (one UI dump per attempt) until a node with exactly that text
-# or description is on screen.
-wait_text() {
-  local wanted="$1" tries="${2:-10}"
-  while [ "$tries" -gt 0 ]; do
-    if has_text "$wanted"; then return 0; fi
-    sleep 1
-    tries=$((tries - 1))
-  done
-  return 1
-}
 
 dump_ui() {
   # uiautomator writes to the device, so the dump has to be pulled back before parsing.
@@ -277,18 +291,21 @@ tap_tab() {
   return 0
 }
 
+# has_tab "Label" — 0 when a bottom-bar item with that label is on screen, 1 when not, 2 when the UI
+# could not be dumped (a caller must not read a failed dump as "the bar is gone").
 has_tab() {
-  dump_ui || return 1
+  dump_ui || return 2
   python3 "$HELPER" has-tab "$@" < "$WORK_DIR/ui.xml"
 }
 
-# assert_locale_clock — a CJK locale must not show an English AM/PM time or "Sep 3" date; that is the
-# process default locale lagging behind the app language (round-21 finding), not a translation gap.
+# assert_locale_clock — a CJK locale must not show an English AM/PM time or "Sep 3" date in the app's
+# own nodes; that is the process default locale lagging behind the app language (round-21 finding),
+# not a translation gap. It assumes an English device language (the project AVDs).
 assert_locale_clock() {
   [ "$LOCALE" = "en-US" ] && return 0
   dump_ui || die "uiautomator could not dump the screen before $1"
   local hit
-  if hit="$(python3 "$HELPER" has-english-clock < "$WORK_DIR/ui.xml")"; then
+  if hit="$(python3 "$HELPER" has-english-clock "$APP_ID" < "$WORK_DIR/ui.xml")"; then
     die "$1: English date/time on a $LOCALE screen (\"$hit\") — the process locale did not follow the app language"
   fi
 }
@@ -464,15 +481,16 @@ tap_first_list_item
 # The conversation loads asynchronously: wait for the pinned conversation's title in the app bar (and
 # a moment more for the list to settle at its newest message) instead of trusting a fixed delay.
 # Ready = the pinned title is on screen *and* the bottom bar is gone (the inbox shows the same title
-# in its first row; the phone layout hides the bar on the conversation page).
+# in its first row; the phone layout hides the bar on the conversation page). One UI dump per attempt.
 conversation_ready() {
-  has_text "$DEMO_PINNED_TITLE" && ! has_tab "$NAV_INBOX"
+  dump_ui || return 1
+  python3 "$HELPER" conversation-ready "$DEMO_PINNED_TITLE" "$NAV_INBOX" < "$WORK_DIR/ui.xml"
 }
 for _ in 1 2 3 4 5 6 7 8 9 10; do
   conversation_ready && break
   sleep 1
 done
-conversation_ready || warn "the conversation page did not settle after 10 attempts"
+conversation_ready || die "the conversation page did not settle after 10 attempts (a store screenshot must be the conversation, not the inbox)"
 sleep 2
 assert_locale_clock "2_conversation"
 shot "2_conversation"
