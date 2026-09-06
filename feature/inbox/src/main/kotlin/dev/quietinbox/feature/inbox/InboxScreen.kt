@@ -79,6 +79,7 @@ import dev.quietinbox.core.designsystem.components.NoticeBanner
 import dev.quietinbox.core.designsystem.components.QualityTag
 import dev.quietinbox.core.designsystem.components.SourceBadge
 import dev.quietinbox.core.designsystem.components.TimeFormat
+import dev.quietinbox.core.designsystem.components.currentLocale
 import dev.quietinbox.core.designsystem.components.identityLabel
 import dev.quietinbox.core.designsystem.components.rememberAppLabel
 import dev.quietinbox.core.designsystem.components.relativeTime
@@ -220,8 +221,8 @@ private fun summaryLine(state: InboxUiState): String {
     val gapText = if (gap.startEpochMs != null) {
         stringResource(
             R.string.inbox_summary_gap,
-            TimeFormat.time(gap.startEpochMs!!),
-            gap.endEpochMs?.let { TimeFormat.time(it) } ?: stringResource(R.string.health_gap_open),
+            TimeFormat.time(gap.startEpochMs!!, locale = currentLocale()),
+            gap.endEpochMs?.let { TimeFormat.time(it, locale = currentLocale()) } ?: stringResource(R.string.health_gap_open),
         )
     } else {
         stringResource(R.string.inbox_summary_gap_unknown)

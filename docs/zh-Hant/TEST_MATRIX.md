@@ -13,7 +13,7 @@
 | L3 真實來源 App | 兩個知情同意的測試帳號、錄影紀錄 | **未執行** | — |
 | L4 故障與效能 | 終止 process、Doze、首次解鎖、撤銷、磁碟上限 | **未執行**（程式中已有 commit 圍籬（generation）；尚無注入故障的測試） | — |
 | L5 發行產物 | 合併後的 manifest、權限傾印、可重現建置 | `tools/check-permissions.sh`（CI）；尚無 SBOM／重建比對 | CI |
-| 設計系統 | 頭像單字 | `MonogramTest`（4 個：漢字、假名、諺文名字取一個字，拉丁名字取兩個縮寫，空白給 `?`） | `./gradlew :core:designsystem:testDebugUnitTest` |
+| 設計系統 | 頭像單字；明確指定語系的時間格式 | `MonogramTest`（4 個：漢字、假名、諺文名字取一個字，拉丁名字取兩個縮寫，空白給 `?`）、`TimeFormatTest`（2 個：日文與韓文的日期時間以指定語系呈現，絕不用程序預設） | `./gradlew :core:designsystem:testDebugUnitTest` |
 | 字串目錄 | 每個語系都必須帶有預設目錄的所有名稱、佔位符與複數形 | `tools/check-strings.py`（`core:designsystem` 與 `platform:capture` 的 en、zh-Hant、zh-Hans、ja、ko）；Android lint 的 `MissingTranslation` 也是錯誤 | `python3 tools/check-strings.py`（CI：Assemble + permission gate） |
 | 真機測試（instrumented）儲存 | 真實的 SQLCipher + Room 遷移 | `VaultRoundTripTest`（日誌 → commit → 搜尋 → 抑制 → 以持久化的金鑰重新開啟；刪除的會話在重播後不會復活）、`MigrationTest`（對照匯出的 schema 執行 1→2 與 2→3）、`DemoDataTest`（示範資料寫入 → 筆數與投影 → 重複寫入不重複 → 清除後不留痕跡；App 語言為 zh-Hans／ja／ko 時，寫入內容經 `DemoLocalisation` 在地化）、`DeletionGraphTest`（5 個：journal 離開 PENDING 即清空 payload；刪除最新訊息後重算投影；到期副本在 retention 跑之前就隱藏、跑之後投影重算；移除來源並刪資料後不留任何東西；刪除全部經驗證且沒有快取的 cipher 沿用舊金鑰）、`SearchPagingTest`（2 個：250 筆假陽性候選既藏不住真命中也不會讓頁面不足額，游標續頁不重疊；刪除 token 會抑制同一 post 的重播、但不抑制之後同文字的新 post）、`MediaExportBoundTest`（1 個：空表的 `maxId` 為 0，帶上限的匯出分頁排除快照之後才寫入的 blob）——共 16 個 | `./gradlew :platform:storage:connectedDebugAndroidTest` |
 | 真機測試（instrumented）備份 | 真實金庫上的匯出 → 清空 → 匯入；維護閘門 | `BackupRoundTripTest`（2 個：備份只含看得見的副本、回報讀不到的媒體、還原後投影重算且媒體檔以目前金鑰可解密；exclusive 進行中的匯出會被拒絕） | `./gradlew :platform:backup:connectedDebugAndroidTest` |
@@ -62,7 +62,7 @@
   擷取世代 —— 已擷取的副本不受影響。沒有 schema 變更：只新增查詢，不新增資料表或欄位。
 - 截圖工具：`tools/demo-screenshots.sh <adb-serial> <en-US|zh-TW|zh-CN|ja-JP|ko-KR> <out-dir>` 會安裝 debug APK、清除 app
   資料、授予監聽器與 `POST_NOTIFICATIONS`、以雙語按鈕文字走完引導流程、寫入示範資料並拍攝
-  `1_inbox.png … 7_inbox_dark.png`。請使用模擬器：在真機上監聽器會把使用者自己的通知複製進 debug 資料庫。 Android 13 以上鍵盤會跟著 App 語言走，所以工具在啟動 App 前先停用預設輸入法、之後還原，等輸入法穩定後一次一個字鍵入查詢、以搜尋欄的 ENTER 動作收起輸入法，並在搜尋欄沒有顯示該字串時拒絕拍搜尋頁；每張截圖至少 80 KB，對話頁截圖會等到釘選對話的標題出現，App 只在 per-app 語言請求確實生效後才啟動，而寫入示範資料的廣播會明確指定語言（`--es lang`）。
+  `1_inbox.png … 7_inbox_dark.png`。請使用模擬器：在真機上監聽器會把使用者自己的通知複製進 debug 資料庫。Android 13 以上鍵盤會跟著 App 語言走，所以工具在啟動 App 前先停用預設輸入法、之後還原，等輸入法穩定後一次一個字鍵入查詢、以 ENTER（單行欄位的 Done 動作；搜尋是即時的，沒有送出）收起輸入法，並在搜尋欄沒有顯示該字串或輸入法仍顯示時拒絕拍搜尋頁；每張截圖至少 80 KB（以 1080×2400 的 `QuietInbox_Phone` 校準），對話頁截圖會等到釘選標題出現且底部導覽列消失，App 語言在任何會啟動程序的指令之前就設定並確認（啟動前再把程序停掉一次），寫入示範資料的廣播會明確指定語言（`--es lang`），而非英文語系若在收件匣、對話、活動或擷取頁看到英文的 AM/PM 時間或月份就拒絕拍照——那是程序語言落後於 App 語言的徵兆。
 - 覆蓋範圍：`DemoDataTest`（真機測試，`platform:storage`）寫入示範資料、驗證各畫面讀取的筆數與對話投影、
   確認重複寫入不會產生重複資料，接著清除並驗證不留下任何示範資料列。因為 SQLCipher 的原生函式庫無法在
   JVM 載入，此測試需在裝置上執行（`./gradlew :platform:storage:connectedDebugAndroidTest`）。

@@ -75,7 +75,7 @@ class DemoReceiver : BroadcastReceiver() {
         const val TAG = "QuietInboxDemo"
         const val EXTRA_OP = "op"
         const val OP_SEED = "seed"
-        const val EXTRA_LANG = "lang"
         const val OP_CLEAR = "clear"
+        const val EXTRA_LANG = "lang"
     }
 }

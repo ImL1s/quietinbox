@@ -77,6 +77,7 @@ import dev.quietinbox.core.designsystem.components.SourceBadge
 import dev.quietinbox.core.designsystem.components.StatTile
 import dev.quietinbox.core.designsystem.components.StatusHero
 import dev.quietinbox.core.designsystem.components.TimeFormat
+import dev.quietinbox.core.designsystem.components.currentLocale
 import dev.quietinbox.core.designsystem.components.gapReasonLabel
 import dev.quietinbox.core.designsystem.components.listenerStateLabel
 import dev.quietinbox.core.designsystem.components.relativeTime
@@ -233,8 +234,8 @@ fun HealthScreen(
                 }
             }
             items(state.gaps, key = { "gap-${it.id}" }) { gap ->
-                val start = gap.startEpochMs?.let { TimeFormat.dateTime(it) } ?: stringResource(R.string.health_gap_unknown_time)
-                val end = gap.endEpochMs?.let { TimeFormat.time(it) } ?: stringResource(R.string.health_gap_open)
+                val start = gap.startEpochMs?.let { TimeFormat.dateTime(it, locale = currentLocale()) } ?: stringResource(R.string.health_gap_unknown_time)
+                val end = gap.endEpochMs?.let { TimeFormat.time(it, locale = currentLocale()) } ?: stringResource(R.string.health_gap_open)
                 ListItem(
                     leadingContent = { Icon(Icons.Outlined.Timeline, null, tint = QualityColors.uncertain) },
                     headlineContent = { Text("$start → $end") },
@@ -328,7 +329,7 @@ private fun HeroCard(state: HealthUiState, onGrant: () -> Unit, onPause: (Boolea
     val body = when (ls) {
         ListenerState.CONNECTED -> buildString {
             append(stringResource(R.string.health_connected_body))
-            state.capture.connectedSinceEpochMs?.let { append(' ').append(stringResource(R.string.health_since, TimeFormat.time(it))) }
+            state.capture.connectedSinceEpochMs?.let { append(' ').append(stringResource(R.string.health_since, TimeFormat.time(it, locale = currentLocale()))) }
         }
         ListenerState.NOT_GRANTED -> stringResource(R.string.health_not_granted_body)
         ListenerState.DEGRADED -> if (state.vaultFailure != null) stringResource(R.string.health_vault_locked) else stringResource(R.string.gap_reason_overflow)

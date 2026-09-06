@@ -25,12 +25,21 @@ object TimeFormat {
     fun localDate(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): LocalDate = Instant.ofEpochMilli(epochMs).atZone(zone).toLocalDate()
 }
 
+/**
+ * The locale the UI is composed in, read through the composition so it follows a per-app language
+ * (Android 13+) and every configuration change. `Locale.getDefault()` is the *process* default: when
+ * the user changes the app language while the process is alive — it always is, the notification
+ * listener keeps it up — resources switch but the default locale does not until the next
+ * process-level configuration change, so every date and time went on in the device language
+ * (round-21 finding). The fallback is only for an empty locale list, which Android never provides.
+ */
+@Composable
+fun currentLocale(): Locale = LocalConfiguration.current.locales.let { if (it.isEmpty) Locale.ENGLISH else it[0] }
+
 /** "just now", "5 min", "yesterday", or a date, for list rows. */
 @Composable
 fun relativeTime(epochMs: Long, nowMs: Long = System.currentTimeMillis()): String {
-    // Read through the composition (observable on configuration change); the fallback is only for
-    // an empty locale list, which Android never provides.
-    val locale = LocalConfiguration.current.locales.let { if (it.isEmpty) Locale.ENGLISH else it[0] }
+    val locale = currentLocale()
     val diff = nowMs - epochMs
     val minutes = diff / 60_000
     val hours = diff / 3_600_000
@@ -53,6 +62,6 @@ fun dayLabel(epochMs: Long, nowMs: Long = System.currentTimeMillis()): String {
     return when (day) {
         today -> stringResource(R.string.date_today)
         today.minusDays(1) -> stringResource(R.string.date_yesterday)
-        else -> TimeFormat.date(epochMs)
+        else -> TimeFormat.date(epochMs, locale = currentLocale())
     }
 }

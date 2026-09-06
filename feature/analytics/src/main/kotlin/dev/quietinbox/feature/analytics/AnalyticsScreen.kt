@@ -72,6 +72,7 @@ import dev.quietinbox.core.designsystem.components.ShareBar
 import dev.quietinbox.core.designsystem.components.SourceBadge
 import dev.quietinbox.core.designsystem.components.StatTile
 import dev.quietinbox.core.designsystem.components.TimeFormat
+import dev.quietinbox.core.designsystem.components.currentLocale
 import dev.quietinbox.core.designsystem.components.rememberAppLabel
 import kotlin.math.roundToInt
 import kotlin.time.Instant
@@ -540,7 +541,7 @@ private fun LazyListScope.chattinessTab(state: AnalyticsUiState, onOpen: (Long) 
                     conversationId = rank.conversationId,
                     state = state,
                     onOpen = onOpen,
-                    trailing = stringResource(R.string.analytics_chattiness_value, oneDecimal(rank.perActiveDay)),
+                    trailing = stringResource(R.string.analytics_chattiness_value, oneDecimal(rank.perActiveDay, currentLocale())),
                     secondary = stringResource(R.string.analytics_chattiness_days, rank.activeDays, rank.count),
                     share = shareOf(rank, top),
                 )
@@ -658,8 +659,8 @@ private fun RangeLine(state: AnalyticsUiState, report: ActivityReport) {
         Text(
             stringResource(
                 R.string.analytics_range_line,
-                TimeFormat.date(report.rangeStartEpochMs),
-                TimeFormat.date(report.rangeEndEpochMs),
+                TimeFormat.date(report.rangeStartEpochMs, locale = currentLocale()),
+                TimeFormat.date(report.rangeEndEpochMs, locale = currentLocale()),
                 report.timeZoneId,
             ),
             style = MaterialTheme.typography.labelMedium,
@@ -719,7 +720,7 @@ private fun median(ms: Long?): String {
     }
 }
 
-private fun oneDecimal(value: Double): String = String.format(Locale.getDefault(), "%.1f", value)
+private fun oneDecimal(value: Double, locale: Locale): String = String.format(locale, "%.1f", value)
 
 private val PRESET_PERIODS = listOf(
     PeriodKind.LAST_7_DAYS,

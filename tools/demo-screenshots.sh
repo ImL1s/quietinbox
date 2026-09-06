@@ -118,6 +118,34 @@ def main():
                     return 0
         return 1
 
+    if command == "has-tab":
+        # A bottom-navigation item with exactly this label is on screen.
+        wanted = set(sys.argv[2:])
+        height = 0
+        for node in nodes(tree):
+            box = bounds(node)
+            if box:
+                height = max(height, box[3])
+        for node in nodes(tree):
+            text = (node.get("text") or "").strip()
+            description = (node.get("content-desc") or "").strip()
+            if text in wanted or description in wanted:
+                box = bounds(node)
+                if box and box[1] >= int(height * 0.85):
+                    return 0
+        return 1
+
+    if command == "has-english-clock":
+        # An AM/PM time or an English month before a day number anywhere on screen: what a CJK
+        # locale shows when the process default locale lagged behind the app language.
+        pattern = re.compile(r"\b(AM|PM)\b|\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d")
+        for node in nodes(tree):
+            for value in (node.get("text") or "", node.get("content-desc") or ""):
+                if pattern.search(value):
+                    print(value.strip())
+                    return 0
+        return 1
+
     if command == "has-text":
         wanted = set(sys.argv[2:])
         for node in nodes(tree):
@@ -204,7 +232,8 @@ ime_shown() {
   grep -qE '(mInputShown|isInputShown)=true|mImeWindowVis=(0x)?[1-9a-f]' <<< "$dump"
 }
 
-# wait_text "Label" [seconds] — polls until a node with exactly that text or description is on screen.
+# wait_text "Label" [attempts] — polls (one UI dump per attempt) until a node with exactly that text
+# or description is on screen.
 wait_text() {
   local wanted="$1" tries="${2:-10}"
   while [ "$tries" -gt 0 ]; do
@@ -246,6 +275,22 @@ tap_tab() {
   shell input tap $point
   sleep 1
   return 0
+}
+
+has_tab() {
+  dump_ui || return 1
+  python3 "$HELPER" has-tab "$@" < "$WORK_DIR/ui.xml"
+}
+
+# assert_locale_clock — a CJK locale must not show an English AM/PM time or "Sep 3" date; that is the
+# process default locale lagging behind the app language (round-21 finding), not a translation gap.
+assert_locale_clock() {
+  [ "$LOCALE" = "en-US" ] && return 0
+  dump_ui || die "uiautomator could not dump the screen before $1"
+  local hit
+  if hit="$(python3 "$HELPER" has-english-clock < "$WORK_DIR/ui.xml")"; then
+    die "$1: English date/time on a $LOCALE screen (\"$hit\") — the process locale did not follow the app language"
+  fi
 }
 
 has_text() {
@@ -357,22 +402,33 @@ device install -r -d "$APK" >/dev/null
 
 log "resetting app data and granting access"
 shell pm clear "$APP_ID" >/dev/null
+
+# The app language goes in *before* anything that can start the process (granting the listener binds
+# it and brings the process up): a per-app language applied to a live process reaches the resources
+# but not the process default locale. `pm clear` also resets the language asynchronously, so the
+# request is confirmed with get-app-locales and the process is stopped again before the launch.
+log "requesting app locale $LOCALE"
+app_locale_is() {
+  local current
+  current="$(shell cmd locale get-app-locales "$APP_ID" --user 0 2>/dev/null | tr -d '\r')"
+  case "$current" in *"$LOCALE"*) return 0 ;; *) return 1 ;; esac
+}
+if shell cmd locale set-app-locales "$APP_ID" --user 0 --locales "$LOCALE" >/dev/null 2>&1; then
+  for _ in 1 2 3 4 5; do
+    app_locale_is && break
+    sleep 1
+    shell cmd locale set-app-locales "$APP_ID" --user 0 --locales "$LOCALE" >/dev/null 2>&1 || true
+  done
+  app_locale_is || warn "the app locale is not $LOCALE; screens will be in the device language"
+else
+  warn "per-app locales need API 33+; the device language decides instead"
+fi
+
 shell cmd notification allow_listener "$LISTENER" >/dev/null 2>&1 ||
   warn "could not grant the notification listener; the Capture page will show it as not granted"
 shell pm grant "$APP_ID" android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 || true
-
-log "requesting app locale $LOCALE"
-shell cmd locale set-app-locales "$APP_ID" --user 0 --locales "$LOCALE" >/dev/null 2>&1 ||
-  warn "per-app locales need API 33+; the device language decides instead"
-# `pm clear` above also resets the app's locale asynchronously; make sure the request stuck before
-# the app starts, otherwise the process would come up in the device language.
-for _ in 1 2 3 4 5; do
-  if shell cmd locale get-app-locales "$APP_ID" --user 0 2>/dev/null | tr -d '\r' | grep -q "$LOCALE"; then break; fi
-  sleep 1
-  shell cmd locale set-app-locales "$APP_ID" --user 0 --locales "$LOCALE" >/dev/null 2>&1 || true
-done
-shell cmd locale get-app-locales "$APP_ID" --user 0 2>/dev/null | tr -d '\r' | grep -q "$LOCALE" ||
-  warn "the app locale is not $LOCALE; screens will be in the device language"
+# Whatever the grants started must start over with the language in place.
+shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
 
 shell cmd uimode night no >/dev/null 2>&1 || true
 imes_off
@@ -400,14 +456,25 @@ sleep 6
 
 # 1 — inbox
 tap_tab "$NAV_INBOX" || warn "could not reach the inbox tab"
+assert_locale_clock "1_inbox"
 shot "1_inbox"
 
 # 2 — a conversation (first row of the inbox)
 tap_first_list_item
 # The conversation loads asynchronously: wait for the pinned conversation's title in the app bar (and
 # a moment more for the list to settle at its newest message) instead of trusting a fixed delay.
-wait_text "$DEMO_PINNED_TITLE" 10 || warn "the conversation title did not appear within 10 s"
+# Ready = the pinned title is on screen *and* the bottom bar is gone (the inbox shows the same title
+# in its first row; the phone layout hides the bar on the conversation page).
+conversation_ready() {
+  has_text "$DEMO_PINNED_TITLE" && ! has_tab "$NAV_INBOX"
+}
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  conversation_ready && break
+  sleep 1
+done
+conversation_ready || warn "the conversation page did not settle after 10 attempts"
 sleep 2
+assert_locale_clock "2_conversation"
 shot "2_conversation"
 shell input keyevent KEYCODE_BACK
 sleep 2
@@ -424,15 +491,26 @@ for ((i = 0; i < ${#SEARCH_QUERY}; i++)); do
   sleep 0.3
 done
 sleep 1
-# ENTER is the field's search action: it dismisses the input method (with the keyboard disabled that
-# is the voice panel) and keeps the page and the query, so the results fill the frame.
+# ENTER triggers the single-line field's Done action, which dismisses the input method (with the
+# keyboard disabled that is the voice panel) and keeps the page and the query; the search itself is
+# live, nothing is submitted.
 shell input keyevent KEYCODE_ENTER
 sleep 2
-if ime_shown; then sleep 2; ime_shown && warn "an input method is still showing; the search shot will include it"; fi
+if ime_shown; then
+  sleep 2
+  ime_shown && die "an input method is still showing; a store screenshot must not include it"
+fi
 # The shot must show the query and its results, not what a keyboard layout made of the keystrokes.
-dump_ui || die "uiautomator could not dump the search screen"
-python3 "$HELPER" has-text "$SEARCH_QUERY" < "$WORK_DIR/ui.xml" ||
-  die "the search field does not show \"$SEARCH_QUERY\" (an input method composed the keystrokes, or the page was left)"
+# The field text can lag the last key by a moment, so the check is retried before it fails the run.
+query_shown() {
+  dump_ui || die "uiautomator could not dump the search screen"
+  python3 "$HELPER" has-text "$SEARCH_QUERY" < "$WORK_DIR/ui.xml"
+}
+for _ in 1 2 3 4 5; do
+  query_shown && break
+  sleep 1
+done
+query_shown || die "the search field does not show \"$SEARCH_QUERY\" (an input method composed the keystrokes, or the page was left)"
 shot "3_search"
 shell input keyevent KEYCODE_BACK
 sleep 1
@@ -440,11 +518,13 @@ sleep 1
 # 4 — activity statistics
 tap_tab "$NAV_ACTIVITY" || warn "could not reach the activity tab"
 sleep 3
+assert_locale_clock "4_activity"
 shot "4_activity"
 
 # 5 — capture health
 tap_tab "$NAV_CAPTURE" || warn "could not reach the capture tab"
 sleep 2
+assert_locale_clock "5_capture"
 shot "5_capture"
 
 # 6 — settings

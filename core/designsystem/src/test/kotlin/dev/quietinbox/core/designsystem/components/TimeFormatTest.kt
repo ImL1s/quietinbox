@@ -1,0 +1,45 @@
+package dev.quietinbox.core.designsystem.components
+
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
+import org.junit.Test
+import java.time.ZoneId
+import java.util.Locale
+
+/**
+ * The formatters render in the locale they are handed, never in the process default: the UI passes
+ * the composition's locale so a per-app language (Android 13+) is honoured while the process lives on.
+ */
+class TimeFormatTest {
+    private val zone = ZoneId.of("Asia/Taipei")
+    private val septemberThird = 1_788_800_000_000L // 2026-09-04 in Asia/Taipei, morning
+
+    @Test
+    fun japaneseAndKoreanDatesCarryNoEnglishMonth() {
+        val previous = Locale.getDefault()
+        Locale.setDefault(Locale.US)
+        try {
+            val ja = TimeFormat.date(septemberThird, zone, Locale.JAPAN)
+            val ko = TimeFormat.date(septemberThird, zone, Locale.KOREA)
+            ja shouldNotContain "Sep"
+            ko shouldNotContain "Sep"
+            ja shouldContain "2026"
+            TimeFormat.date(septemberThird, zone, Locale.US) shouldContain "Sep"
+        } finally {
+            Locale.setDefault(previous)
+        }
+    }
+
+    @Test
+    fun timesFollowTheGivenLocaleNotTheProcessDefault() {
+        val previous = Locale.getDefault()
+        Locale.setDefault(Locale.US)
+        try {
+            TimeFormat.time(septemberThird, zone, Locale.KOREA) shouldContain "오"
+            TimeFormat.time(septemberThird, zone, Locale.JAPAN) shouldNotContain "M"
+            TimeFormat.time(septemberThird, zone, Locale.US) shouldContain "M"
+        } finally {
+            Locale.setDefault(previous)
+        }
+    }
+}

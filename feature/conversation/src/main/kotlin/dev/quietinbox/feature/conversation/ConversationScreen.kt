@@ -80,6 +80,7 @@ import dev.quietinbox.core.designsystem.components.MonogramAvatar
 import dev.quietinbox.core.designsystem.components.QualityTag
 import dev.quietinbox.core.designsystem.components.SourceBadge
 import dev.quietinbox.core.designsystem.components.TimeFormat
+import dev.quietinbox.core.designsystem.components.currentLocale
 import dev.quietinbox.core.designsystem.components.dayLabel
 import dev.quietinbox.core.designsystem.components.identityLabel
 import dev.quietinbox.core.designsystem.components.mediaLabel
@@ -374,7 +375,7 @@ private fun MetaLine(message: Message, contentColor: androidx.compose.ui.graphic
         TimestampQuality.NOTIFICATION_WHEN, TimestampQuality.NOTIFICATION_POST_TIME -> stringResource(R.string.conv_time_notification)
         TimestampQuality.OBSERVED_ONLY -> stringResource(R.string.conv_time_captured)
     }
-    val timeValue = TimeFormat.time(message.sourceTimestampEpochMs ?: message.observedAtEpochMs)
+    val timeValue = TimeFormat.time(message.sourceTimestampEpochMs ?: message.observedAtEpochMs, locale = currentLocale())
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             "$timeValue · $timeLabel",
@@ -384,7 +385,7 @@ private fun MetaLine(message: Message, contentColor: androidx.compose.ui.graphic
         )
         if (message.timestampQuality == TimestampQuality.SOURCE_MESSAGE) {
             Text(
-                "${TimeFormat.time(message.observedAtEpochMs)} · ${stringResource(R.string.conv_time_captured)}",
+                "${TimeFormat.time(message.observedAtEpochMs, locale = currentLocale())} · ${stringResource(R.string.conv_time_captured)}",
                 style = MaterialTheme.typography.labelSmall,
                 color = contentColor.copy(alpha = 0.5f),
                 modifier = Modifier.align(Alignment.CenterVertically),

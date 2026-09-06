@@ -80,6 +80,9 @@ when the guard is removed.
   dead epoch.
 - Never zero the key array handed to `SupportOpenHelperFactory`; never overwrite an unreadable key file.
 - Debug builds skip `FLAG_SECURE` so `adb screencap` works; release honours it.
+- Dates, times and numbers in the UI are formatted with the composition's locale (`currentLocale()` in
+  `Formatting.kt`), never `Locale.getDefault()`: a per-app language does not update the process default
+  while the process lives, and the listener keeps it alive.
 - Strings: every user-facing string exists in all five catalogues — `values` (en), `values-b+zh+Hant`,
   `values-b+zh+Hans`, `values-ja`, `values-ko` — with the same names, placeholders and plurals;
   `python3 tools/check-strings.py` (also in CI) fails on any gap. A new language also goes into
@@ -126,8 +129,8 @@ notifications into the debug vault. Use an emulator for screenshots. On foldable
 
 The 2026-09-06 audit findings are GitHub issues #1–#17 (labels P0/P1/P2/audit); #17 (real-source
 fixtures) stays open because it needs real devices and accounts. Every fix cites its issue and its
-review round (`docs/reviews/2026-09-06-round{10,…,20}/`; rounds 13–17 re-reviewed each fix commit until
-both reviewers approved with no finding; rounds 18–20 reviewed the localisation). ADR-0007 records the design.
+review round (`docs/reviews/2026-09-06-round{10,…,21}/`; rounds 13–17 re-reviewed each fix commit until
+both reviewers approved with no finding; rounds 18–21 reviewed the localisation). ADR-0007 records the design.
 
 ## Review gate before a push
 
