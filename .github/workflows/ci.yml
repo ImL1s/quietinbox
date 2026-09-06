@@ -30,7 +30,7 @@ jobs:
           :core:analytics:test :parsers:apps:test
           :platform:crypto:testDebugUnitTest :platform:storage:testDebugUnitTest :platform:backup:testDebugUnitTest :platform:capture:testDebugUnitTest
           :feature:analytics:testDebugUnitTest :feature:search:testDebugUnitTest :feature:conversation:testDebugUnitTest :app:testDebugUnitTest
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: jvm-test-reports
@@ -53,7 +53,7 @@ jobs:
         run: ./gradlew --no-daemon --console=plain :app:assembleDebug :app:assembleRelease :app:lintDebug
       - name: No network permission in release APK
         run: tools/check-permissions.sh app/build/outputs/apk/release/app-release-unsigned.apk
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: apks
           path: app/build/outputs/apk/**/*.apk
@@ -86,7 +86,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           script: ./gradlew --no-daemon --console=plain :platform:storage:connectedDebugAndroidTest :platform:crypto:connectedDebugAndroidTest :platform:backup:connectedDebugAndroidTest
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: instrumented-reports-${{ matrix.api }}
