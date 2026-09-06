@@ -71,7 +71,7 @@
 :feature:*                 onboarding / inbox / conversation / search / health / settings / analytics
 ```
 
-管線：`來源通知 → 白名單 → 不可變 snapshot（有上限）→ 有界佇列 → 加密 journal（此後才算 accepted）→ parser → 身分 → 對帳 → 單一交易投影 → Flow → UI`。撤權／暫停切換 generation token，排隊中的事件在提交前再檢查（commit fence）。
+管線：`來源通知 → 白名單 → 不可變 snapshot（有上限）→ 有界佇列 → 加密 journal（此後才算 accepted）→ parser → 身分 → 對帳 → 單一交易投影 → Flow → UI`。撤權、暫停、來源變更與維護都是圍籬：每個事件在等鎖前、鎖內與提交前各檢查一次；來源清單未知前通知原封保留不讀；重設或還原是 `VaultMaintenance` 後面的獨佔維護執行（[ADR-0007](docs/adr/0007-maintenance-gate-and-fail-closed-capture.md)）。
 
 ### 建置與驗證
 
@@ -146,7 +146,7 @@ QuietInbox reads what the messaging apps you explicitly enable post to the notif
 
 ### Architecture
 
-See the module table in the Chinese section above; the pipeline is `source notification → allow-list → immutable bounded snapshot → bounded queue → encrypted journal (only now "accepted") → parser → identity → reconcile → single-transaction projection → Flow → UI`. Revoke/pause rotate a generation token that queued events re-check before commit (commit fence). Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), decisions: [docs/adr/](docs/adr/).
+See the module table in the Chinese section above; the pipeline is `source notification → allow-list → immutable bounded snapshot → bounded queue → encrypted journal (only now "accepted") → parser → identity → reconcile → single-transaction projection → Flow → UI`. Revoke, pause, source changes and maintenance are fences that every event re-checks before the lock, inside it and before the commit; before the source list is known a notification is held unread; a reset or restore is an exclusive maintenance run behind `VaultMaintenance` ([ADR-0007](docs/adr/0007-maintenance-gate-and-fail-closed-capture.md)). Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), decisions: [docs/adr/](docs/adr/).
 
 ### Build and verify
 

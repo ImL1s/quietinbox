@@ -661,9 +661,11 @@ class CaptureCoordinatorTest : FunSpec({
         val copying = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
         val bitmaps = Collections.synchronizedList(ArrayList<android.graphics.Bitmap?>())
+        // Every copy stays in flight until released: an in-flight bitmap is what the bound counts.
         coEvery { h.mediaCopier.copyPending(any(), any()) } coAnswers {
             bitmaps += secondArg<android.graphics.Bitmap?>()
-            if (bitmaps.size == 1) { copying.complete(Unit); release.await() }
+            if (bitmaps.size == 1) copying.complete(Unit)
+            release.await()
         }
         fun withBitmap(id: String) = CapturedNotification(Fixtures.snapshot(Fixtures.base(title = "A", text = "picture"), packageName = ENABLED_PKG, eventId = id), bitmap)
         val coordinator = h.coordinator()
@@ -671,7 +673,8 @@ class CaptureCoordinatorTest : FunSpec({
 
         coordinator.offerCaptured(withBitmap("evt-0"))
         withTimeout(5_000) { copying.await() }
-        // The first copy is still running: its bitmap is still counted. Seven more fill the bound...
+        // The first copy is still running: its bitmap is still counted. Seven more fill the bound
+        // (counted at the door, whether queued or already in flight)...
         for (i in 1..7) coordinator.offerCaptured(withBitmap("evt-$i"))
         // ...so the ninth bitmap is dropped at the door (a placeholder is kept), not queued.
         coordinator.offerCaptured(withBitmap("evt-8"))

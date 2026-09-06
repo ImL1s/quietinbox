@@ -34,7 +34,11 @@ Toolchain: Gradle 9.7.1 wrapper, AGP 9.4.0 (built-in Kotlin, compileSdk 37, targ
 Kotlin 2.4.10, KSP, Compose BOM 2026.08.00 with material3 pinned to 1.5.0-alpha27 (Expressive APIs;
 stable 1.4 lacks them, see ADR-0002). Versions live in `gradle/libs.versions.toml`; conventions in
 `build-logic/` (`quietinbox.android.library`, `.library.compose`, `.hilt`, `.feature`, `.kotlin.jvm`).
-Tests are Kotest (JUnit Platform); property tests use fixed seeds.
+Tests are Kotest (JUnit Platform); property tests use fixed seeds. Instrumented tests are JUnit 4:
+a `@Test` method must return `Unit` (end a `runBlocking { … }` body with `Unit`, or the class fails
+to load). Coordinator tests run on real dispatchers: hand-offs are latches or polls, never
+`delay()`-based ordering, and every "X must not happen" test has a negative control that fails
+when the guard is removed.
 
 ## Layout
 
@@ -54,11 +58,33 @@ Tests are Kotest (JUnit Platform); property tests use fixed seeds.
 
 - Callback thread (`onNotificationPosted`) must stay allocation-light: snapshot, enqueue, return.
   No DB, no bitmap decoding, no parsing there.
-- Keep the pipeline single-writer: everything that commits goes through `pipelineMutex`.
+- Keep the pipeline single-writer: everything that commits goes through `pipelineMutex`, which is
+  owned by `VaultMaintenance` (ADR-0007). Anything else that writes the vault in the background
+  (media copies, journal replay, retention, backup export) runs inside `maintenance.work {}`;
+  whole-vault writes (reset, backup import) are `maintenance.exclusive {}` runs. Never take the
+  pipeline lock from inside `work {}` for longer than one event.
+- Source policy changes (add / enable / pause / remove a source) go through `CaptureCoordinator`,
+  never straight to `SourceRepository` from a ViewModel: the write and the in-memory allow-list
+  must change under the pipeline lock.
+- Gaps are shown, never hidden: any path that drops a captured notification records a gap, and a
+  loss the locked vault cannot record yet is remembered and written once the vault opens.
+- Before the source policy is known, do not read a third-party notification: hold the framework
+  object, decide when the policy loads (`Held` buffer in `CaptureCoordinator`).
 - Best-effort bookkeeping uses `guarded {}`; never swallow `CancellationException`.
+- Room writes that also create files: write the files first, insert rows and links in one
+  transaction, and clear the cleanup list *inside* the transaction block (`MediaCopier.store`,
+  `BackupService.apply`), so a cancellation landing after the commit never deletes a linked file.
+- Deletion is a graph: journal payload cleared on leaving `PENDING`, media rows and files with
+  their messages, `rebuildProjection` after every delete / expiry / restore, reads filter expiry.
+- A cached crypto primitive must be tied to `KeyMaterial.epoch`; never hand out one built under a
+  dead epoch.
 - Never zero the key array handed to `SupportOpenHelperFactory`; never overwrite an unreadable key file.
 - Debug builds skip `FLAG_SECURE` so `adb screencap` works; release honours it.
-- Strings: add to both `values/strings.xml` and `values-b+zh+Hant/strings.xml`, same names.
+- Strings: add to both `values/strings.xml` and `values-b+zh+Hant/strings.xml`, same names
+  (plurals included; en/zh parity is checked by reviewers).
+- Lint is a hard gate in every module (`abortOnError = true`, no baseline): fix the finding, do not
+  suppress it. `MissingPermission` needs the `checkSelfPermission` call in the *same method* as the
+  guarded call, and the library manifest must declare the permission it uses.
 - Do not add real-app notification captures, decompiled sources, or vendor assets to the repo.
 
 ## Demo mode and screenshots
@@ -91,6 +117,12 @@ adb shell cmd notification post -S messaging -t "Title" tag "body"
 Onboarding enables installed sources; on a real phone the reconnect resync will copy the user's own
 notifications into the debug vault. Use an emulator for screenshots. On foldable AVDs strip the
 "Multiple displays" warning that `screencap -p` prepends to the PNG.
+
+## Audit trail
+
+The 2026-09-06 audit findings are GitHub issues #1–#17 (labels P0/P1/P2/audit); #17 (real-source
+fixtures) stays open because it needs real devices and accounts. Every fix cites its issue and its
+review round (`docs/reviews/2026-09-06-round{10,11,12}/`). ADR-0007 records the design.
 
 ## Review gate before a push
 

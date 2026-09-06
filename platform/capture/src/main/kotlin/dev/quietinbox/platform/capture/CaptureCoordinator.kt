@@ -375,14 +375,20 @@ class CaptureCoordinator @Inject constructor(
         }
     }
 
-    /** Must be called under [pipelineMutex]. Once the policy is known, held notifications are decided. */
+    /**
+     * Must be called under [pipelineMutex]. Once the policy is known, held notifications are
+     * decided — *before* the flag flips, so a notification arriving during the release still goes
+     * through the buffer and cannot overtake the ones held before it (CI caught the reordering).
+     */
     private suspend fun loadSourcePolicy() {
         val list = sources.sources()
         enabledPackages = list.filter { it.enabled }.map { it.packageName }.toSet()
         pausedPackages = list.filter { it.enabled && it.paused }.map { it.packageName }.toSet()
-        sourcesLoaded = true
         settleColdStartGap()
         releaseHeld()
+        sourcesLoaded = true
+        // Held in the instant before the flag flipped: released now, still in arrival order.
+        if (synchronized(held) { held.isNotEmpty() }) releaseHeld()
     }
 
     /**
