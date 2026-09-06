@@ -15,16 +15,16 @@ records what the repository **actually delivers today** and what it does **not**
 | NotificationListenerService capture, bounded snapshot | Done | `platform:capture`; no DB/network/decoding on callback thread |
 | Multi-message parser (MessagingStyle / Inbox / BigText / summary) | Done | 10 JVM tests in `core:parser` |
 | Identity without cross-stream merging | Done | 5 JVM tests in `core:identity` |
-| Dedup with `AMBIGUOUS_REPEAT`, revisions, stale-window handling, resync-as-repost | Done | 20 JVM tests in `core:reconcile` including two 1,000-iteration property tests (the six §7.2 examples plus the closed-window ambiguous repeat are literal test cases) |
+| Dedup with `AMBIGUOUS_REPEAT`, revisions, stale-window handling, resync-as-repost | Done | 22 JVM tests in `core:reconcile` including two 1,000-iteration property tests (the six §7.2 examples plus the closed-window ambiguous repeat are literal test cases) |
 | Encrypted vault (Room + SQLCipher, per-install random key, Keystore-wrapped) | Done | Instrumented tests `VaultRoundTripTest` + `MigrationTest` (1→2, 2→3) + `KeystoreWrapperTest` (serialised KEK creation) on device; `KeystoreWrapper` sets `setUserAuthenticationRequired(false)` |
-| Journal-first commit, commit fence on revoke / pause / source change / maintenance | Done | `CaptureCoordinator`: admission fence before and inside the pipeline lock, commit fence before the write; source policy changes under the lock; `CaptureCoordinatorTest` (16) |
-| "Delete everything" as a verified, exclusive maintenance run; cipher cache tied to the key epoch | Done | `VaultMaintenance`, `VaultRepository.deleteEverything` → `ResetResult`; `VaultMaintenanceTest` (4), `DeletionGraphTest` on device; reset walked through on the AVD |
+| Journal-first commit, commit fence on revoke / pause / source change / maintenance | Done | `CaptureCoordinator`: admission fence before and inside the pipeline lock, commit fence before the write; source policy changes under the lock; `CaptureCoordinatorTest` (32) |
+| "Delete everything" as a verified, exclusive maintenance run; cipher cache tied to the key epoch | Done | `VaultMaintenance`, `VaultRepository.deleteEverything` → `ResetResult`; `VaultMaintenanceTest` (5), `DeletionGraphTest` on device; reset walked through on the AVD |
 | Deletion graph and read-time expiry (journal payload cleared, media rows/files with their messages, projection rebuilt, expired copies hidden) | Done | `DeletionGraphTest` (5, on device) |
 | Inbox / conversation UI with quality labels | Done | Device screenshots |
 | Search (CJK bigram + Latin trigram, parameterised, keyset-paged, verified until the page is full) | Done | Instrumented `VaultRoundTripTest` (開會 / hel) and `SearchPagingTest` (250 false-positive candidates, resumable cursor); UI on device |
 | Cold start fails closed: nothing read from a notification before the source policy is known | Done | `CaptureCoordinatorTest` (held unread, dropped with a `COLD_START` gap when the vault does not open); synthetic capture on the AVD after a cold start |
 | Locked / opening vault on the search and conversation pages | Done | `SearchViewModelTest` (2), `ConversationViewModelTest` (1); not device-exercised (a vault cannot be locked on demand on the AVD) |
-| Activity insights (observed-only: overview, heat map, rankings, best time, chattiness, quiet rate, emoji, catchphrases) | Done | 32 JVM tests in `core:analytics` plus 8 in `AnalyticsViewModelTest` (state rules, off-main-thread computation, locked/opening vault); UI on device; at most 50,000 messages per period are loaded (every tab shows a notice when it capped) |
+| Activity insights (observed-only: overview, heat map, rankings, best time, chattiness, quiet rate, emoji, catchphrases) | Done | 34 JVM tests in `core:analytics` plus 8 in `AnalyticsViewModelTest` (state rules, off-main-thread computation, locked/opening vault); UI on device; at most 50,000 messages per period are loaded (every tab shows a notice when it capped) |
 | Capture health page with gaps and diagnostics | Done | UI on device |
 | Retention TTL worker | Done (not soak-tested) | `RetentionWorker`, 12h periodic |
 | Media copy (content:// + notification bitmap, encrypted) | Implemented, **not device-verified** | `MediaCopier`; no test yet exercises a real content URI |
@@ -41,7 +41,7 @@ records what the repository **actually delivers today** and what it does **not**
 
 - **Real-source E2E (L3)** for LINE / WhatsApp / Telegram / Instagram / Messenger with two consenting test accounts. All five adapters are `SYNTHETIC_ONLY`; nothing has been observed from the real apps. See `docs/COMPATIBILITY.md`.
 - **72-hour soak, OEM matrix, API 26 lane, 16 KB page-size verification** (plan §15). One physical device (Samsung SM-S9280, Android 16) and one foldable emulator (API 36) were exercised locally; the CI workflow defines API 29/35 emulator lanes but has not been executed yet.
-- **Release signing, reproducible-build comparison, SBOM, F-Droid submission** (plan §17). `assembleRelease` is configured with R8 but no keystore exists in the repo.
+- **Reproducible-build comparison, SBOM, F-Droid submission** (plan §17). Release signing itself is done: `release.yml` builds a signed APK / AAB with the upload keystore, which lives outside the repository (`docs/RELEASE.md`).
 - **Password-based backup (Argon2id)**, high-security lock-vault mode, remote-config rule updates, networked media variant — all P2 by plan.
 - **Original-notification `PendingIntent` reuse** when opening the source app: v0.1 always falls back to the launcher intent (the snapshot deliberately never retains `PendingIntent`s).
 - **Per-profile source control and a non-null account key** (audit #8): sources are keyed by package only, `accountKey` is nullable in the conversation identity. Making it `NOT NULL` needs the `conversation` table recreated (the `message` FK points at it), which is deferred to a later schema version; the inbox tags work-profile conversations and `docs/COMPATIBILITY.md` documents the limits.
@@ -51,7 +51,7 @@ records what the repository **actually delivers today** and what it does **not**
 - **Governance not yet in CI** (audit #12): detekt / ktlint, CodeQL, SBOM, coverage thresholds, reproducible builds and commit signing. Each adds dependencies or maintainer-side keys; tracked, not started.
 - **Golden corpus diff reports** for parser changes (plan §14): fixtures are Kotest cases, no separate corpus tooling yet.
 - **Diagnostic bundle export with redaction preview** (plan §14): only a body-free clipboard summary exists.
-- **Name / trademark / package-id clearance**: `dev.quietinbox` is a placeholder.
+- **Name / trademark clearance**: the name has not been cleared. The package id is no longer open — `dev.quietinbox.app` is published on Google Play (Gradle namespace `dev.quietinbox`), and a published applicationId cannot be changed.
 
 ## Review round 1 (2026-09-06): findings fixed before the first push
 

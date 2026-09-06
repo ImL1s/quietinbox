@@ -27,3 +27,12 @@
 
 - `-Xjvm-default=all` 在 Kotlin 2.4 已消失（`-jvm-default` 只接受 `enable|no-compatibility|disable`）；預設值已足夠。
 - KSP 2.3.11 以 Kotlin 2.3.20 為目標，但用 2.4.10 也能正常編譯；若出現 KSP 不相容，應把 Kotlin 降版到 2.3.x，而不是釘住 KSP。
+
+## 附錄（2026-09-06）：一個 `:parsers:apps` 模組取代五個
+
+計畫原本把 `:parsers:line`、`:parsers:whatsapp`、`:parsers:telegram`、`:parsers:instagram`、
+`:parsers:messenger` 列為各自獨立的模組，另外還有 `:tools:fixture-publisher`、`:tools:replay-cli` 與
+`:benchmark`。v0.1 把五個 adapter 放在單一的 `:parsers:apps` 模組裡：它們共用同一個 `AppParser` 基底，
+其候選項 hook 是 `final`，所以 adapter 只能覆寫 `appSingleCandidates` 與 `postProcess`，讓每個 App 的
+表面積小而好審。拆成五個模組等於為各約 60 行程式碼多開五個 Gradle 模組，卻換不到隔離上的好處（它們全部
+都是 `SYNTHETIC_ONLY`）。工具與 benchmark 模組尚未建置；見 `docs/SCOPE.md`。

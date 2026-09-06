@@ -9,8 +9,11 @@
 #
 # Nothing here reads a real notification: every conversation in the shots comes from
 # DemoDataRepository. Use an emulator — on a real phone the listener would copy the owner's own
-# notifications into the debug vault. Phone layout only: the bottom-bar rules (tab taps, page
-# readiness) and the size floor are calibrated on QuietInbox_Phone (1080×2400), not on a rail layout.
+# notifications into the debug vault. Both layouts are handled: on a window narrower than 600dp the
+# navigation is the bottom bar, on a wider one it is the left rail and the inbox keeps the conversation
+# beside it (list-detail). The size floor is calibrated on QuietInbox_Phone (1080×2400); a tablet shot
+# is larger still. Every shot is refused unless QuietInbox itself is the foreground app — the guard
+# that was missing when the first tablet set captured the launcher and the system settings instead.
 set -euo pipefail
 
 if [ "$#" -ne 3 ]; then
@@ -101,22 +104,42 @@ def main():
         return 1
 
     if command == "tap-tab":
-        # Like tap-text, but only nodes in the bottom navigation bar (lowest 15% of the screen):
-        # a tile or heading that happens to carry the same word must not be mistaken for the tab.
-        wanted = set(sys.argv[2:])
-        height = 0
+        # Like tap-text, but only nodes in the navigation container: the bottom bar (lowest 15% of the
+        # screen) on a narrow window, the left rail (leftmost 15%) on a wide one. A tile or heading
+        # that happens to carry the same word must not be mistaken for the tab, so the rail is only
+        # accepted on the layout that has one — a short CJK heading in the top-left corner of a phone
+        # screen would otherwise pass the same width test. Accepting the rail at all is what makes the
+        # tablet run navigate: the bottom-bar-only rule matched nothing there, every tab tap silently
+        # did nothing, and the shots were of whatever was behind the app.
+        layout = sys.argv[2]
+        wanted = set(sys.argv[3:])
+        width = height = 0
         for node in nodes(tree):
             box = bounds(node)
             if box:
+                width = max(width, box[2])
                 height = max(height, box[3])
         for node in nodes(tree):
             text = (node.get("text") or "").strip()
             description = (node.get("content-desc") or "").strip()
             if text in wanted or description in wanted:
                 box = bounds(node)
-                if box and box[1] >= int(height * 0.85):
+                if not box:
+                    continue
+                in_bottom_bar = box[1] >= int(height * 0.85)
+                in_left_rail = layout == "wide" and box[2] <= int(width * 0.15)
+                if in_bottom_bar or in_left_rail:
                     print("%d %d" % centre(box))
                     return 0
+        return 1
+
+    if command == "app-foreground":
+        # At least one node on screen belongs to the app. The launcher, the system settings and a
+        # crashed app all fail this; every screenshot is gated on it.
+        package = sys.argv[2]
+        for node in nodes(tree):
+            if (node.get("package") or "") == package:
+                return 0
         return 1
 
     if command == "has-english-clock":
@@ -135,25 +158,30 @@ def main():
         return 1
 
     if command == "conversation-ready":
-        # The conversation page: the pinned title is on screen and no bottom-bar item with the
-        # inbox label remains (the inbox row carries the same title; the phone layout hides the bar).
-        title, inbox_tab = sys.argv[2], sys.argv[3]
+        # Narrow layout: the pinned title is on screen and no bottom-bar item with the inbox label
+        # remains (the inbox row carries the same title; the bar is hidden on the conversation page).
+        # Wide layout: the inbox stays beside the conversation, so the bar test cannot apply — the
+        # detail pane has opened once the title appears twice, in the list row and in the detail
+        # header. Either way "the inbox is still all there is" never passes as a conversation shot.
+        title, inbox_tab, layout = sys.argv[2], sys.argv[3], sys.argv[4]
         height = 0
         for node in nodes(tree):
             box = bounds(node)
             if box:
                 height = max(height, box[3])
-        title_seen = False
+        titles = 0
         for node in nodes(tree):
             text = (node.get("text") or "").strip()
             description = (node.get("content-desc") or "").strip()
             if text == title or description == title:
-                title_seen = True
-            if text == inbox_tab or description == inbox_tab:
+                titles += 1
+            if layout == "narrow" and (text == inbox_tab or description == inbox_tab):
                 box = bounds(node)
                 if box and box[1] >= int(height * 0.85):
                     return 1
-        return 0 if title_seen else 1
+        if layout == "wide":
+            return 0 if titles >= 2 else 1
+        return 0 if titles >= 1 else 1
 
     if command == "has-text":
         wanted = set(sys.argv[2:])
@@ -262,11 +290,11 @@ tap_text() {
   return 0
 }
 
-# tap_tab "Label" — taps a bottom-navigation item by its label, ignoring look-alikes elsewhere.
+# tap_tab "Label" — taps a navigation item (bottom bar or rail) by its label, ignoring look-alikes.
 tap_tab() {
   dump_ui || return 1
   local point
-  if ! point="$(python3 "$HELPER" tap-tab "$@" < "$WORK_DIR/ui.xml")"; then
+  if ! point="$(python3 "$HELPER" tap-tab "$LAYOUT" "$@" < "$WORK_DIR/ui.xml")"; then
     return 1
   fi
   # shellcheck disable=SC2086
@@ -341,9 +369,19 @@ if offset > 0:
 PYTHON
 }
 
+# assert_app_foreground — QuietInbox itself must be the app on screen. The first tablet set was
+# taken without this: every tab tap missed the rail, the run walked out to the launcher and the size
+# floor happily passed 3.3 MB of wallpaper. A shot of anything else now fails the whole run.
+assert_app_foreground() {
+  dump_ui || die "$1: uiautomator could not dump the screen"
+  python3 "$HELPER" app-foreground "$APP_ID" < "$WORK_DIR/ui.xml" \
+    || die "$1: QuietInbox is not on screen (the navigation tap missed, or the app was left)"
+}
+
 shot() {
   local name="$1"
   local path="$OUT_DIR/$name.png"
+  assert_app_foreground "$name"
   sleep 1
   device exec-out screencap -p > "$path"
   strip_png_prefix "$path"
@@ -382,6 +420,26 @@ OB_NEXT_EN="Next"; OB_START_EN="Start"; OB_SKIP_EN="Skip"
 command -v adb >/dev/null 2>&1 || die "adb is not on PATH"
 command -v python3 >/dev/null 2>&1 || die "python3 is not on PATH"
 device get-state >/dev/null 2>&1 || die "device $SERIAL is not available (adb devices)"
+
+# The app follows the window size class: below 600dp of width the navigation is a bottom bar and the
+# conversation replaces the inbox; at or above it the navigation is a left rail and the conversation
+# opens beside the inbox (`ListDetailSceneStrategy`). Everything that depends on where the navigation
+# sits, or on whether the inbox stays on screen, reads this.
+screen_dp_width() {
+  local size density px
+  size="$(shell wm size | tr -d '\r' | awk -F': *' '{print $2}' | tail -1)"
+  density="$(shell wm density | tr -d '\r' | awk -F': *' '{print $2}' | tail -1)"
+  px="${size%x*}"
+  [ -n "$px" ] && [ -n "$density" ] && [ "$density" -gt 0 ] 2>/dev/null || return 1
+  echo $(( px * 160 / density ))
+}
+LAYOUT="narrow"
+if DP_WIDTH="$(screen_dp_width)"; then
+  [ "$DP_WIDTH" -ge 600 ] && LAYOUT="wide"
+  log "window width ${DP_WIDTH}dp -> $LAYOUT layout ($([ "$LAYOUT" = wide ] && echo 'navigation rail, list-detail' || echo 'bottom bar'))"
+else
+  warn "could not read the screen size; assuming the narrow (bottom bar) layout"
+fi
 
 mkdir -p "$OUT_DIR"
 
@@ -451,7 +509,7 @@ shell am broadcast -a "$DEMO_ACTION" --es op seed --es lang "$LOCALE" -n "$DEMO_
 sleep 6
 
 # 1 — inbox
-tap_tab "$NAV_INBOX" || warn "could not reach the inbox tab"
+tap_tab "$NAV_INBOX" || die "could not reach the inbox tab — the navigation container was not found in the dump"
 assert_locale_clock "1_inbox"
 shot "1_inbox"
 
@@ -459,11 +517,13 @@ shot "1_inbox"
 tap_first_list_item
 # The conversation loads asynchronously: wait for the pinned conversation's title in the app bar (and
 # a moment more for the list to settle at its newest message) instead of trusting a fixed delay.
-# Ready = the pinned title is on screen *and* the bottom bar is gone (the inbox shows the same title
-# in its first row; the phone layout hides the bar on the conversation page). One UI dump per attempt.
+# Ready = the pinned title is on screen *and* the bottom bar is gone on the narrow layout (the inbox
+# shows the same title in its first row, and the bar is hidden on the conversation page); on the wide
+# layout the inbox stays beside it, so ready means the title appears twice — once in the list row and
+# once in the detail header. One UI dump per attempt.
 conversation_ready() {
   dump_ui || return 1
-  python3 "$HELPER" conversation-ready "$DEMO_PINNED_TITLE" "$NAV_INBOX" < "$WORK_DIR/ui.xml"
+  python3 "$HELPER" conversation-ready "$DEMO_PINNED_TITLE" "$NAV_INBOX" "$LAYOUT" < "$WORK_DIR/ui.xml"
 }
 for _ in 1 2 3 4 5 6 7 8 9 10; do
   conversation_ready && break
@@ -473,13 +533,17 @@ conversation_ready || die "the conversation page did not settle after 10 attempt
 sleep 2
 assert_locale_clock "2_conversation"
 shot "2_conversation"
-shell input keyevent KEYCODE_BACK
-sleep 2
+# Only the narrow layout needs to come back from the conversation: on the wide one the rail never
+# left, and a BACK there pops the scene the app is standing on.
+if [ "$LAYOUT" = "narrow" ]; then
+  shell input keyevent KEYCODE_BACK
+  sleep 2
+fi
 
 # 3 — search with a query typed
-tap_tab "$NAV_SEARCH" || warn "could not reach the search tab"
+tap_tab "$NAV_SEARCH" || die "could not reach the search tab — the navigation container was not found in the dump"
 sleep 1
-tap_text "$SEARCH_HINT" || warn "could not focus the search field"
+tap_text "$SEARCH_HINT" || die "could not focus the search field"
 # Let the input method window settle before the first key: keys injected while it is still coming
 # up were seen to arrive out of order ("metinge"). One character per call keeps the order strict.
 sleep 2
@@ -509,28 +573,30 @@ for _ in 1 2 3 4 5; do
 done
 query_shown || die "the search field does not show \"$SEARCH_QUERY\" (an input method composed the keystrokes, or the page was left)"
 shot "3_search"
-shell input keyevent KEYCODE_BACK
-sleep 1
+if [ "$LAYOUT" = "narrow" ]; then
+  shell input keyevent KEYCODE_BACK
+  sleep 1
+fi
 
 # 4 — activity statistics
-tap_tab "$NAV_ACTIVITY" || warn "could not reach the activity tab"
+tap_tab "$NAV_ACTIVITY" || die "could not reach the activity tab — the navigation container was not found in the dump"
 sleep 3
 assert_locale_clock "4_activity"
 shot "4_activity"
 
 # 5 — capture health
-tap_tab "$NAV_CAPTURE" || warn "could not reach the capture tab"
+tap_tab "$NAV_CAPTURE" || die "could not reach the capture tab — the navigation container was not found in the dump"
 sleep 2
 assert_locale_clock "5_capture"
 shot "5_capture"
 
 # 6 — settings
-tap_tab "$NAV_SETTINGS" || warn "could not reach the settings tab"
+tap_tab "$NAV_SETTINGS" || die "could not reach the settings tab — the navigation container was not found in the dump"
 sleep 2
 shot "6_settings"
 
 # 7 — inbox in dark mode
-tap_tab "$NAV_INBOX" || warn "could not reach the inbox tab"
+tap_tab "$NAV_INBOX" || die "could not reach the inbox tab — the navigation container was not found in the dump"
 shell cmd uimode night yes >/dev/null 2>&1 || warn "could not switch the device to night mode"
 sleep 3
 shot "7_inbox_dark"

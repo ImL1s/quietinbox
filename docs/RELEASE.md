@@ -25,7 +25,7 @@ The two installs cannot update over each other because Play re-signs the store c
 
 1. Bump `versionCode` / `versionName` in `app/build.gradle.kts`; add the version section to
    `CHANGELOG.md` and a `fastlane/metadata/android/<locale>/changelogs/<versionCode>.txt`
-   (≤ 500 chars) plus `whatsnew/whatsnew-<locale>`.
+   (≤ 500 chars) plus `fastlane/whatsnew/whatsnew-<locale>`.
 2. Run the gate locally: `./gradlew test :app:assembleRelease && tools/check-permissions.sh app/build/outputs/apk/release/app-release.apk`,
    install the release APK on a device and walk every user-facing flow in the changelog.
 3. Independent review (`docs/reviews/README.md` roster); fix; re-review.

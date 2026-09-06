@@ -4,7 +4,35 @@ All notable changes to this project are documented here. The format follows Keep
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+- **Ten of the fourteen tablet store screenshots were not QuietInbox.** `docs/screenshots/tablet/` and the
+  `tenInchScreenshots` uploaded to Google Play for en-US and zh-TW held the launcher home screen and the
+  system Settings app instead of the app: only `1_inbox` and `2_conversation` were genuine, and the zh-TW
+  `3_search` was an English system screen filed as a Traditional Chinese asset. `tools/demo-screenshots.sh`
+  looked for the navigation items in the bottom bar only, a tablet puts them in a left rail, so every tab
+  tap missed, the run walked out to the launcher, and the 80 KB floor passed 3.3 MB of wallpaper. Both
+  locales are re-shot from the demo vault and inspected one by one.
+- `tools/demo-screenshots.sh` handles both layouts: it reads the window width in dp, taps the navigation
+  rail when the window is ≥ 600dp wide and the bottom bar otherwise, treats the conversation as ready on a
+  wide window when the pinned title is on screen twice (list row and detail header) instead of waiting for
+  a bottom bar that never appears, and does not press BACK on a layout where the rail never left.
+- **Every screenshot is now gated on QuietInbox being the app on screen** (`app-foreground`: at least one
+  node of `dev.quietinbox.app.debug` in the UI dump), and a navigation tap that finds no target fails the
+  run instead of warning and carrying on. Those two guards are what the earlier tablet set was missing.
+
+### Changed
+- Documentation fixes found by a full en/zh-Hant parity audit: `docs/SCOPE.md` (both languages) had four
+  stale test counts (`CaptureCoordinatorTest` 16→32, `VaultMaintenanceTest` 4→5, `core:reconcile` 20→22,
+  `core:analytics` 32→34), still listed release signing as not done, and still called the package id a
+  placeholder; `docs/zh-Hant/ARCHITECTURE.md` was missing the activity-screen paragraph;
+  `docs/zh-Hant/adr/0001` was missing the `:parsers:apps` addendum; `docs/zh-Hant/reviews/README.md` was
+  missing the whole-repo round row; ADR-0006 and ADR-0007 had no link to their Chinese versions;
+  `docs/RELEASE.md` gave the what's-new path without its `fastlane/` prefix; `gradle/libs.versions.toml`
+  pointed at a non-existent ADR filename. `CONTRIBUTING.md` and `.github/PULL_REQUEST_TEMPLATE.md` still
+  told contributors to add strings to two catalogues when the parity gate requires five, and named only
+  the storage instrumented suite when CI runs storage, crypto and backup. The README now shows the
+  Traditional Chinese screenshots in its Chinese half and the English ones in its English half, and its
+  English half has the module table instead of a pointer at the Chinese one.
 
 ## [0.1.2] — 2026-09-06
 

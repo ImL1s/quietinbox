@@ -13,16 +13,16 @@
 | NotificationListenerService 擷取、有界 snapshot | 完成 | `platform:capture`；callback 執行緒上沒有 DB／網路／解碼 |
 | 多訊息 parser（MessagingStyle / Inbox / BigText / summary） | 完成 | `core:parser` 10 個 JVM 測試 |
 | 不跨串流合併的身分判定 | 完成 | `core:identity` 5 個 JVM 測試 |
-| 去重（`AMBIGUOUS_REPEAT`、revision、過期視窗處理、resync 視為重貼） | 完成 | `core:reconcile` 20 個 JVM 測試，含兩個 1,000 次迭代的 property test（§7.2 的六個例子加上關閉視窗的歧義重複都是字面測試案例） |
+| 去重（`AMBIGUOUS_REPEAT`、revision、過期視窗處理、resync 視為重貼） | 完成 | `core:reconcile` 22 個 JVM 測試，含兩個 1,000 次迭代的 property test（§7.2 的六個例子加上關閉視窗的歧義重複都是字面測試案例） |
 | 加密金庫（Room + SQLCipher、每次安裝隨機金鑰、Keystore 包裝） | 完成 | 真機測試 `VaultRoundTripTest` + `MigrationTest`（1→2、2→3）+ `KeystoreWrapperTest`（序列化的 KEK 建立）；`KeystoreWrapper` 設定 `setUserAuthenticationRequired(false)` |
-| Journal-first commit；撤權／暫停／來源變更／維護時的 commit 圍籬 | 完成 | `CaptureCoordinator`：等鎖前與鎖內各一次 admission 圍籬、寫入前的 commit 圍籬；來源政策變更在鎖內；`CaptureCoordinatorTest`（16） |
-| 「刪除全部」是經驗證的獨佔維護執行；cipher 快取綁定金鑰 epoch | 完成 | `VaultMaintenance`、`VaultRepository.deleteEverything` → `ResetResult`；`VaultMaintenanceTest`（4）、真機 `DeletionGraphTest`；AVD 上實際走過重設 |
+| Journal-first commit；撤權／暫停／來源變更／維護時的 commit 圍籬 | 完成 | `CaptureCoordinator`：等鎖前與鎖內各一次 admission 圍籬、寫入前的 commit 圍籬；來源政策變更在鎖內；`CaptureCoordinatorTest`（32） |
+| 「刪除全部」是經驗證的獨佔維護執行；cipher 快取綁定金鑰 epoch | 完成 | `VaultMaintenance`、`VaultRepository.deleteEverything` → `ResetResult`；`VaultMaintenanceTest`（5）、真機 `DeletionGraphTest`；AVD 上實際走過重設 |
 | 刪除圖與讀取時到期（journal payload 清空、媒體列／檔案隨訊息刪除、投影重算、到期副本隱藏） | 完成 | `DeletionGraphTest`（5，真機） |
 | 帶品質標籤的收件匣／對話 UI | 完成 | 實機截圖 |
 | 搜尋（CJK 二元組 + 拉丁三元組、參數化、keyset 分頁、驗證到頁面填滿） | 完成 | 真機 `VaultRoundTripTest`（開會 / hel）與 `SearchPagingTest`（250 筆假陽性候選、可續的游標）；實機 UI |
 | 冷啟動 fail closed：來源政策未知前不讀任何通知 | 完成 | `CaptureCoordinatorTest`（原封保留、金庫打不開時以 `COLD_START` 缺口丟棄）；AVD 冷啟動後的合成擷取 |
 | 搜尋與對話頁面的鎖定／開啟中金庫 | 完成 | `SearchViewModelTest`（2）、`ConversationViewModelTest`（1）；未在裝置上演練（AVD 無法隨時把金庫鎖上） |
-| 活動洞察（僅觀測：概觀、熱區圖、排行、最佳時段、好聊度、神隱率、emoji、口頭禪） | 完成 | `core:analytics` 32 個 JVM 測試加 `AnalyticsViewModelTest` 8 個（狀態規則、非主執行緒計算、鎖定／開啟中金庫）；實機 UI；每個期間最多載入 50,000 則（超過時每個分頁都顯示提示） |
+| 活動洞察（僅觀測：概觀、熱區圖、排行、最佳時段、好聊度、神隱率、emoji、口頭禪） | 完成 | `core:analytics` 34 個 JVM 測試加 `AnalyticsViewModelTest` 8 個（狀態規則、非主執行緒計算、鎖定／開啟中金庫）；實機 UI；每個期間最多載入 50,000 則（超過時每個分頁都顯示提示） |
 | 擷取健康頁（缺口與診斷） | 完成 | 實機 UI |
 | 保留期限 TTL worker | 完成（未做 soak 測試） | `RetentionWorker`，12 小時週期 |
 | 媒體複製（content:// + 通知 bitmap，加密） | 已實作，**未經裝置驗證** | `MediaCopier`；尚無測試碰過真實 content URI |
@@ -39,7 +39,7 @@
 
 - **真實來源 E2E（L3）**：LINE / WhatsApp / Telegram / Instagram / Messenger 各用兩個同意的測試帳號。五個 adapter 都是 `SYNTHETIC_ONLY`；沒有從真實 App 觀測到任何東西。見 `docs/COMPATIBILITY.md`。
 - **72 小時 soak、OEM 矩陣、API 26 lane、16 KB page-size 驗證**（計畫 §15）。本機只演練過一台實機（Samsung SM-S9280，Android 16）與一台可摺疊模擬器（API 36）；CI workflow 定義了 API 29/35 的模擬器 lane，但尚未執行過。
-- **發行簽章、可重現建置比對、SBOM、F-Droid 上架**（計畫 §17）。`assembleRelease` 已設定 R8，但 repo 內沒有 keystore。
+- **可重現建置比對、SBOM、F-Droid 上架**（計畫 §17）。發行簽章本身已完成：`release.yml` 會用上傳金鑰簽出 APK／AAB，金鑰存放在 repo 之外（見 `docs/RELEASE.md`）。
 - **密碼式備份（Argon2id）**、高安全的鎖定金庫模式、遠端設定的規則更新、聯網媒體版本——依計畫皆為 P2。
 - **開啟來源 App 時重用原始通知的 `PendingIntent`**：v0.1 一律退回 launcher intent（snapshot 刻意不保留任何 `PendingIntent`）。
 - **每個 profile 的來源控制與非空的 account key**（審計 #8）：來源只以套件為鍵，會話身分裡的 `accountKey` 可為 null。改成 `NOT NULL` 需要重建 `conversation` 表（`message` 的 FK 指向它），延後到之後的 schema 版本；收件匣會標記工作設定檔的會話，`docs/COMPATIBILITY.md` 記錄其限制。
@@ -49,7 +49,7 @@
 - **尚未進 CI 的治理項目**（審計 #12）：detekt / ktlint、CodeQL、SBOM、覆蓋率門檻、可重現建置與 commit 簽章。每一項都會增加依賴或維護者端的金鑰；已追蹤，未開始。
 - **parser 變更的 golden corpus diff 報告**（計畫 §14）：fixture 是 Kotest 案例，尚無獨立的 corpus 工具。
 - **帶去識別化預覽的診斷包匯出**（計畫 §14）：目前只有不含本文的剪貼簿摘要。
-- **名稱／商標／套件 id 清查**：`dev.quietinbox` 是佔位名稱。
+- **名稱／商標清查**：名稱尚未清查。套件 id 已無法再改——`dev.quietinbox.app` 已在 Google Play 上架（Gradle namespace 為 `dev.quietinbox`），已發布的 applicationId 不能變更。
 
 ## 第 1 輪審查（2026-09-06）：第一次推送前修正的發現
 

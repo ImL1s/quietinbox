@@ -8,7 +8,7 @@
 | 層級 | 判準（Oracle） | 現有內容 | 執行方式 |
 | --- | --- | --- | --- |
 | L0 契約與 fixture | 手寫的預期值 | `core:testing` Fixtures DSL；每個解析器測試都是一個帶有明確預期批次的合成 fixture | JVM |
-| L1 JVM 重播 | 純 Kotlin 的 parser／identity／reconcile／analytics | `core:*` 76 個測試（model 5、parser 10、identity 5、reconcile 22（含 `ReconcilerIdAlignmentTest`）、analytics 34）、`parsers:apps` 43 個、`app` 5 個（提醒）；兩個 1,000 次迭代的性質測試（property test）：不同的內容必須恰好被接受一次（seed 20260905）、沒有 id 的重複內容絕不可重複，且重播絕不可縮小視窗（seed 20260906） | `./gradlew :core:model:test :core:parser:test :core:identity:test :core:reconcile:test :core:analytics:test :parsers:apps:test` |
+| L1 JVM 重播 | 純 Kotlin 的 parser／identity／reconcile／analytics | `core:*` 76 個測試（model 5、parser 10、identity 5、reconcile 22（含 `ReconcilerIdAlignmentTest`）、analytics 34）、`parsers:apps` 43 個、`app` 5 個（提醒，含 `ReminderPolicy`）；兩個 1,000 次迭代的性質測試（property test）：不同的內容必須恰好被接受一次（seed 20260905）、沒有 id 的重複內容絕不可重複，且重播絕不可縮小視窗（seed 20260906） | `./gradlew :core:model:test :core:parser:test :core:identity:test :core:reconcile:test :core:analytics:test :parsers:apps:test` |
 | L2 Android 發布器 | 透過自家 package 產生的真實通知回呼 | `SyntheticNotifications`（MessagingStyle、BigText）；引導流程步驟 4 | 裝置、手動 |
 | L3 真實來源 App | 兩個知情同意的測試帳號、錄影紀錄 | **未執行** | — |
 | L4 故障與效能 | 終止 process、Doze、首次解鎖、撤銷、磁碟上限 | **未執行**（程式中已有 commit 圍籬（generation）；尚無注入故障的測試） | — |
@@ -63,6 +63,13 @@
 - 截圖工具：`tools/demo-screenshots.sh <adb-serial> <en-US|zh-TW|zh-CN|ja-JP|ko-KR> <out-dir>` 會安裝 debug APK、清除 app
   資料、授予監聽器與 `POST_NOTIFICATIONS`、以雙語按鈕文字走完引導流程、寫入示範資料並拍攝
   `1_inbox.png … 7_inbox_dark.png`。請使用模擬器：在真機上監聽器會把使用者自己的通知複製進 debug 資料庫。Android 13 以上鍵盤會跟著 App 語言走，所以工具在啟動 App 前先停用預設輸入法、之後還原，等輸入法穩定後一次一個字鍵入查詢、以 ENTER（單行欄位的 Done 動作；搜尋是即時的，沒有送出）收起輸入法，並在搜尋欄沒有顯示該字串或輸入法仍顯示時拒絕拍搜尋頁；每張截圖至少 80 KB（以 1080×2400 的 `QuietInbox_Phone` 校準），對話頁截圖會等到釘選標題出現且底部導覽列消失（等不到就整個 run 失敗），App 語言在任何會啟動程序的指令之前就設定並確認（啟動前再把程序停掉一次），寫入示範資料的廣播會明確指定語言（`--es lang`），而非英文語系若在收件匣、對話、活動或擷取頁的 App 節點看到英文的 AM/PM 時間或月份就拒絕拍照——那是程序語言落後於 App 語言的徵兆（偵測器假設裝置語言為英文，而英文 run 會證明它仍能咬到自己收件匣的時鐘）。
+  有兩道關卡決定一個檔案到底寫不寫得出來。**畫面上必須真的是這個 App**：每次拍照前，UI dump 裡一定要有屬於
+  `dev.quietinbox.app.debug` 的節點；而找不到目標的導覽 tap 會讓整個 run 失敗，不再只是警告後照走。少了這兩道，
+  第一批平板截圖拍到的是桌布與系統設定，而且大小下限還放行了（一張桌布可以壓到 3.3 MB）。**兩種版面都支援**：
+  工具會讀出視窗寬度（dp），≥ 600dp 點左側導覽 rail，未達則點底部導覽列；寬版面下，對話頁的「就緒」定義改成
+  釘選標題同時出現兩次（清單列與細節標題列，因為收件匣仍留在旁邊），而且不送 BACK——rail 從來沒有離開過。
+  平板截圖放在 `docs/screenshots/tablet/<locale>/` 與 `fastlane/metadata/android/<locale>/images/tenInchScreenshots/`
+  （目前是 en-US 與 zh-TW，在 `Foldable_Test`、2076×2152 上拍攝）。
 - 覆蓋範圍：`DemoDataTest`（真機測試，`platform:storage`）寫入示範資料、驗證各畫面讀取的筆數與對話投影、
   確認重複寫入不會產生重複資料，接著清除並驗證不留下任何示範資料列。因為 SQLCipher 的原生函式庫無法在
   JVM 載入，此測試需在裝置上執行（`./gradlew :platform:storage:connectedDebugAndroidTest`）。

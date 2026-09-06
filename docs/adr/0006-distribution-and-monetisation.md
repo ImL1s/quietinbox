@@ -1,3 +1,5 @@
+> 繁體中文：[docs/zh-Hant/adr/0006-distribution-and-monetisation.md](../zh-Hant/adr/0006-distribution-and-monetisation.md)
+
 # ADR-0006: Distribution and monetisation — paid on Google Play, free on GitHub, no billing SDK
 
 Date: 2026-09-06 · Status: accepted

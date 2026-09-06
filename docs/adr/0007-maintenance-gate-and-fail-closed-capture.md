@@ -1,3 +1,5 @@
+> 繁體中文：[docs/zh-Hant/adr/0007-maintenance-gate-and-fail-closed-capture.md](../zh-Hant/adr/0007-maintenance-gate-and-fail-closed-capture.md)
+
 # ADR-0007: Maintenance gate and fail-closed capture
 
 Date: 2026-09-06 · Status: accepted

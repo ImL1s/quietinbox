@@ -89,4 +89,5 @@ token) = n` 串接，接著每個候選項目都會在 Kotlin 中以正規化子
 Material 3 Expressive（`MaterialExpressiveTheme`、expressive motion scheme、大型形狀），預設使用品牌
 色盤，並可選用動態色彩。Navigation 3 返回堆疊；在寬度 ≥ medium 的視窗上，`NavigationRail` 加上
 `ListDetailSceneStrategy` 會並排顯示收件匣與對話。每個品質狀態都會同時呈現文字 + 圖示（顏色絕不是唯一
-的訊號）。
+的訊號）。活動頁是共用同一個期間選擇器的五個分頁（概觀、排行、最佳時段、好聊度、神隱
+率），每個分頁都由 `core:analytics` 的純函式計算，而且都標示為僅限已觀測的訊息。

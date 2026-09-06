@@ -9,16 +9,18 @@
 [![Release](https://github.com/ImL1s/quietinbox/actions/workflows/release.yml/badge.svg)](https://github.com/ImL1s/quietinbox/actions/workflows/release.yml)
 [![Licence: GPL-3.0-or-later](https://img.shields.io/badge/licence-GPL--3.0--or--later-blue.svg)](LICENSE)
 
-<p align="center">
-  <img src="docs/screenshots/phone/en-US/1_inbox.png" width="180" alt="Inbox">
-  <img src="docs/screenshots/phone/en-US/2_conversation.png" width="180" alt="Conversation">
-  <img src="docs/screenshots/phone/en-US/4_activity.png" width="180" alt="Activity">
-  <img src="docs/screenshots/phone/en-US/5_capture.png" width="180" alt="Capture health">
-</p>
-
 ---
 
 ## 繁體中文
+
+<p align="center">
+  <img src="docs/screenshots/phone/zh-TW/1_inbox.png" width="180" alt="收件匣">
+  <img src="docs/screenshots/phone/zh-TW/2_conversation.png" width="180" alt="對話">
+  <img src="docs/screenshots/phone/zh-TW/4_activity.png" width="180" alt="活動洞察">
+  <img src="docs/screenshots/phone/zh-TW/5_capture.png" width="180" alt="擷取健康">
+</p>
+
+<p align="center"><sub>示範資料全屬虛構；另有簡體中文、日文與韓文介面（<a href="docs/screenshots/phone/">docs/screenshots/phone/</a>）。</sub></p>
 
 ### 取得方式
 
@@ -45,7 +47,7 @@
 | Onboarding | 範圍說明 → 選擇來源 → 通知存取授權（含 Android 13+ 受限制設定指引）→ 合成測試通知 → 標籤說明 |
 | 收件匣 | 來源篩選、釘選／封存、本機已查看、身分與重複標籤、健康橫幅、刪除（含防重播 suppression） |
 | 對話 | 氣泡、發送者、來源時間 vs 擷取時間、修訂／觀測次數、媒體結果、選取刪除、開啟來源 App（需確認） |
-| 搜尋 | 加密 n-gram 索引：繁中子字串、ASCII 詞／3-gram、日期與來源篩選、參數化＋分頁 |
+| 搜尋 | 加密 n-gram 索引：CJK 子字串（中／日／韓）、拉丁詞／3-gram、日期與來源篩選、參數化＋分頁 |
 | 活動洞察 | 只計已觀測資料：概觀（樣本、時段長條、週×時熱力圖、Emoji 與口頭禪）、排行榜（全部／平日／週末）、最佳時段、好聊度、神隱率；期間 7 天／本月／上月／3 個月／全部／自訂，全部免費 |
 | 擷取健康 | 連線狀態、暫停、管線計數、來源啟用／暫停／移除、中斷區間、無正文診斷摘要 |
 | 設定 | 主題／動態色彩／減少動畫、App 鎖、禁止截圖、保存期限、媒體複製揭示、自己的提醒、復原金鑰、加密備份匯出／還原、刪除所有資料、已知限制、授權 |
@@ -113,6 +115,15 @@ adb shell cmd notification post -S messaging -t "Alice" tag "hello from shell"
 
 ## English
 
+<p align="center">
+  <img src="docs/screenshots/phone/en-US/1_inbox.png" width="180" alt="Inbox">
+  <img src="docs/screenshots/phone/en-US/2_conversation.png" width="180" alt="Conversation">
+  <img src="docs/screenshots/phone/en-US/4_activity.png" width="180" alt="Activity">
+  <img src="docs/screenshots/phone/en-US/5_capture.png" width="180" alt="Capture health">
+</p>
+
+<p align="center"><sub>Every conversation shown is fictional demo data; the same screens in zh-Hant, zh-Hans, ja and ko are under <a href="docs/screenshots/phone/">docs/screenshots/phone/</a>.</sub></p>
+
 ### Get it
 
 | Channel | Price | Notes |
@@ -146,7 +157,25 @@ QuietInbox reads what the messaging apps you explicitly enable post to the notif
 
 ### Architecture
 
-See the module table in the Chinese section above; the pipeline is `source notification → allow-list → immutable bounded snapshot → bounded queue → encrypted journal (only now "accepted") → parser → identity → reconcile → single-transaction projection → Flow → UI`. Revoke, pause, source changes and maintenance are fences that every event re-checks before the lock, inside it and before the commit; before the source list is known a notification is held unread; a reset or restore is an exclusive maintenance run behind `VaultMaintenance` ([ADR-0007](docs/adr/0007-maintenance-gate-and-fail-closed-capture.md)). Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), decisions: [docs/adr/](docs/adr/).
+```
+:app                       Nav3 + list-detail, Hilt, WorkManager, reminders, UI lock
+:core:model                pure Kotlin data contracts (NotificationSnapshot / ParsedBatch / …)
+:core:parser               Parser SPI, ParserRegistry, StandardParser (MessagingStyle / Inbox / BigText / summary)
+:core:identity             conversation identity: chat id > shortcut > notification stream > title (never merges across streams)
+:core:reconcile            bounded-window alignment and dedup, AMBIGUOUS_REPEAT, revisions, checkpoints
+:core:analytics            descriptive statistics and insights (heat map, rankings, bands, chattiness, quiet rate, catchphrases)
+:core:testing              synthetic fixture DSL
+:parsers:apps              LINE / WhatsApp / Telegram / Instagram / Messenger adapters (SYNTHETIC_ONLY)
+:platform:crypto           Keystore-wrapped per-install random key, Tink AEAD, recovery-key codec
+:platform:storage          Room + SQLCipher, DataStore settings, retention worker, demo data
+:platform:capture          NotificationListenerService → bounded snapshot → queue → journal → parse → identity → reconcile → commit
+:platform:media            quota-bounded encrypted copies of content:// and notification bitmaps
+:platform:backup           Tink streaming AEAD container, manifest / EOF / count verification, atomic merge restore
+:core:designsystem         Material 3 Expressive theme, shared components, en / zh-Hant / zh-Hans / ja / ko strings
+:feature:*                 onboarding / inbox / conversation / search / health / settings / analytics
+```
+
+The pipeline is `source notification → allow-list → immutable bounded snapshot → bounded queue → encrypted journal (only now "accepted") → parser → identity → reconcile → single-transaction projection → Flow → UI`. Revoke, pause, source changes and maintenance are fences that every event re-checks before the lock, inside it and before the commit; before the source list is known a notification is held unread; a reset or restore is an exclusive maintenance run behind `VaultMaintenance` ([ADR-0007](docs/adr/0007-maintenance-gate-and-fail-closed-capture.md)). Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), decisions: [docs/adr/](docs/adr/).
 
 ### Build and verify
 
